@@ -129,7 +129,7 @@ export async function recordLoginFailure(
                 else ${authRateLimits.failureCount} + 1
               end
             ) >= ${MAX_FAILURES}
-              then ${blockedUntil}
+              then ${blockedUntil}::timestamptz
             else null
           end
         `,
