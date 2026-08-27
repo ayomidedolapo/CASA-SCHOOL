@@ -1,3 +1,4 @@
+export * from "./auth-security";
 export * from "./auth";
 export * from "./academic";
 export * from "./enums";

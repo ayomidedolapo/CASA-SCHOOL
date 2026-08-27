@@ -1,13 +1,13 @@
-# CASA School â€” Authentication and Authorization Foundation
+# CASA School Ã¢â‚¬â€ Authentication and Authorization Foundation
 
 ## Separation of concerns
 
 CASA School treats these as different decisions:
 
-1. Authentication â€” who is the user?
-2. Session management â€” is this browser still authenticated?
-3. School access â€” does this user currently belong to this school?
-4. Authorization â€” what roles does the user currently hold in that school?
+1. Authentication Ã¢â‚¬â€ who is the user?
+2. Session management Ã¢â‚¬â€ is this browser still authenticated?
+3. School access Ã¢â‚¬â€ does this user currently belong to this school?
+4. Authorization Ã¢â‚¬â€ what roles does the user currently hold in that school?
 
 A session does not permanently embed school roles.
 
@@ -87,3 +87,6 @@ The login surface will be introduced with:
 - password-change lifecycle.
 
 This prevents a partially protected login endpoint from being exposed during foundation work.
+## Phase 1E
+
+The public password login surface, privacy-preserving authentication events, identifier throttling, and local first-owner provisioning are defined in `docs/architecture/SECURE_LOGIN_AND_PROVISIONING.md`.
