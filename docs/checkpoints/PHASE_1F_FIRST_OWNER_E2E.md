@@ -1,6 +1,6 @@
 # CASA School Ã¢â‚¬â€ Phase 1F First Owner & Auth E2E
 
-Status: installer in progress until end-to-end verification completes.
+Status: GREEN
 
 ## Purpose
 
@@ -37,22 +37,19 @@ It returns:
 First-owner provisioning is permitted only from an empty school/user database.
 
 A recovery rerun may continue when exactly one school, one user, one OWNER role, and one password credential already exist.
-## Recovery note â€” login rate limiter
+## Verified live flow
 
-The first live wrong-password test exposed a PostgreSQL expression-typing issue in the `auth_rate_limits` upsert.
+1. unauthenticated school access -> HTTP 401;
+2. wrong password -> HTTP 401;
+3. correct OWNER login -> HTTP 200 + session cookie;
+4. /api/auth/session -> authenticated user;
+5. /api/schools/casatestingowner/access -> active membership + OWNER role;
+6. logout -> session revoked;
+7. protected school access after logout -> HTTP 401;
+8. FIRST_OWNER_PROVISIONED, LOGIN_FAILURE, LOGIN_SUCCESS, and LOGOUT events recorded.
 
-`blocked_until` is `timestamp with time zone`. In the `CASE` expression, the bound JavaScript `Date` parameter did not receive enough PostgreSQL type context and was inferred as text.
+## Database state
 
-The runtime query now casts that bound parameter explicitly:
+The development environment now contains the first real CASA School and first OWNER identity.
 
-`${blockedUntil}::timestamptz`
-
-No database schema or migration change was required.
-
-A disposable database-backed test verified that:
-
-- a new identifier is allowed;
-- one failed attempt remains allowed;
-- the fifth failed attempt creates the temporary block;
-- `Retry-After` state is positive;
-- the disposable limiter row is removed afterward.
+No migration was added or modified in Phase 1F.

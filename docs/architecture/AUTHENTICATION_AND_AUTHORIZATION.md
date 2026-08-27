@@ -1,13 +1,13 @@
-# CASA School Ã¢â‚¬â€ Authentication and Authorization Foundation
+# CASA School ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â Authentication and Authorization Foundation
 
 ## Separation of concerns
 
 CASA School treats these as different decisions:
 
-1. Authentication Ã¢â‚¬â€ who is the user?
-2. Session management Ã¢â‚¬â€ is this browser still authenticated?
-3. School access Ã¢â‚¬â€ does this user currently belong to this school?
-4. Authorization Ã¢â‚¬â€ what roles does the user currently hold in that school?
+1. Authentication ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â who is the user?
+2. Session management ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â is this browser still authenticated?
+3. School access ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â does this user currently belong to this school?
+4. Authorization ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â what roles does the user currently hold in that school?
 
 A session does not permanently embed school roles.
 
@@ -90,3 +90,6 @@ This prevents a partially protected login endpoint from being exposed during fou
 ## Phase 1E
 
 The public password login surface, privacy-preserving authentication events, identifier throttling, and local first-owner provisioning are defined in `docs/architecture/SECURE_LOGIN_AND_PROVISIONING.md`.
+## Phase 1F live proof
+
+The first-owner provisioning and end-to-end authentication proof is recorded in `docs/checkpoints/PHASE_1F_FIRST_OWNER_E2E.md`.
