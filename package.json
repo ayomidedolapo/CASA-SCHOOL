@@ -11,10 +11,12 @@
     "check": "npm run typecheck && npm run lint && npm run build",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "auth:selftest": "tsx scripts/auth-selftest.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
+    "@node-rs/argon2": "^2.1.0",
     "drizzle-orm": "^1.0.0-rc.4",
     "next": "16.3.3",
     "react": "19.2.8",

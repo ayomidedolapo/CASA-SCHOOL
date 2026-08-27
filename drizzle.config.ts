@@ -11,6 +11,7 @@ export default defineConfig({
     "./src/db/schema/enums.ts",
     "./src/db/schema/schools.ts",
     "./src/db/schema/users.ts",
+    "./src/db/schema/auth.ts",
     "./src/db/schema/academic.ts",
   ],
   out: "./drizzle",
