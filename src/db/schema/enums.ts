@@ -19,7 +19,7 @@ export const schoolMembershipStatusEnum = pgEnum(
 
 export const schoolMembershipRoleEnum = pgEnum(
   "school_membership_role",
-  ["OWNER", "ADMIN", "STAFF", "GUARDIAN", "STUDENT"],
+  ["OWNER", "ADMIN", "SCHOOL_TECHNICIAN", "STAFF", "GUARDIAN", "STUDENT"],
 );
 
 export const academicPeriodStatusEnum = pgEnum(

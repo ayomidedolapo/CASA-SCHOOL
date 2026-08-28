@@ -21,6 +21,19 @@ export async function requireRegistryAdmin(
   );
 }
 
+export async function requireRegistryOperator(
+  schoolSlug: string,
+): Promise<SchoolAccess> {
+  return requireSchoolRole(
+    schoolSlug,
+    [
+      "OWNER",
+      "ADMIN",
+      "SCHOOL_TECHNICIAN",
+    ],
+  );
+}
+
 export function registryAuthErrorResponse(
   error: unknown,
 ): NextResponse | null {

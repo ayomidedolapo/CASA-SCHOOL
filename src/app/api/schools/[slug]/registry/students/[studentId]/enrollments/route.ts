@@ -19,7 +19,7 @@ import {
   registryAuthErrorResponse,
   registryDatabaseErrorResponse,
   registryNoStoreHeaders,
-  requireRegistryAdmin,
+  requireRegistryOperator,
 } from "@/server/registry/http";
 import {
   enrollmentCreateSchema,
@@ -45,7 +45,7 @@ export async function POST(
 
   try {
     const access =
-      await requireRegistryAdmin(slug);
+      await requireRegistryOperator(slug);
 
     let body: unknown;
 

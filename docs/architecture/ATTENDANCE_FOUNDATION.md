@@ -1,10 +1,10 @@
-# CASA School â€” Attendance Foundation
+# CASA School Ã¢â‚¬â€ Attendance Foundation
 
 ## Verification model
 
 CASA School follows:
 
-**Scan ID â†’ Verify Face â†’ Verify Liveness â†’ Verify Time â†’ Record Attendance**
+**Scan ID Ã¢â€ â€™ Verify Face Ã¢â€ â€™ Verify Liveness Ã¢â€ â€™ Verify Time Ã¢â€ â€™ Record Attendance**
 
 The ID card identifies the student.
 
@@ -119,3 +119,26 @@ It does not yet implement:
 - offline terminal sync.
 
 Those layers will build on this foundation rather than create parallel attendance data.
+## Departure extension requirement
+
+The Phase 3A schema was created before the final school-day sign-out requirement was locked.
+
+The Scanner PWA must support both CHECK_IN and CHECK_OUT.
+
+The next attendance migration will extend the existing foundation before terminal APIs are finalized. It will not create a separate competing attendance system.
+
+Required behavior:
+
+- normal CHECK_OUT after the configured dismissal time/window;
+- face/liveness/card verification on departure;
+- durable departure timestamp and terminal evidence;
+- one completed departure per student/session unless an explicit re-entry workflow exists;
+- early-departure staff override with reason/audit;
+- guardian notification event after successful departure;
+- notification delivery decoupled through durable outbox processing.
+
+The student daily presence state should be derivable as:
+
+`NOT_ARRIVED â†’ ON_CAMPUS â†’ SIGNED_OUT`
+
+with explicit exception states for rejected attempts and authorized early departure.

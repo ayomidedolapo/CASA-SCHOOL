@@ -27,12 +27,22 @@ export const students = pgTable(
       .references(
         () => schools.id,
       ),
+    casaStudentId: varchar(
+      "casa_student_id",
+      {
+        length: 32,
+      },
+    )
+      .default(
+        sql`'CASA-STU-' || upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 16))`,
+      )
+      .notNull(),
     admissionNumber: varchar(
       "admission_number",
       {
         length: 64,
       },
-    ).notNull(),
+    ),
     firstName: varchar("first_name", {
       length: 100,
     }).notNull(),
@@ -80,6 +90,11 @@ export const students = pgTable(
       table.id,
     ),
     unique(
+      "students_casa_student_id_unique",
+    ).on(
+      table.casaStudentId,
+    ),
+    unique(
       "students_school_admission_number_unique",
     ).on(
       table.schoolId,
@@ -99,8 +114,12 @@ export const students = pgTable(
       table.firstName,
     ),
     check(
+      "students_casa_student_id_format_check",
+      sql`${table.casaStudentId} ~ '^CASA-STU-[0-9A-F]{16}$'`,
+    ),
+    check(
       "students_admission_number_not_blank_check",
-      sql`length(trim(${table.admissionNumber})) > 0`,
+      sql`${table.admissionNumber} is null or length(trim(${table.admissionNumber})) > 0`,
     ),
     check(
       "students_first_name_not_blank_check",

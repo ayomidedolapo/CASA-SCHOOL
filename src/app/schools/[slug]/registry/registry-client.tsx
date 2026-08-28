@@ -24,7 +24,8 @@ interface RegistryClientProps {
 
 interface StudentRow {
   id: string;
-  admissionNumber: string;
+  casaStudentId: string;
+  admissionNumber: string | null;
   firstName: string;
   middleName: string | null;
   lastName: string;
@@ -412,7 +413,7 @@ export function RegistryClient({
             admissionNumber:
               form.get(
                 "admissionNumber",
-              ),
+              ) || null,
             firstName:
               form.get("firstName"),
             middleName:
@@ -659,7 +660,7 @@ export function RegistryClient({
                 {user.fullName}
               </p>
               <p className="text-slate-500">
-                {roles.join(" ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· ")}
+                {roles.join(" ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· ")}
               </p>
             </div>
             <button
@@ -761,7 +762,7 @@ export function RegistryClient({
                     event.target.value,
                   )
                 }
-                placeholder="Search registryÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦"
+                placeholder="Search registryÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦"
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-950 sm:max-w-xs"
               />
             </div>
@@ -817,9 +818,10 @@ export function RegistryClient({
                             }
                           </p>
                           <p className="mt-1 text-sm text-slate-500">
-                            {
-                              student.admissionNumber
-                            }
+                            {student.casaStudentId}
+                            {student.admissionNumber
+                              ? ` Ã‚Â· ${student.admissionNumber}`
+                              : ""}
                           </p>
                         </div>
                         <div className="text-sm">
@@ -838,7 +840,7 @@ export function RegistryClient({
                           </p>
                           <p className="mt-1 font-medium">
                             {student.classLevelName
-                              ? `${student.classLevelName} ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· ${student.classArmName}`
+                              ? `${student.classLevelName} ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· ${student.classArmName}`
                               : "Not enrolled"}
                           </p>
                         </div>
@@ -897,10 +899,10 @@ export function RegistryClient({
           <aside className="space-y-6">
             <section className="rounded-2xl border border-slate-200 bg-white p-5">
               <h3 className="font-semibold">
-                Add student
+                Manual student registration
               </h3>
               <p className="mt-1 text-sm text-slate-500">
-                A student record does not create a login account.
+                For exceptions and new admissions. Initial onboarding can be handled by CASA Technical or by the School Technician appointed by the school. A student record does not create a login account.
               </p>
 
               <form
@@ -910,9 +912,8 @@ export function RegistryClient({
                 }
               >
                 <input
-                  required
                   name="admissionNumber"
-                  placeholder="Admission number"
+                  placeholder="School student/admission number (optional)"
                   className="rounded-lg border border-slate-300 px-3 py-2.5 text-sm"
                 />
                 <input
@@ -974,7 +975,7 @@ export function RegistryClient({
                   disabled={busy}
                   className="rounded-lg bg-slate-950 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-60 sm:col-span-2 xl:col-span-1 2xl:col-span-2"
                 >
-                  Add student
+                  Manual student registration
                 </button>
               </form>
             </section>
@@ -1041,8 +1042,11 @@ export function RegistryClient({
                     {
                       studentDetail
                         .student
-                        .admissionNumber
+                        .casaStudentId
                     }
+                    {studentDetail.student.admissionNumber
+                      ? ` Ã‚Â· ${studentDetail.student.admissionNumber}`
+                      : ""}
                   </p>
                 </div>
 
@@ -1082,7 +1086,7 @@ export function RegistryClient({
                                 guardian.relationshipLabel
                               }
                               {guardian.isPrimary
-                                ? " ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· Primary"
+                                ? " ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· Primary"
                                 : ""}
                             </p>
                           </div>
@@ -1207,7 +1211,7 @@ export function RegistryClient({
                               {
                                 enrollment.classLevelName
                               }{" "}
-                              ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â·{" "}
+                              ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â·{" "}
                               {
                                 enrollment.classArmName
                               }
@@ -1216,7 +1220,7 @@ export function RegistryClient({
                               {
                                 enrollment.academicSessionName
                               }{" "}
-                              ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â·{" "}
+                              ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â·{" "}
                               {
                                 enrollment.status
                               }
@@ -1299,7 +1303,7 @@ export function RegistryClient({
                               {
                                 arm.classLevelName
                               }{" "}
-                              ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â·{" "}
+                              ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â·{" "}
                               {
                                 arm.name
                               }

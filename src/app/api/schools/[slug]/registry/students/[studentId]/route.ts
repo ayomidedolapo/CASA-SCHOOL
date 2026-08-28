@@ -22,7 +22,7 @@ import {
   registryAuthErrorResponse,
   registryDatabaseErrorResponse,
   registryNoStoreHeaders,
-  requireRegistryAdmin,
+  requireRegistryOperator,
 } from "@/server/registry/http";
 import {
   studentUpdateSchema,
@@ -48,7 +48,7 @@ export async function GET(
 
   try {
     const access =
-      await requireRegistryAdmin(slug);
+      await requireRegistryOperator(slug);
     const db = getDb();
 
     const studentRows = await db
@@ -256,7 +256,7 @@ export async function PATCH(
 
   try {
     const access =
-      await requireRegistryAdmin(slug);
+      await requireRegistryOperator(slug);
 
     let body: unknown;
 

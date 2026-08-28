@@ -18,6 +18,7 @@ import {
 export const SCHOOL_ROLES = [
   "OWNER",
   "ADMIN",
+  "SCHOOL_TECHNICIAN",
   "STAFF",
   "GUARDIAN",
   "STUDENT",

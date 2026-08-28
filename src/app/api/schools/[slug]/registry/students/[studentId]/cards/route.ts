@@ -22,7 +22,7 @@ import {
   registryAuthErrorResponse,
   registryDatabaseErrorResponse,
   registryNoStoreHeaders,
-  requireRegistryAdmin,
+  requireRegistryOperator,
 } from "@/server/registry/http";
 
 export const dynamic = "force-dynamic";
@@ -45,7 +45,7 @@ export async function GET(
 
   try {
     const access =
-      await requireRegistryAdmin(slug);
+      await requireRegistryOperator(slug);
     const db = getDb();
 
     const studentRows = await db
@@ -189,7 +189,7 @@ export async function POST(
 
   try {
     const access =
-      await requireRegistryAdmin(slug);
+      await requireRegistryOperator(slug);
     const db = getDb();
 
     const studentRows = await db

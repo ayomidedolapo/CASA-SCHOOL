@@ -19,7 +19,7 @@ import {
   registryAuthErrorResponse,
   registryDatabaseErrorResponse,
   registryNoStoreHeaders,
-  requireRegistryAdmin,
+  requireRegistryOperator,
 } from "@/server/registry/http";
 import {
   guardianCreateSchema,
@@ -42,7 +42,7 @@ export async function GET(
 
   try {
     const access =
-      await requireRegistryAdmin(slug);
+      await requireRegistryOperator(slug);
     const db = getDb();
     const q =
       request.nextUrl.searchParams
@@ -149,7 +149,7 @@ export async function POST(
 
   try {
     const access =
-      await requireRegistryAdmin(slug);
+      await requireRegistryOperator(slug);
 
     let body: unknown;
 

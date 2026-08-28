@@ -9,7 +9,9 @@ export const studentCreateSchema =
       .string()
       .trim()
       .min(1)
-      .max(64),
+      .max(64)
+      .optional()
+      .nullable(),
     firstName: z
       .string()
       .trim()

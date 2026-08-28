@@ -1,4 +1,4 @@
-# CASA School Ã¢â‚¬â€ Phase 3A Attendance Foundation
+# CASA School ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â Phase 3A Attendance Foundation
 
 Status: GREEN
 
@@ -26,7 +26,7 @@ Status: GREEN
 
 ## Verification sequence
 
-Scan ID Ã¢â€ â€™ Verify Face Ã¢â€ â€™ Verify Liveness Ã¢â€ â€™ Verify Time Ã¢â€ â€™ Record Attendance
+Scan ID ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ Verify Face ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ Verify Liveness ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ Verify Time ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ Record Attendance
 
 Phase 3A adds persistence only; no attendance terminal API or biometric matching is exposed yet.
 ## Migration
@@ -43,3 +43,13 @@ Verified development state:
 - two required partial unique indexes;
 - zero attendance policy, terminal, session, attempt, or record rows created;
 - all five earlier migrations remained immutable.
+
+## Locked follow-up: student sign-out
+
+After Phase 3A was completed, the operating requirement was expanded to include terminal-based student departure/sign-out and guardian departure notification.
+
+Phase 3A remains GREEN as the verified persistence foundation.
+
+Before Scanner PWA APIs are finalized, the attendance model will be extended additively so verification attempts distinguish CHECK_IN from CHECK_OUT and accepted daily attendance can represent the student's departure state.
+
+No Phase 3A migration will be rewritten.

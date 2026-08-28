@@ -26,7 +26,7 @@ export default async function RegistryPage({
     access =
       await requireSchoolRole(
         slug,
-        ["OWNER", "ADMIN"],
+        ["OWNER", "ADMIN", "SCHOOL_TECHNICIAN"],
       );
   } catch (error) {
     if (

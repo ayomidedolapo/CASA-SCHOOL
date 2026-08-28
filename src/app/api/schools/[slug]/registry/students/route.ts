@@ -22,7 +22,7 @@ import {
   registryAuthErrorResponse,
   registryDatabaseErrorResponse,
   registryNoStoreHeaders,
-  requireRegistryAdmin,
+  requireRegistryOperator,
 } from "@/server/registry/http";
 import {
   studentCreateSchema,
@@ -45,7 +45,7 @@ export async function GET(
 
   try {
     const access =
-      await requireRegistryAdmin(slug);
+      await requireRegistryOperator(slug);
 
     const searchParams =
       request.nextUrl.searchParams;
@@ -72,6 +72,10 @@ export async function GET(
 
     const searchCondition = q
       ? or(
+          ilike(
+            students.casaStudentId,
+            `%${q}%`,
+          ),
           ilike(
             students.admissionNumber,
             `%${q}%`,
@@ -104,6 +108,8 @@ export async function GET(
     const rows = await db
       .select({
         id: students.id,
+        casaStudentId:
+          students.casaStudentId,
         admissionNumber:
           students.admissionNumber,
         firstName:
@@ -230,7 +236,7 @@ export async function POST(
 
   try {
     const access =
-      await requireRegistryAdmin(slug);
+      await requireRegistryOperator(slug);
 
     let body: unknown;
 
@@ -287,7 +293,11 @@ export async function POST(
         schoolId:
           access.school.id,
         admissionNumber:
-          input.admissionNumber,
+          input.admissionNumber
+            ? input.admissionNumber
+                .trim()
+                .toUpperCase()
+            : null,
         firstName:
           input.firstName,
         middleName:
@@ -304,6 +314,8 @@ export async function POST(
       })
       .returning({
         id: students.id,
+        casaStudentId:
+          students.casaStudentId,
         admissionNumber:
           students.admissionNumber,
         firstName:

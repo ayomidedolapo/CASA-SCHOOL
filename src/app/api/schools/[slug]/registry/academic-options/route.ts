@@ -18,7 +18,7 @@ import {
 import {
   registryAuthErrorResponse,
   registryNoStoreHeaders,
-  requireRegistryAdmin,
+  requireRegistryOperator,
 } from "@/server/registry/http";
 
 export const dynamic = "force-dynamic";
@@ -38,7 +38,7 @@ export async function GET(
 
   try {
     const access =
-      await requireRegistryAdmin(slug);
+      await requireRegistryOperator(slug);
     const db = getDb();
 
     const [sessions, arms] =

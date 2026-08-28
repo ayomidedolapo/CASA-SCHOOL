@@ -18,7 +18,7 @@ import {
 import {
   registryAuthErrorResponse,
   registryNoStoreHeaders,
-  requireRegistryAdmin,
+  requireRegistryOperator,
 } from "@/server/registry/http";
 
 export const dynamic = "force-dynamic";
@@ -49,7 +49,7 @@ export async function PATCH(
 
   try {
     const access =
-      await requireRegistryAdmin(slug);
+      await requireRegistryOperator(slug);
 
     let body: unknown;
 
