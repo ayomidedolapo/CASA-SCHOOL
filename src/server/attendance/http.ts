@@ -79,3 +79,22 @@ export function terminalUnauthorizedResponse():
     },
   );
 }
+export async function requireAttendanceManager(
+  schoolSlug: string,
+): Promise<SchoolAccess> {
+  return requireSchoolRole(
+    schoolSlug,
+    [
+      "OWNER",
+      "ADMIN",
+    ],
+  );
+}
+
+export async function requireEarlyDepartureAuthorizer(
+  schoolSlug: string,
+): Promise<SchoolAccess> {
+  return requireAttendanceManager(
+    schoolSlug,
+  );
+}

@@ -24,3 +24,6 @@ export * from "./passkeys";
 export * from "./biometric-profile-events";
 
 export * from "./biometric-provider-sessions";
+
+export * from "./attendance-operations-enums";
+export * from "./attendance-operations";

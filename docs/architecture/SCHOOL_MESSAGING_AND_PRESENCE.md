@@ -1,4 +1,4 @@
-# CASA School ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â Presence Lifecycle & School Messaging
+# CASA School ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â Presence Lifecycle & School Messaging
 
 ## Daily presence
 
@@ -6,11 +6,11 @@ CASA School tracks both arrival and departure.
 
 The normal state machine is:
 
-`NOT_ARRIVED ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ ON_CAMPUS ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ SIGNED_OUT`
+`NOT_ARRIVED ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ ON_CAMPUS ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ SIGNED_OUT`
 
 The accepted verification sequence for both directions remains:
 
-**Scan ID ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ Verify Face ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ Verify Liveness ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ Verify Time ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ Record Presence Event**
+**Scan ID ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Verify Face ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Verify Liveness ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Verify Time ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Record Presence Event**
 
 `attendance_verification_attempts.operation` distinguishes:
 
@@ -165,3 +165,12 @@ The outbox uses the school's ACTIVE WhatsApp sender.
 A missing/inactive sender does not invalidate attendance; it produces no delivery row and will be surfaced later as an operational messaging exception.
 
 Early departure stays Passkey-gated.
+## Phase 3I early release
+
+EARLY CHECK_OUT has a supervised production path.
+
+The student remains at the Scanner while OWNER/ADMIN records the reason and consumes an `EARLY_DEPARTURE` Passkey grant.
+
+The same pending terminal attempt then resumes trusted face+liveness verification.
+
+Accepted early departure records the staff actor + reason and queues `STUDENT_EARLY_DEPARTURE` instead of the normal sign-out notification event.

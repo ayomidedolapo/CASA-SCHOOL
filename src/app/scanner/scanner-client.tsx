@@ -51,7 +51,7 @@ const FaceLivenessDetectorCore =
             styles.message
           }
         >
-          Preparing face cameraÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦
+          Preparing face cameraÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦
         </div>
       ),
     },
@@ -334,7 +334,7 @@ export default function ScannerClient() {
     setMessage,
   ] =
     useState(
-      "Starting scannerÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦",
+      "Starting scannerÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦",
     );
 
   const [
@@ -694,7 +694,7 @@ export default function ScannerClient() {
         true,
       );
       setMessage(
-        "Verifying this scannerÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦",
+        "Verifying this scannerÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦",
       );
 
       try {
@@ -791,7 +791,7 @@ export default function ScannerClient() {
           "CARD",
         );
         setMessage(
-          "Preparing face verificationÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦",
+          "Preparing face verificationÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦",
         );
 
         try {
@@ -866,6 +866,97 @@ export default function ScannerClient() {
       ],
     );
 
+  useEffect(
+    () => {
+      if (
+        phase !==
+          "STAFF" ||
+        !token ||
+        !currentAttempt
+      ) {
+        return;
+      }
+
+      let cancelled =
+        false;
+
+      const attemptId =
+        currentAttempt
+          .attempt
+          .id;
+
+      const check =
+        async () => {
+          try {
+            const response =
+              await terminalFetch(
+                token,
+                `/api/terminal/attempts/${attemptId}`,
+              );
+
+            if (
+              cancelled ||
+              !response.ok
+            ) {
+              return;
+            }
+
+            const status =
+              await parseJson<{
+                staffAuthorized:
+                  boolean;
+                requiresBiometric:
+                  boolean;
+              }>(
+                response,
+              );
+
+            if (
+              !cancelled &&
+              status
+                ?.staffAuthorized &&
+              status
+                .requiresBiometric
+            ) {
+              setMessage(
+                "Staff authorization received. Preparing face verificationâ€¦",
+              );
+
+              await startFace(
+                attemptId,
+              );
+            }
+          } catch {
+            // The next poll retries while the Scanner remains in STAFF state.
+          }
+        };
+
+      void check();
+
+      const timer =
+        setInterval(
+          () => {
+            void check();
+          },
+          2_000,
+        );
+
+      return () => {
+        cancelled =
+          true;
+
+        clearInterval(
+          timer,
+        );
+      };
+    },
+    [
+      phase,
+      token,
+      currentAttempt,
+      startFace,
+    ],
+  );
   const processCard =
     useCallback(
       async (
@@ -884,7 +975,7 @@ export default function ScannerClient() {
           "CARD",
         );
         setMessage(
-          "Identifying studentÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦",
+          "Identifying studentÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦",
         );
 
         const requestId =
@@ -954,7 +1045,7 @@ export default function ScannerClient() {
               "STAFF",
             );
             setMessage(
-              "Early departure requires a staff member to authorize it with CASA Passkey.",
+              "Early departure requires staff authorization. The scanner will continue automatically after an authorized staff member confirms the release with CASA Passkey.",
             );
             return;
           }
@@ -1086,7 +1177,7 @@ export default function ScannerClient() {
           liveness;
 
         setMessage(
-          "Verifying identityÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦",
+          "Verifying identityÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦",
         );
 
         try {
@@ -1415,7 +1506,7 @@ export default function ScannerClient() {
                       .value,
                   )
               }
-              placeholder="CASAT1.ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦"
+              placeholder="CASAT1.ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦"
               autoComplete="off"
               autoCapitalize="none"
               spellCheck={
@@ -1438,7 +1529,7 @@ export default function ScannerClient() {
               }
             >
               {provisioning
-                ? "VerifyingÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦"
+                ? "VerifyingÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦"
                 : "Provision this device"}
             </button>
 

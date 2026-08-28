@@ -22,7 +22,7 @@ import {
 } from "@/server/attendance/biometric-assertion";
 import {
   finalizeVerifiedPresence,
-} from "@/server/attendance/finalize-presence";
+} from "@/server/attendance/finalize-presence-dispatch";
 import type {
   TerminalAccess,
 } from "@/server/attendance/terminal-auth";

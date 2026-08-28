@@ -1,10 +1,10 @@
-# CASA School ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â Attendance Foundation
+# CASA School ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â Attendance Foundation
 
 ## Verification model
 
 CASA School follows:
 
-**Scan ID ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ Verify Face ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ Verify Liveness ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ Verify Time ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ Record Attendance**
+**Scan ID ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Verify Face ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Verify Liveness ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Verify Time ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Record Attendance**
 
 The ID card identifies the student.
 
@@ -139,7 +139,7 @@ Required behavior:
 
 The student daily presence state should be derivable as:
 
-`NOT_ARRIVED Ã¢â€ â€™ ON_CAMPUS Ã¢â€ â€™ SIGNED_OUT`
+`NOT_ARRIVED ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ ON_CAMPUS ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ SIGNED_OUT`
 
 with explicit exception states for rejected attempts and authorized early departure.
 ## Phase 3B presence extension
@@ -158,3 +158,10 @@ Additive Phase 3B changes include:
 - durable guardian-notification outbox.
 
 The original Phase 3A migration remains immutable.
+## Phase 3I daily operations
+
+Attendance policy version creation, daily session lifecycle, Today presence state, session audit events, and supervised Passkey-authorized early departure are implemented.
+
+Policy changes create a new policy version rather than mutating the historical policy referenced by an attendance session.
+
+The existing accepted attendance and immutable presence-event tables remain authoritative.

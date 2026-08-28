@@ -1,0 +1,285 @@
+.shell {
+  --paper: #f5f3ee;
+  --ink: #0b0b0b;
+  --muted: #6f6c65;
+  --line: #cbc6ba;
+  --positive: #0c6a46;
+  --warning: #9a5a00;
+  --danger: #a52b2b;
+
+  min-height: 100vh;
+  background: var(--paper);
+  color: var(--ink);
+  padding: 30px;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 24px;
+  align-items: end;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--ink);
+}
+
+.brand {
+  margin: 0;
+  font-size: clamp(46px, 8vw, 96px);
+  line-height: 0.84;
+  letter-spacing: -0.065em;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.school {
+  max-width: 300px;
+  text-align: right;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.statusLine {
+  margin-top: 18px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 18px;
+  font-size: 13px;
+}
+
+.status {
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.actions {
+  margin-left: auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.button,
+.secondaryButton {
+  min-height: 42px;
+  border-radius: 0;
+  padding: 10px 14px;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.button {
+  border: 1px solid var(--ink);
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.secondaryButton {
+  border: 1px solid var(--ink);
+  background: transparent;
+  color: var(--ink);
+}
+
+.button:disabled,
+.secondaryButton:disabled {
+  opacity: 0.45;
+  cursor: wait;
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(90px, 1fr));
+  margin-top: 30px;
+  border-top: 1px solid var(--line);
+  border-left: 1px solid var(--line);
+}
+
+.metric {
+  min-height: 118px;
+  padding: 14px;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.metricValue {
+  display: block;
+  font-size: clamp(34px, 4vw, 62px);
+  line-height: 1;
+  letter-spacing: -0.055em;
+  font-weight: 900;
+}
+
+.metricLabel {
+  display: block;
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.section {
+  margin-top: 42px;
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 18px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--ink);
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: clamp(26px, 4vw, 48px);
+  letter-spacing: -0.045em;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.filters {
+  margin-top: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.input,
+.select {
+  min-height: 42px;
+  border: 1px solid var(--ink);
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink);
+  padding: 8px 10px;
+  font: inherit;
+}
+
+.input {
+  min-width: min(360px, 100%);
+}
+
+.tableWrap {
+  margin-top: 14px;
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+}
+
+.table th,
+.table td {
+  padding: 11px 8px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  font-size: 13px;
+}
+
+.table th {
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.studentName {
+  font-weight: 800;
+}
+
+.earlyGrid {
+  border-top: 1px solid var(--line);
+}
+
+.earlyItem {
+  display: grid;
+  grid-template-columns: minmax(200px, 1fr) minmax(260px, 2fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.policyForm {
+  margin-top: 16px;
+  display: grid;
+  gap: 12px;
+  max-width: 900px;
+}
+
+.policyTimes {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(110px, 1fr));
+  gap: 8px;
+}
+
+.weekdays {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.checkbox {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+}
+
+.notice {
+  margin-top: 14px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.error {
+  color: var(--danger);
+}
+
+.success {
+  color: var(--positive);
+}
+
+.warning {
+  color: var(--warning);
+}
+
+@media (max-width: 900px) {
+  .shell {
+    padding: 18px;
+  }
+
+  .header {
+    grid-template-columns: 1fr;
+  }
+
+  .school {
+    text-align: left;
+  }
+
+  .metrics {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .policyTimes {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .earlyItem {
+    grid-template-columns: 1fr;
+  }
+}

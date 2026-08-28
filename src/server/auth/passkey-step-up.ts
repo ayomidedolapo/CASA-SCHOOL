@@ -428,20 +428,20 @@ export async function finishPasskeyStepUp(
   };
 }
 
-export async function consumePasskeyStepUpGrant(
+export async function consumePasskeyStepUpGrantWithId(
   input: {
     token: string;
     access: SchoolAccess;
     action:
       PasskeyStepUpAction;
   },
-): Promise<boolean> {
+): Promise<string | null> {
   if (
     !/^CASASTEP1\.[A-Za-z0-9_-]{43}$/.test(
       input.token,
     )
   ) {
-    return false;
+    return null;
   }
 
   const db = getDb();
@@ -495,7 +495,22 @@ export async function consumePasskeyStepUpGrant(
           authPasskeyStepUpGrants.id,
       });
 
-  return Boolean(rows[0]);
+  return rows[0]?.id ?? null;
+}
+
+export async function consumePasskeyStepUpGrant(
+  input: {
+    token: string;
+    access: SchoolAccess;
+    action:
+      PasskeyStepUpAction;
+  },
+): Promise<boolean> {
+  return Boolean(
+    await consumePasskeyStepUpGrantWithId(
+      input,
+    ),
+  );
 }
 
 export async function requirePasskeyStepUpGrant(

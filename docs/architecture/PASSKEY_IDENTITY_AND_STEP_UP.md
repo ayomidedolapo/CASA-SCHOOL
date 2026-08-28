@@ -1,4 +1,4 @@
-# CASA School ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â Passkey Identity & Step-Up
+# CASA School ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â Passkey Identity & Step-Up
 
 ## CASA signature identity
 
@@ -173,3 +173,12 @@ The mutation API consumes:
 before changing terminal trust state or returning a new one-time device secret.
 
 The Scanner's terminal credential never substitutes for human Passkey authorization.
+## Phase 3I early departure integration
+
+`EARLY_DEPARTURE` is consumed by a real privileged workflow.
+
+OWNER/ADMIN authorizes the exact pending departure with a nonblank reason.
+
+The authorization row references the exact consumed `auth_passkey_step_up_grants` row, preserving the WebAuthn step-up audit chain.
+
+The Scanner does not receive or consume that Passkey grant; it only observes that the server-side attempt has become staff-authorized and then resumes face+liveness.

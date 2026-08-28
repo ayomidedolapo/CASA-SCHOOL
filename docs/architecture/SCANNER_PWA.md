@@ -1,4 +1,4 @@
-# CASA School ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â Scanner PWA
+# CASA School ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â Scanner PWA
 
 ## Product boundary
 
@@ -58,9 +58,9 @@ The PWA sends `operation=AUTO`.
 
 The trusted server resolves:
 
-- no attendance record ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ CHECK_IN;
-- current ON_CAMPUS ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ CHECK_OUT;
-- already SIGNED_OUT ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ CHECK_IN, then existing re-entry policy rejects it.
+- no attendance record ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ CHECK_IN;
+- current ON_CAMPUS ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ CHECK_OUT;
+- already SIGNED_OUT ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ CHECK_IN, then existing re-entry policy rejects it.
 
 The actual persisted attendance attempt still stores only CHECK_IN or CHECK_OUT.
 
@@ -98,7 +98,7 @@ Those credentials:
 
 `onAnalysisComplete` calls CASA's server-side liveness completion route.
 
-CASAÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Ânot the browserÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Âretrieves the liveness result, compares the exact ACTIVE FaceId, creates the trusted assertion, and finalizes attendance.
+CASAÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Ânot the browserÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Âretrieves the liveness result, compares the exact ACTIVE FaceId, creates the trusted assertion, and finalizes attendance.
 
 ## Retry
 
@@ -196,3 +196,10 @@ V5 treats the manifest as structured JSON:
 - `display` must be `standalone`.
 
 No PWA architecture or manifest source change was required.
+## Phase 3I supervised early departure
+
+When the Scanner receives `EARLY_DEPARTURE_AUTH_REQUIRED`, it keeps the attendance attempt pending and polls only that attempt's authenticated terminal status.
+
+After OWNER/ADMIN authorizes the release through Attendance Operations, the Scanner automatically starts a fresh AWS Face Liveness session for the same attempt.
+
+The Scanner never receives the human Passkey step-up token or private release reason.
