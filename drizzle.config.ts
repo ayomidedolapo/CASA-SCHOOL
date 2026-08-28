@@ -22,6 +22,8 @@ export default defineConfig({
     "./src/db/schema/attendance.ts",
     "./src/db/schema/messaging-enums.ts",
     "./src/db/schema/school-messaging.ts",
+    "./src/db/schema/biometric-enums.ts",
+    "./src/db/schema/student-biometrics.ts",
     "./src/db/schema/academic.ts",
   ],
   out: "./drizzle",

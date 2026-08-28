@@ -15,7 +15,8 @@
     "auth:selftest": "tsx scripts/auth-selftest.ts",
     "card:selftest": "tsx scripts/student-card-selftest.ts",
     "attendance:selftest": "tsx scripts/attendance-presence-selftest.ts",
-    "terminal:selftest": "tsx scripts/terminal-credential-selftest.ts"
+    "terminal:selftest": "tsx scripts/terminal-credential-selftest.ts",
+    "biometric:selftest": "tsx scripts/biometric-assertion-selftest.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",

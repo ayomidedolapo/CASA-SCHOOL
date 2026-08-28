@@ -14,3 +14,6 @@ export * from "./attendance";
 
 export * from "./messaging-enums";
 export * from "./school-messaging";
+
+export * from "./biometric-enums";
+export * from "./student-biometrics";

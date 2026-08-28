@@ -1,4 +1,4 @@
-# CASA School Ã¢â‚¬â€ Presence Lifecycle & School Messaging
+# CASA School ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â Presence Lifecycle & School Messaging
 
 ## Daily presence
 
@@ -6,11 +6,11 @@ CASA School tracks both arrival and departure.
 
 The normal state machine is:
 
-`NOT_ARRIVED Ã¢â€ â€™ ON_CAMPUS Ã¢â€ â€™ SIGNED_OUT`
+`NOT_ARRIVED ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ ON_CAMPUS ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ SIGNED_OUT`
 
 The accepted verification sequence for both directions remains:
 
-**Scan ID Ã¢â€ â€™ Verify Face Ã¢â€ â€™ Verify Liveness Ã¢â€ â€™ Verify Time Ã¢â€ â€™ Record Presence Event**
+**Scan ID ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ Verify Face ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ Verify Liveness ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ Verify Time ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ Record Presence Event**
 
 `attendance_verification_attempts.operation` distinguishes:
 
@@ -156,3 +156,12 @@ The Scanner backend now authenticates provisioned terminals, resolves the school
 QR scans alone still cannot create CHECK_IN/CHECK_OUT attendance.
 
 Accepted presence events and guardian notifications remain downstream of trusted biometric/liveness finalization.
+## Phase 3D verified presence
+
+Normal departure now queues guardian delivery only after trusted face + liveness evidence has atomically moved the student to SIGNED_OUT.
+
+The outbox uses the school's ACTIVE WhatsApp sender.
+
+A missing/inactive sender does not invalidate attendance; it produces no delivery row and will be surfaced later as an operational messaging exception.
+
+Early departure stays Passkey-gated.

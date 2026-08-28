@@ -1,4 +1,4 @@
-# CASA School â€” Scanner PWA Trust Boundary
+# CASA School Ã¢â‚¬â€ Scanner PWA Trust Boundary
 
 ## Principle
 
@@ -174,3 +174,12 @@ The later Scanner PWA will:
 - transition to face/liveness capture only when the server returns a PENDING attempt.
 
 The PWA will not expose the normal School Admin interface.
+## Phase 3D trusted biometric finalization
+
+A pending Scanner attempt can now be finalized only by a short-lived signed biometric assertion tied to the exact attempt, student, and active provider-side biometric profile.
+
+Normal CHECK_IN/CHECK_OUT finalization is atomic.
+
+Normal CHECK_OUT also creates the school's guardian WhatsApp outbox rows when an ACTIVE school sender and eligible guardian destinations exist.
+
+EARLY departure remains blocked until real CASA Passkey step-up authorization is implemented.
