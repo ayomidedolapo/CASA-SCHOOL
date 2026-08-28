@@ -1,10 +1,10 @@
-# CASA School Ã¢â‚¬â€ Attendance Foundation
+# CASA School ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â Attendance Foundation
 
 ## Verification model
 
 CASA School follows:
 
-**Scan ID Ã¢â€ â€™ Verify Face Ã¢â€ â€™ Verify Liveness Ã¢â€ â€™ Verify Time Ã¢â€ â€™ Record Attendance**
+**Scan ID ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ Verify Face ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ Verify Liveness ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ Verify Time ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ Record Attendance**
 
 The ID card identifies the student.
 
@@ -139,6 +139,22 @@ Required behavior:
 
 The student daily presence state should be derivable as:
 
-`NOT_ARRIVED â†’ ON_CAMPUS â†’ SIGNED_OUT`
+`NOT_ARRIVED Ã¢â€ â€™ ON_CAMPUS Ã¢â€ â€™ SIGNED_OUT`
 
 with explicit exception states for rejected attempts and authorized early departure.
+## Phase 3B presence extension
+
+The attendance foundation now models both CHECK_IN and CHECK_OUT.
+
+Additive Phase 3B changes include:
+
+- explicit verification-attempt operation;
+- normal dismissal and departure-close windows;
+- early/normal/manual departure result;
+- ON_CAMPUS/SIGNED_OUT daily state;
+- departure evidence on the attendance record;
+- immutable accepted `student_presence_events`;
+- school-specific WhatsApp sender identity;
+- durable guardian-notification outbox.
+
+The original Phase 3A migration remains immutable.

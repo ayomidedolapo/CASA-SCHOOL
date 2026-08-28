@@ -21,6 +21,15 @@ export const attendanceSessionStatusEnum =
     ],
   );
 
+export const attendanceOperationEnum =
+  pgEnum(
+    "attendance_operation",
+    [
+      "CHECK_IN",
+      "CHECK_OUT",
+    ],
+  );
+
 export const attendanceCardResultEnum =
   pgEnum(
     "attendance_card_result",
@@ -65,6 +74,18 @@ export const attendanceTimeResultEnum =
     ],
   );
 
+export const attendanceDepartureResultEnum =
+  pgEnum(
+    "attendance_departure_result",
+    [
+      "NOT_RUN",
+      "NORMAL",
+      "EARLY",
+      "OUTSIDE_WINDOW",
+      "MANUAL",
+    ],
+  );
+
 export const attendanceAttemptOutcomeEnum =
   pgEnum(
     "attendance_attempt_outcome",
@@ -83,5 +104,23 @@ export const attendanceRecordStatusEnum =
       "ON_TIME",
       "LATE",
       "MANUAL",
+    ],
+  );
+
+export const attendancePresenceStateEnum =
+  pgEnum(
+    "attendance_presence_state",
+    [
+      "ON_CAMPUS",
+      "SIGNED_OUT",
+    ],
+  );
+
+export const attendancePresenceEventTypeEnum =
+  pgEnum(
+    "attendance_presence_event_type",
+    [
+      "CHECKED_IN",
+      "CHECKED_OUT",
     ],
   );

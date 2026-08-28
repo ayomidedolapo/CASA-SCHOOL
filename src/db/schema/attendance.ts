@@ -19,8 +19,12 @@ import {
 import {
   attendanceAttemptOutcomeEnum,
   attendanceCardResultEnum,
+  attendanceDepartureResultEnum,
   attendanceFaceResultEnum,
   attendanceLivenessResultEnum,
+  attendanceOperationEnum,
+  attendancePresenceEventTypeEnum,
+  attendancePresenceStateEnum,
   attendanceRecordStatusEnum,
   attendanceSessionStatusEnum,
   attendanceTerminalStatusEnum,
@@ -152,6 +156,18 @@ export const attendancePolicyDays =
           withTimezone: false,
         },
       ).notNull(),
+      normalDismissalAt: time(
+        "normal_dismissal_at",
+        {
+          withTimezone: false,
+        },
+      ).notNull(),
+      checkOutClosesAt: time(
+        "check_out_closes_at",
+        {
+          withTimezone: false,
+        },
+      ).notNull(),
       createdAt: timestamp(
         "created_at",
         {
@@ -201,6 +217,10 @@ export const attendancePolicyDays =
       check(
         "attendance_policy_days_time_order_check",
         sql`${table.checkInOpensAt} <= ${table.onTimeUntil} and ${table.onTimeUntil} <= ${table.checkInClosesAt}`,
+      ),
+      check(
+        "attendance_policy_days_departure_time_order_check",
+        sql`${table.normalDismissalAt} <= ${table.checkOutClosesAt}`,
       ),
     ],
   );
@@ -446,6 +466,12 @@ export const attendanceVerificationAttempts =
           length: 64,
         },
       ).notNull(),
+      operation:
+        attendanceOperationEnum(
+          "operation",
+        )
+          .default("CHECK_IN")
+          .notNull(),
       cardResult:
         attendanceCardResultEnum(
           "card_result",
@@ -474,6 +500,12 @@ export const attendanceVerificationAttempts =
       timeResult:
         attendanceTimeResultEnum(
           "time_result",
+        )
+          .default("NOT_RUN")
+          .notNull(),
+      departureResult:
+        attendanceDepartureResultEnum(
+          "departure_result",
         )
           .default("NOT_RUN")
           .notNull(),
@@ -627,6 +659,18 @@ export const attendanceVerificationAttempts =
         "attendance_attempts_manual_review_actor_check",
         sql`${table.outcome} <> 'MANUAL_REVIEW' or ${table.manualVerifiedByMembershipId} is not null`,
       ),
+      check(
+        "attendance_attempts_operation_time_semantics_check",
+        sql`(
+          (${table.operation} = 'CHECK_IN' and ${table.departureResult} = 'NOT_RUN')
+          or
+          (${table.operation} = 'CHECK_OUT' and ${table.timeResult} = 'NOT_RUN')
+        )`,
+      ),
+      check(
+        "attendance_attempts_early_departure_actor_check",
+        sql`${table.departureResult} <> 'EARLY' or ${table.manualVerifiedByMembershipId} is not null`,
+      ),
     ],
   );
 
@@ -659,6 +703,43 @@ export const studentAttendanceRecords =
         attendanceRecordStatusEnum(
           "status",
         ).notNull(),
+      presenceState:
+        attendancePresenceStateEnum(
+          "presence_state",
+        )
+          .default("ON_CAMPUS")
+          .notNull(),
+      departureResult:
+        attendanceDepartureResultEnum(
+          "departure_result",
+        )
+          .default("NOT_RUN")
+          .notNull(),
+      checkedOutAt: timestamp(
+        "checked_out_at",
+        {
+          withTimezone: true,
+        },
+      ),
+      checkOutAttemptId: uuid(
+        "check_out_attempt_id",
+      ),
+      checkOutTerminalId: uuid(
+        "check_out_terminal_id",
+      ),
+      checkOutCardId: uuid(
+        "check_out_card_id",
+      ),
+      checkOutVerifiedByMembershipId:
+        uuid(
+          "check_out_verified_by_membership_id",
+        ),
+      checkOutReason: varchar(
+        "check_out_reason",
+        {
+          length: 240,
+        },
+      ),
       verifiedByMembershipId:
         uuid(
           "verified_by_membership_id",
@@ -777,9 +858,253 @@ export const studentAttendanceRecords =
         ],
         name: "student_attendance_records_school_verifier_fk",
       }),
+      foreignKey({
+        columns: [
+          table.schoolId,
+          table.checkOutAttemptId,
+        ],
+        foreignColumns: [
+          attendanceVerificationAttempts.schoolId,
+          attendanceVerificationAttempts.id,
+        ],
+        name: "student_attendance_records_school_checkout_attempt_fk",
+      }),
+      foreignKey({
+        columns: [
+          table.schoolId,
+          table.checkOutTerminalId,
+        ],
+        foreignColumns: [
+          attendanceTerminals.schoolId,
+          attendanceTerminals.id,
+        ],
+        name: "student_attendance_records_school_checkout_terminal_fk",
+      }),
+      foreignKey({
+        columns: [
+          table.schoolId,
+          table.checkOutCardId,
+        ],
+        foreignColumns: [
+          studentIdentityCards.schoolId,
+          studentIdentityCards.id,
+        ],
+        name: "student_attendance_records_school_checkout_card_fk",
+      }),
+      foreignKey({
+        columns: [
+          table.schoolId,
+          table.checkOutVerifiedByMembershipId,
+        ],
+        foreignColumns: [
+          schoolMemberships.schoolId,
+          schoolMemberships.id,
+        ],
+        name: "student_attendance_records_school_checkout_verifier_fk",
+      }),
       check(
         "student_attendance_records_manual_verifier_check",
         sql`${table.status} <> 'MANUAL' or ${table.verifiedByMembershipId} is not null`,
+      ),
+      check(
+        "student_attendance_records_presence_state_check",
+        sql`(
+          (${table.presenceState} = 'ON_CAMPUS' and ${table.checkedOutAt} is null and ${table.departureResult} = 'NOT_RUN')
+          or
+          (${table.presenceState} = 'SIGNED_OUT' and ${table.checkedOutAt} is not null and ${table.departureResult} <> 'NOT_RUN')
+        )`,
+      ),
+      check(
+        "student_attendance_records_checkout_time_check",
+        sql`${table.checkedOutAt} is null or ${table.checkedOutAt} >= ${table.recordedAt}`,
+      ),
+      check(
+        "student_attendance_records_early_departure_check",
+        sql`${table.departureResult} <> 'EARLY' or (
+          ${table.checkOutVerifiedByMembershipId} is not null
+          and ${table.checkOutReason} is not null
+          and length(trim(${table.checkOutReason})) > 0
+        )`,
+      ),
+    ],
+  );
+
+export const studentPresenceEvents =
+  pgTable(
+    "student_presence_events",
+    {
+      id: uuid("id")
+        .defaultRandom()
+        .primaryKey(),
+      schoolId: uuid("school_id")
+        .notNull()
+        .references(
+          () => schools.id,
+        ),
+      sessionId: uuid(
+        "session_id",
+      ).notNull(),
+      studentId: uuid(
+        "student_id",
+      ).notNull(),
+      attendanceRecordId: uuid(
+        "attendance_record_id",
+      ).notNull(),
+      attemptId: uuid(
+        "attempt_id",
+      ),
+      terminalId: uuid(
+        "terminal_id",
+      ),
+      cardId: uuid(
+        "card_id",
+      ),
+      eventType:
+        attendancePresenceEventTypeEnum(
+          "event_type",
+        ).notNull(),
+      departureResult:
+        attendanceDepartureResultEnum(
+          "departure_result",
+        )
+          .default("NOT_RUN")
+          .notNull(),
+      actorMembershipId: uuid(
+        "actor_membership_id",
+      ),
+      reason: varchar("reason", {
+        length: 240,
+      }),
+      occurredAt: timestamp(
+        "occurred_at",
+        {
+          withTimezone: true,
+        },
+      )
+        .defaultNow()
+        .notNull(),
+      createdAt: timestamp(
+        "created_at",
+        {
+          withTimezone: true,
+        },
+      )
+        .defaultNow()
+        .notNull(),
+    },
+    (table) => [
+      unique(
+        "student_presence_events_school_id_id_unique",
+      ).on(
+        table.schoolId,
+        table.id,
+      ),
+      unique(
+        "student_presence_events_record_type_unique",
+      ).on(
+        table.schoolId,
+        table.attendanceRecordId,
+        table.eventType,
+      ),
+      index(
+        "student_presence_events_student_occurred_idx",
+      ).on(
+        table.schoolId,
+        table.studentId,
+        table.occurredAt,
+      ),
+      foreignKey({
+        columns: [
+          table.schoolId,
+          table.sessionId,
+        ],
+        foreignColumns: [
+          attendanceSessions.schoolId,
+          attendanceSessions.id,
+        ],
+        name: "student_presence_events_school_session_fk",
+      }),
+      foreignKey({
+        columns: [
+          table.schoolId,
+          table.studentId,
+        ],
+        foreignColumns: [
+          students.schoolId,
+          students.id,
+        ],
+        name: "student_presence_events_school_student_fk",
+      }),
+      foreignKey({
+        columns: [
+          table.schoolId,
+          table.attendanceRecordId,
+        ],
+        foreignColumns: [
+          studentAttendanceRecords.schoolId,
+          studentAttendanceRecords.id,
+        ],
+        name: "student_presence_events_school_record_fk",
+      }),
+      foreignKey({
+        columns: [
+          table.schoolId,
+          table.attemptId,
+        ],
+        foreignColumns: [
+          attendanceVerificationAttempts.schoolId,
+          attendanceVerificationAttempts.id,
+        ],
+        name: "student_presence_events_school_attempt_fk",
+      }),
+      foreignKey({
+        columns: [
+          table.schoolId,
+          table.terminalId,
+        ],
+        foreignColumns: [
+          attendanceTerminals.schoolId,
+          attendanceTerminals.id,
+        ],
+        name: "student_presence_events_school_terminal_fk",
+      }),
+      foreignKey({
+        columns: [
+          table.schoolId,
+          table.cardId,
+        ],
+        foreignColumns: [
+          studentIdentityCards.schoolId,
+          studentIdentityCards.id,
+        ],
+        name: "student_presence_events_school_card_fk",
+      }),
+      foreignKey({
+        columns: [
+          table.schoolId,
+          table.actorMembershipId,
+        ],
+        foreignColumns: [
+          schoolMemberships.schoolId,
+          schoolMemberships.id,
+        ],
+        name: "student_presence_events_school_actor_fk",
+      }),
+      check(
+        "student_presence_events_departure_semantics_check",
+        sql`(
+          (${table.eventType} = 'CHECKED_IN' and ${table.departureResult} = 'NOT_RUN')
+          or
+          (${table.eventType} = 'CHECKED_OUT' and ${table.departureResult} <> 'NOT_RUN')
+        )`,
+      ),
+      check(
+        "student_presence_events_early_departure_actor_reason_check",
+        sql`${table.departureResult} <> 'EARLY' or (
+          ${table.actorMembershipId} is not null
+          and ${table.reason} is not null
+          and length(trim(${table.reason})) > 0
+        )`,
       ),
     ],
   );

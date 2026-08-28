@@ -11,3 +11,6 @@ export * from "./schools";
 export * from "./users";
 export * from "./attendance-enums";
 export * from "./attendance";
+
+export * from "./messaging-enums";
+export * from "./school-messaging";

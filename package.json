@@ -13,7 +13,8 @@
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
     "auth:selftest": "tsx scripts/auth-selftest.ts",
-    "card:selftest": "tsx scripts/student-card-selftest.ts"
+    "card:selftest": "tsx scripts/student-card-selftest.ts",
+    "attendance:selftest": "tsx scripts/attendance-presence-selftest.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
