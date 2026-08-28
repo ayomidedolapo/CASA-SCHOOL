@@ -1,4 +1,4 @@
-# CASA School â€” Presence Lifecycle & School Messaging
+# CASA School Ã¢â‚¬â€ Presence Lifecycle & School Messaging
 
 ## Daily presence
 
@@ -6,11 +6,11 @@ CASA School tracks both arrival and departure.
 
 The normal state machine is:
 
-`NOT_ARRIVED â†’ ON_CAMPUS â†’ SIGNED_OUT`
+`NOT_ARRIVED Ã¢â€ â€™ ON_CAMPUS Ã¢â€ â€™ SIGNED_OUT`
 
 The accepted verification sequence for both directions remains:
 
-**Scan ID â†’ Verify Face â†’ Verify Liveness â†’ Verify Time â†’ Record Presence Event**
+**Scan ID Ã¢â€ â€™ Verify Face Ã¢â€ â€™ Verify Liveness Ã¢â€ â€™ Verify Time Ã¢â€ â€™ Record Presence Event**
 
 `attendance_verification_attempts.operation` distinguishes:
 
@@ -149,3 +149,10 @@ The next terminal phase will implement:
 - replay/idempotency protections.
 
 Face/liveness provider integration remains a separate biometric layer.
+## Phase 3C Scanner trust boundary
+
+The Scanner backend now authenticates provisioned terminals, resolves the school-local OPEN session, securely resolves CASA card hashes, and creates idempotent pending verification attempts.
+
+QR scans alone still cannot create CHECK_IN/CHECK_OUT attendance.
+
+Accepted presence events and guardian notifications remain downstream of trusted biometric/liveness finalization.

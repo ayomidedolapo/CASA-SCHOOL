@@ -27,6 +27,7 @@ import {
   attendancePresenceStateEnum,
   attendanceRecordStatusEnum,
   attendanceSessionStatusEnum,
+  attendanceTerminalEventTypeEnum,
   attendanceTerminalStatusEnum,
   attendanceTimeResultEnum,
 } from "./attendance-enums";
@@ -252,6 +253,11 @@ export const attendanceTerminals =
           length: 64,
         },
       ).notNull(),
+      credentialVersion: integer(
+        "credential_version",
+      )
+        .default(1)
+        .notNull(),
       status:
         attendanceTerminalStatusEnum(
           "status",
@@ -331,6 +337,94 @@ export const attendanceTerminals =
       check(
         "attendance_terminals_secret_hash_format_check",
         sql`${table.secretHash} ~ '^[0-9a-f]{64}$'`,
+      ),
+      check(
+        "attendance_terminals_credential_version_check",
+        sql`${table.credentialVersion} >= 1`,
+      ),
+    ],
+  );
+
+export const attendanceTerminalEvents =
+  pgTable(
+    "attendance_terminal_events",
+    {
+      id: uuid("id")
+        .defaultRandom()
+        .primaryKey(),
+      schoolId: uuid("school_id")
+        .notNull()
+        .references(
+          () => schools.id,
+        ),
+      terminalId: uuid(
+        "terminal_id",
+      ).notNull(),
+      actorMembershipId: uuid(
+        "actor_membership_id",
+      ).notNull(),
+      eventType:
+        attendanceTerminalEventTypeEnum(
+          "event_type",
+        ).notNull(),
+      credentialVersion: integer(
+        "credential_version",
+      ).notNull(),
+      reason: varchar("reason", {
+        length: 240,
+      }),
+      createdAt: timestamp(
+        "created_at",
+        {
+          withTimezone: true,
+        },
+      )
+        .defaultNow()
+        .notNull(),
+    },
+    (table) => [
+      unique(
+        "attendance_terminal_events_school_id_id_unique",
+      ).on(
+        table.schoolId,
+        table.id,
+      ),
+      index(
+        "attendance_terminal_events_terminal_created_idx",
+      ).on(
+        table.schoolId,
+        table.terminalId,
+        table.createdAt,
+      ),
+      foreignKey({
+        columns: [
+          table.schoolId,
+          table.terminalId,
+        ],
+        foreignColumns: [
+          attendanceTerminals.schoolId,
+          attendanceTerminals.id,
+        ],
+        name: "attendance_terminal_events_school_terminal_fk",
+      }),
+      foreignKey({
+        columns: [
+          table.schoolId,
+          table.actorMembershipId,
+        ],
+        foreignColumns: [
+          schoolMemberships.schoolId,
+          schoolMemberships.id,
+        ],
+        name: "attendance_terminal_events_school_actor_fk",
+      }),
+      check(
+        "attendance_terminal_events_credential_version_check",
+        sql`${table.credentialVersion} >= 1`,
+      ),
+      check(
+        "attendance_terminal_events_reason_check",
+        sql`${table.reason} is null or length(trim(${table.reason})) > 0`,
       ),
     ],
   );
@@ -456,6 +550,12 @@ export const attendanceVerificationAttempts =
       terminalId: uuid(
         "terminal_id",
       ).notNull(),
+      terminalRequestId: varchar(
+        "terminal_request_id",
+        {
+          length: 64,
+        },
+      ).notNull(),
       studentId: uuid(
         "student_id",
       ),
@@ -555,6 +655,13 @@ export const attendanceVerificationAttempts =
         table.schoolId,
         table.id,
       ),
+      unique(
+        "attendance_attempts_terminal_request_unique",
+      ).on(
+        table.schoolId,
+        table.terminalId,
+        table.terminalRequestId,
+      ),
       index(
         "attendance_attempts_session_occurred_idx",
       ).on(
@@ -631,6 +738,10 @@ export const attendanceVerificationAttempts =
         ],
         name: "attendance_attempts_school_manual_verifier_fk",
       }),
+      check(
+        "attendance_attempts_terminal_request_id_check",
+        sql`${table.terminalRequestId} ~ '^[A-Za-z0-9_-]{8,64}$'`,
+      ),
       check(
         "attendance_attempts_token_hash_format_check",
         sql`${table.scannedTokenHash} ~ '^[0-9a-f]{64}$'`,

@@ -124,3 +124,14 @@ export const attendancePresenceEventTypeEnum =
       "CHECKED_OUT",
     ],
   );
+export const attendanceTerminalEventTypeEnum =
+  pgEnum(
+    "attendance_terminal_event_type",
+    [
+      "PROVISIONED",
+      "SUSPENDED",
+      "REACTIVATED",
+      "REVOKED",
+      "CREDENTIAL_ROTATED",
+    ],
+  );

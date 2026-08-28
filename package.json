@@ -14,7 +14,8 @@
     "db:studio": "drizzle-kit studio",
     "auth:selftest": "tsx scripts/auth-selftest.ts",
     "card:selftest": "tsx scripts/student-card-selftest.ts",
-    "attendance:selftest": "tsx scripts/attendance-presence-selftest.ts"
+    "attendance:selftest": "tsx scripts/attendance-presence-selftest.ts",
+    "terminal:selftest": "tsx scripts/terminal-credential-selftest.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
