@@ -13,7 +13,9 @@ import {
 
 import { schools } from "./schools";
 import { students } from "./students";
+import { schoolMemberships } from "./users";
 import {
+  studentIdentityCardEventTypeEnum,
   studentIdentityCardStatusEnum,
 } from "./student-enums";
 
@@ -143,6 +145,101 @@ export const studentIdentityCards =
       check(
         "student_identity_cards_expiry_after_issue_check",
         sql`${table.expiresAt} is null or ${table.expiresAt} > ${table.issuedAt}`,
+      ),
+    ],
+  );
+export const studentIdentityCardEvents =
+  pgTable(
+    "student_identity_card_events",
+    {
+      id: uuid("id")
+        .defaultRandom()
+        .primaryKey(),
+      schoolId: uuid("school_id")
+        .notNull()
+        .references(
+          () => schools.id,
+        ),
+      studentId: uuid("student_id")
+        .notNull(),
+      cardId: uuid("card_id")
+        .notNull(),
+      actorMembershipId: uuid(
+        "actor_membership_id",
+      ).notNull(),
+      eventType:
+        studentIdentityCardEventTypeEnum(
+          "event_type",
+        ).notNull(),
+      reason: varchar("reason", {
+        length: 240,
+      }),
+      createdAt: timestamp(
+        "created_at",
+        {
+          withTimezone: true,
+        },
+      )
+        .defaultNow()
+        .notNull(),
+    },
+    (table) => [
+      unique(
+        "student_identity_card_events_school_id_id_unique",
+      ).on(
+        table.schoolId,
+        table.id,
+      ),
+      index(
+        "student_identity_card_events_student_created_idx",
+      ).on(
+        table.schoolId,
+        table.studentId,
+        table.createdAt,
+      ),
+      index(
+        "student_identity_card_events_card_created_idx",
+      ).on(
+        table.schoolId,
+        table.cardId,
+        table.createdAt,
+      ),
+      foreignKey({
+        columns: [
+          table.schoolId,
+          table.studentId,
+        ],
+        foreignColumns: [
+          students.schoolId,
+          students.id,
+        ],
+        name: "student_identity_card_events_school_student_fk",
+      }),
+      foreignKey({
+        columns: [
+          table.schoolId,
+          table.cardId,
+        ],
+        foreignColumns: [
+          studentIdentityCards.schoolId,
+          studentIdentityCards.id,
+        ],
+        name: "student_identity_card_events_school_card_fk",
+      }),
+      foreignKey({
+        columns: [
+          table.schoolId,
+          table.actorMembershipId,
+        ],
+        foreignColumns: [
+          schoolMemberships.schoolId,
+          schoolMemberships.id,
+        ],
+        name: "student_identity_card_events_school_actor_membership_fk",
+      }),
+      check(
+        "student_identity_card_events_reason_not_blank_check",
+        sql`${table.reason} is null or length(trim(${table.reason})) > 0`,
       ),
     ],
   );

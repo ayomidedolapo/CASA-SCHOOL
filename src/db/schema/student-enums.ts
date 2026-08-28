@@ -39,3 +39,14 @@ export const studentIdentityCardStatusEnum =
     "REPLACED",
     "EXPIRED",
   ]);
+export const studentIdentityCardEventTypeEnum =
+  pgEnum(
+    "student_identity_card_event_type",
+    [
+      "ISSUED",
+      "MARKED_LOST",
+      "REVOKED",
+      "REPLACED",
+      "EXPIRED",
+    ],
+  );

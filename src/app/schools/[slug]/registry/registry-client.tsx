@@ -9,6 +9,8 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 
+import { StudentCards } from "./student-cards";
+
 interface RegistryClientProps {
   school: {
     slug: string;
@@ -657,7 +659,7 @@ export function RegistryClient({
                 {user.fullName}
               </p>
               <p className="text-slate-500">
-                {roles.join(" Ãƒâ€šÃ‚Â· ")}
+                {roles.join(" ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· ")}
               </p>
             </div>
             <button
@@ -759,7 +761,7 @@ export function RegistryClient({
                     event.target.value,
                   )
                 }
-                placeholder="Search registryÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦"
+                placeholder="Search registryÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦"
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-950 sm:max-w-xs"
               />
             </div>
@@ -836,7 +838,7 @@ export function RegistryClient({
                           </p>
                           <p className="mt-1 font-medium">
                             {student.classLevelName
-                              ? `${student.classLevelName} Ãƒâ€šÃ‚Â· ${student.classArmName}`
+                              ? `${student.classLevelName} ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· ${student.classArmName}`
                               : "Not enrolled"}
                           </p>
                         </div>
@@ -1044,6 +1046,13 @@ export function RegistryClient({
                   </p>
                 </div>
 
+                <StudentCards
+                  apiBase={apiBase}
+                  studentId={
+                    studentDetail.student.id
+                  }
+                />
+
                 <div className="mt-6 border-t border-slate-100 pt-5">
                   <h4 className="text-sm font-semibold">
                     Guardians
@@ -1073,7 +1082,7 @@ export function RegistryClient({
                                 guardian.relationshipLabel
                               }
                               {guardian.isPrimary
-                                ? " Ãƒâ€šÃ‚Â· Primary"
+                                ? " ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· Primary"
                                 : ""}
                             </p>
                           </div>
@@ -1198,7 +1207,7 @@ export function RegistryClient({
                               {
                                 enrollment.classLevelName
                               }{" "}
-                              Ãƒâ€šÃ‚Â·{" "}
+                              ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â·{" "}
                               {
                                 enrollment.classArmName
                               }
@@ -1207,7 +1216,7 @@ export function RegistryClient({
                               {
                                 enrollment.academicSessionName
                               }{" "}
-                              Ãƒâ€šÃ‚Â·{" "}
+                              ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â·{" "}
                               {
                                 enrollment.status
                               }
@@ -1290,7 +1299,7 @@ export function RegistryClient({
                               {
                                 arm.classLevelName
                               }{" "}
-                              Ãƒâ€šÃ‚Â·{" "}
+                              ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â·{" "}
                               {
                                 arm.name
                               }
