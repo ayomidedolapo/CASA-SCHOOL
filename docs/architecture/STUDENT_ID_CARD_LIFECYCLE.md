@@ -1,4 +1,4 @@
-# CASA School â€” Student ID Card Lifecycle
+# CASA School Ã¢â‚¬â€ Student ID Card Lifecycle
 
 ## Core principle
 
@@ -87,3 +87,8 @@ Phase 2C does not yet implement:
 - offline terminal sync.
 
 Those features will consume the card identity foundation built here.
+## Phase 3J readiness boundary
+
+The Technician workbench reads card status for identity-readiness decisions but does not expose the raw one-time student-card QR credential.
+
+Legacy card lifecycle remains in Registry until the central personalized card-production engine replaces client-visible raw issuance with server-memory QR rendering and final CASA-controlled artifacts.

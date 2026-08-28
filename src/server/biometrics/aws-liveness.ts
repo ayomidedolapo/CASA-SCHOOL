@@ -1585,6 +1585,80 @@ export async function completeAwsVerificationLiveness(
   };
 }
 
+export async function cancelAwsEnrollmentLiveness(
+  input: {
+    access:
+      SchoolAccess;
+    studentId:
+      string;
+    livenessSessionId:
+      string;
+  },
+) {
+  assertBiometricProviderMode(
+    "AWS_REKOGNITION",
+  );
+
+  const db = getDb();
+
+  const rows =
+    await db
+      .update(
+        biometricLivenessSessions,
+      )
+      .set({
+        status:
+          "FAILED",
+        failureCode:
+          "CLIENT_CANCELLED",
+        updatedAt:
+          new Date(),
+      })
+      .where(
+        and(
+          eq(
+            biometricLivenessSessions.schoolId,
+            input.access.school.id,
+          ),
+          eq(
+            biometricLivenessSessions.id,
+            input.livenessSessionId,
+          ),
+          eq(
+            biometricLivenessSessions.studentId,
+            input.studentId,
+          ),
+          eq(
+            biometricLivenessSessions.initiatedByMembershipId,
+            input.access.membership.id,
+          ),
+          eq(
+            biometricLivenessSessions.purpose,
+            "ENROLLMENT",
+          ),
+          eq(
+            biometricLivenessSessions.provider,
+            AWS_REKOGNITION_PROVIDER,
+          ),
+          eq(
+            biometricLivenessSessions.status,
+            "CREATED",
+          ),
+        ),
+      )
+      .returning({
+        id:
+          biometricLivenessSessions.id,
+      });
+
+  return {
+    ok:
+      Boolean(
+        rows[0],
+      ),
+  };
+}
+
 export async function cancelAwsVerificationLiveness(
   input: {
     access:

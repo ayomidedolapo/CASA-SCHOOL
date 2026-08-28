@@ -1,0 +1,357 @@
+.shell {
+  --paper: #f4f1eb;
+  --ink: #0b0b0b;
+  --muted: #706b62;
+  --line: #c9c2b6;
+  --soft: #e8e3da;
+  --positive: #176744;
+  --warning: #946000;
+  --danger: #a52828;
+
+  min-height: 100vh;
+  background: var(--paper);
+  color: var(--ink);
+  padding: 28px;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 28px;
+  align-items: end;
+  border-bottom: 1px solid var(--ink);
+  padding-bottom: 18px;
+}
+
+.title {
+  margin: 0;
+  font-size: clamp(50px, 8vw, 104px);
+  line-height: 0.82;
+  letter-spacing: -0.067em;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.school {
+  max-width: 320px;
+  text-align: right;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.nav {
+  margin-top: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  font-size: 12px;
+}
+
+.nav a {
+  color: var(--ink);
+  text-decoration: none;
+  border-bottom: 1px solid var(--ink);
+}
+
+.notice {
+  margin-top: 16px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+
+.error {
+  color: var(--danger);
+}
+
+.success {
+  color: var(--positive);
+}
+
+.warning {
+  color: var(--warning);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.86fr) minmax(0, 1.7fr);
+  gap: 34px;
+  margin-top: 34px;
+}
+
+.section {
+  min-width: 0;
+}
+
+.section + .section {
+  margin-top: 38px;
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 9px;
+  border-bottom: 1px solid var(--ink);
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: clamp(25px, 3vw, 42px);
+  letter-spacing: -0.045em;
+}
+
+.caption {
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+}
+
+.search {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.input,
+.select {
+  min-height: 42px;
+  border: 1px solid var(--ink);
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink);
+  padding: 8px 10px;
+  font: inherit;
+}
+
+.button,
+.secondary,
+.danger {
+  min-height: 42px;
+  border-radius: 0;
+  padding: 9px 13px;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.button {
+  border: 1px solid var(--ink);
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.secondary {
+  border: 1px solid var(--ink);
+  background: transparent;
+  color: var(--ink);
+}
+
+.danger {
+  border: 1px solid var(--danger);
+  background: transparent;
+  color: var(--danger);
+}
+
+.button:disabled,
+.secondary:disabled,
+.danger:disabled {
+  opacity: 0.45;
+  cursor: wait;
+}
+
+.studentList {
+  margin-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.studentButton {
+  display: block;
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  padding: 13px 0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.studentButton[aria-current="true"] {
+  padding-left: 12px;
+  border-left: 4px solid var(--ink);
+}
+
+.studentName {
+  display: block;
+  font-weight: 850;
+  font-size: 15px;
+}
+
+.studentMeta {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.pagination {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.identityHero {
+  border-bottom: 1px solid var(--ink);
+  padding-bottom: 22px;
+}
+
+.identityName {
+  margin: 0;
+  font-size: clamp(38px, 5vw, 74px);
+  line-height: 0.92;
+  letter-spacing: -0.055em;
+}
+
+.identityCode {
+  margin-top: 9px;
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+}
+
+.readiness {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-top: 1px solid var(--line);
+  border-left: 1px solid var(--line);
+  margin-top: 22px;
+}
+
+.readinessCell {
+  min-height: 124px;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  padding: 14px;
+}
+
+.readinessValue {
+  display: block;
+  font-size: clamp(28px, 4vw, 54px);
+  line-height: 1;
+  letter-spacing: -0.05em;
+  font-weight: 900;
+}
+
+.readinessLabel {
+  display: block;
+  margin-top: 9px;
+  color: var(--muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.actionRow {
+  margin-top: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.livenessFrame {
+  margin-top: 16px;
+  border: 1px solid var(--ink);
+  min-height: 500px;
+  background: #fff;
+}
+
+.terminals {
+  margin-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.terminal {
+  padding: 15px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.terminalHead {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.terminalName {
+  font-weight: 850;
+}
+
+.terminalCode {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.terminalActions {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.reason {
+  margin-top: 8px;
+  width: min(520px, 100%);
+}
+
+.credential {
+  margin-top: 18px;
+  border: 1px solid var(--ink);
+  padding: 15px;
+}
+
+.credentialValue {
+  margin-top: 10px;
+  word-break: break-all;
+  font-family: Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.empty {
+  margin-top: 14px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+@media (max-width: 900px) {
+  .shell {
+    padding: 18px;
+  }
+
+  .top,
+  .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .school {
+    text-align: left;
+  }
+
+  .readiness {
+    grid-template-columns: 1fr;
+  }
+}

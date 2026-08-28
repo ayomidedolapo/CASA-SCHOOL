@@ -1,4 +1,4 @@
-# CASA School Ã¢â‚¬â€ Amazon Rekognition Biometric Engine Adapter
+# CASA School ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â Amazon Rekognition Biometric Engine Adapter
 
 ## Position in CASA
 
@@ -193,3 +193,10 @@ The provider returns only the temporary STS credentials that Phase 3G created fo
 On analysis completion the browser asks CASA to complete the bound liveness session. The browser does not evaluate AWS confidence scores itself.
 
 Client cancellation marks the provider session FAILED and permits a fresh liveness session for the same still-pending attendance attempt.
+## Phase 3J enrollment operations
+
+The School Technician workbench now drives the existing Passkey-authorized AWS enrollment liveness flow.
+
+Enrollment sessions can also be explicitly cancelled by the same school membership that created them. Cancellation marks the CASA session FAILED with CLIENT_CANCELLED and does not create or replace a biometric profile.
+
+The AWS Face Liveness streaming credential remains transient browser memory only.

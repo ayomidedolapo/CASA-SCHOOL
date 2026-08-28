@@ -1,4 +1,4 @@
-# CASA School ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â Passkey Identity & Step-Up
+# CASA School ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â Passkey Identity & Step-Up
 
 ## CASA signature identity
 
@@ -182,3 +182,18 @@ OWNER/ADMIN authorizes the exact pending departure with a nonblank reason.
 The authorization row references the exact consumed `auth_passkey_step_up_grants` row, preserving the WebAuthn step-up audit chain.
 
 The Scanner does not receive or consume that Passkey grant; it only observes that the server-side attempt has become staff-authorized and then resumes face+liveness.
+## Phase 3J Technician workbench
+
+The Technician workbench consumes the existing Passkey step-up actions for real human operations:
+
+- BIOMETRIC_ENROLL;
+- BIOMETRIC_REENROLL;
+- TERMINAL_PROVISION;
+- TERMINAL_ROTATE;
+- TERMINAL_SUSPEND;
+- TERMINAL_REACTIVATE;
+- TERMINAL_REVOKE.
+
+The browser never sends a terminal-management Passkey token to the Scanner PWA.
+
+Normal student attendance still uses the terminal credential rather than human Passkey.
