@@ -1,0 +1,6270 @@
+{
+  "version": "8",
+  "dialect": "postgres",
+  "id": "9027bee7-a3b3-4f52-9734-007e052ca883",
+  "prevIds": [
+    "82cff04a-d373-42c3-b0d1-a45a4cdc2944"
+  ],
+  "ddl": [
+    {
+      "values": [
+        "PLANNED",
+        "ACTIVE",
+        "CLOSED"
+      ],
+      "name": "academic_period_status",
+      "entityType": "enums",
+      "schema": "public"
+    },
+    {
+      "values": [
+        "OWNER",
+        "ADMIN",
+        "STAFF",
+        "GUARDIAN",
+        "STUDENT"
+      ],
+      "name": "school_membership_role",
+      "entityType": "enums",
+      "schema": "public"
+    },
+    {
+      "values": [
+        "ACTIVE",
+        "INVITED",
+        "SUSPENDED",
+        "REVOKED"
+      ],
+      "name": "school_membership_status",
+      "entityType": "enums",
+      "schema": "public"
+    },
+    {
+      "values": [
+        "ACTIVE",
+        "SUSPENDED",
+        "ARCHIVED"
+      ],
+      "name": "school_status",
+      "entityType": "enums",
+      "schema": "public"
+    },
+    {
+      "values": [
+        "ACTIVE",
+        "SUSPENDED",
+        "ARCHIVED"
+      ],
+      "name": "user_status",
+      "entityType": "enums",
+      "schema": "public"
+    },
+    {
+      "values": [
+        "ACTIVE",
+        "COMPLETED",
+        "WITHDRAWN",
+        "TRANSFERRED"
+      ],
+      "name": "student_enrollment_status",
+      "entityType": "enums",
+      "schema": "public"
+    },
+    {
+      "values": [
+        "ACTIVE",
+        "INACTIVE",
+        "ARCHIVED"
+      ],
+      "name": "guardian_status",
+      "entityType": "enums",
+      "schema": "public"
+    },
+    {
+      "values": [
+        "ISSUED",
+        "MARKED_LOST",
+        "REVOKED",
+        "REPLACED",
+        "EXPIRED"
+      ],
+      "name": "student_identity_card_event_type",
+      "entityType": "enums",
+      "schema": "public"
+    },
+    {
+      "values": [
+        "ACTIVE",
+        "LOST",
+        "REVOKED",
+        "REPLACED",
+        "EXPIRED"
+      ],
+      "name": "student_identity_card_status",
+      "entityType": "enums",
+      "schema": "public"
+    },
+    {
+      "values": [
+        "MALE",
+        "FEMALE",
+        "UNSPECIFIED"
+      ],
+      "name": "student_sex",
+      "entityType": "enums",
+      "schema": "public"
+    },
+    {
+      "values": [
+        "ACTIVE",
+        "INACTIVE",
+        "GRADUATED",
+        "WITHDRAWN",
+        "ARCHIVED"
+      ],
+      "name": "student_status",
+      "entityType": "enums",
+      "schema": "public"
+    },
+    {
+      "values": [
+        "PENDING",
+        "RECORDED",
+        "REJECTED",
+        "MANUAL_REVIEW"
+      ],
+      "name": "attendance_attempt_outcome",
+      "entityType": "enums",
+      "schema": "public"
+    },
+    {
+      "values": [
+        "PENDING",
+        "MATCHED",
+        "UNKNOWN_CARD",
+        "INACTIVE_CARD"
+      ],
+      "name": "attendance_card_result",
+      "entityType": "enums",
+      "schema": "public"
+    },
+    {
+      "values": [
+        "NOT_RUN",
+        "PASSED",
+        "FAILED",
+        "UNAVAILABLE"
+      ],
+      "name": "attendance_face_result",
+      "entityType": "enums",
+      "schema": "public"
+    },
+    {
+      "values": [
+        "NOT_RUN",
+        "PASSED",
+        "FAILED",
+        "UNAVAILABLE"
+      ],
+      "name": "attendance_liveness_result",
+      "entityType": "enums",
+      "schema": "public"
+    },
+    {
+      "values": [
+        "ON_TIME",
+        "LATE",
+        "MANUAL"
+      ],
+      "name": "attendance_record_status",
+      "entityType": "enums",
+      "schema": "public"
+    },
+    {
+      "values": [
+        "PLANNED",
+        "OPEN",
+        "CLOSED",
+        "CANCELLED"
+      ],
+      "name": "attendance_session_status",
+      "entityType": "enums",
+      "schema": "public"
+    },
+    {
+      "values": [
+        "ACTIVE",
+        "SUSPENDED",
+        "REVOKED"
+      ],
+      "name": "attendance_terminal_status",
+      "entityType": "enums",
+      "schema": "public"
+    },
+    {
+      "values": [
+        "NOT_RUN",
+        "ON_TIME",
+        "LATE",
+        "OUTSIDE_WINDOW"
+      ],
+      "name": "attendance_time_result",
+      "entityType": "enums",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "schools",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "school_membership_roles",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "school_memberships",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "users",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "auth_password_credentials",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "auth_sessions",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "auth_login_events",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "auth_rate_limits",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "students",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "guardians",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "student_guardians",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "student_enrollments",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "student_identity_card_events",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "student_identity_cards",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "attendance_policies",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "attendance_policy_days",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "attendance_sessions",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "attendance_terminals",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "attendance_verification_attempts",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "student_attendance_records",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "academic_sessions",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "academic_terms",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "class_arms",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "class_levels",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "school_sections",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "schools"
+    },
+    {
+      "type": "varchar(80)",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "slug",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "schools"
+    },
+    {
+      "type": "varchar(200)",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "name",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "schools"
+    },
+    {
+      "type": "school_status",
+      "typeSchema": "public",
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'ACTIVE'",
+      "generated": null,
+      "identity": null,
+      "name": "status",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "schools"
+    },
+    {
+      "type": "varchar(64)",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'Africa/Lagos'",
+      "generated": null,
+      "identity": null,
+      "name": "timezone",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "schools"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "schools"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "schools"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "school_membership_roles"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "school_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "school_membership_roles"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "membership_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "school_membership_roles"
+    },
+    {
+      "type": "school_membership_role",
+      "typeSchema": "public",
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "role",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "school_membership_roles"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "school_membership_roles"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "school_memberships"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "school_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "school_memberships"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "school_memberships"
+    },
+    {
+      "type": "school_membership_status",
+      "typeSchema": "public",
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'ACTIVE'",
+      "generated": null,
+      "identity": null,
+      "name": "status",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "school_memberships"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "joined_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "school_memberships"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "school_memberships"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "school_memberships"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "users"
+    },
+    {
+      "type": "varchar(200)",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "full_name",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "users"
+    },
+    {
+      "type": "varchar(320)",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "email",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "users"
+    },
+    {
+      "type": "varchar(16)",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "phone",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "users"
+    },
+    {
+      "type": "user_status",
+      "typeSchema": "public",
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'ACTIVE'",
+      "generated": null,
+      "identity": null,
+      "name": "status",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "users"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "users"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "users"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "auth_password_credentials"
+    },
+    {
+      "type": "varchar(512)",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "password_hash",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "auth_password_credentials"
+    },
+    {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "false",
+      "generated": null,
+      "identity": null,
+      "name": "must_change_password",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "auth_password_credentials"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "password_changed_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "auth_password_credentials"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "auth_password_credentials"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "auth_password_credentials"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "auth_sessions"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "auth_sessions"
+    },
+    {
+      "type": "varchar(64)",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "token_hash",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "auth_sessions"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "expires_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "auth_sessions"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "revoked_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "auth_sessions"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "last_seen_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "auth_sessions"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "auth_sessions"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "auth_login_events"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "auth_login_events"
+    },
+    {
+      "type": "varchar(40)",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "event_type",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "auth_login_events"
+    },
+    {
+      "type": "varchar(80)",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "reason",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "auth_login_events"
+    },
+    {
+      "type": "varchar(64)",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "identifier_hash",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "auth_login_events"
+    },
+    {
+      "type": "varchar(64)",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "source_address_hash",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "auth_login_events"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "auth_login_events"
+    },
+    {
+      "type": "varchar(32)",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "scope",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "auth_rate_limits"
+    },
+    {
+      "type": "varchar(64)",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "key_hash",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "auth_rate_limits"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "window_started_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "auth_rate_limits"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "0",
+      "generated": null,
+      "identity": null,
+      "name": "failure_count",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "auth_rate_limits"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "blocked_until",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "auth_rate_limits"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "auth_rate_limits"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "students"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "school_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "students"
+    },
+    {
+      "type": "varchar(64)",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "admission_number",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "students"
+    },
+    {
+      "type": "varchar(100)",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "first_name",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "students"
+    },
+    {
+      "type": "varchar(100)",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "middle_name",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "students"
+    },
+    {
+      "type": "varchar(100)",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "last_name",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "students"
+    },
+    {
+      "type": "varchar(100)",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "preferred_name",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "students"
+    },
+    {
+      "type": "date",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "date_of_birth",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "students"
+    },
+    {
+      "type": "student_sex",
+      "typeSchema": "public",
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'UNSPECIFIED'",
+      "generated": null,
+      "identity": null,
+      "name": "sex",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "students"
+    },
+    {
+      "type": "student_status",
+      "typeSchema": "public",
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'ACTIVE'",
+      "generated": null,
+      "identity": null,
+      "name": "status",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "students"
+    },
+    {
+      "type": "date",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "admission_date",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "students"
+    },
+    {
+      "type": "date",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "exit_date",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "students"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "students"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "students"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "guardians"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "school_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "guardians"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "membership_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "guardians"
+    },
+    {
+      "type": "varchar(200)",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "full_name",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "guardians"
+    },
+    {
+      "type": "varchar(320)",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "email",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "guardians"
+    },
+    {
+      "type": "varchar(32)",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "phone",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "guardians"
+    },
+    {
+      "type": "guardian_status",
+      "typeSchema": "public",
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'ACTIVE'",
+      "generated": null,
+      "identity": null,
+      "name": "status",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "guardians"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "guardians"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "guardians"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "student_guardians"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "school_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "student_guardians"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "student_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "student_guardians"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "guardian_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "student_guardians"
+    },
+    {
+      "type": "varchar(80)",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "relationship_label",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "student_guardians"
+    },
+    {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "false",
+      "generated": null,
+      "identity": null,
+      "name": "is_primary",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "student_guardians"
+    },
+    {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "false",
+      "generated": null,
+      "identity": null,
+      "name": "is_emergency_contact",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "student_guardians"
+    },
+    {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "false",
+      "generated": null,
+      "identity": null,
+      "name": "pickup_authorized",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "student_guardians"
+    },
+    {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "true",
+      "generated": null,
+      "identity": null,
+      "name": "receives_notifications",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "student_guardians"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "student_guardians"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "student_guardians"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "student_enrollments"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "school_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "student_enrollments"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "student_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "student_enrollments"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "academic_session_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "student_enrollments"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "class_arm_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "student_enrollments"
+    },
+    {
+      "type": "student_enrollment_status",
+      "typeSchema": "public",
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'ACTIVE'",
+      "generated": null,
+      "identity": null,
+      "name": "status",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "student_enrollments"
+    },
+    {
+      "type": "date",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "starts_on",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "student_enrollments"
+    },
+    {
+      "type": "date",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "ends_on",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "student_enrollments"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "student_enrollments"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "student_enrollments"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "student_identity_card_events"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "school_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "student_identity_card_events"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "student_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "student_identity_card_events"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "card_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "student_identity_card_events"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "actor_membership_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "student_identity_card_events"
+    },
+    {
+      "type": "student_identity_card_event_type",
+      "typeSchema": "public",
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "event_type",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "student_identity_card_events"
+    },
+    {
+      "type": "varchar(240)",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "reason",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "student_identity_card_events"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "student_identity_card_events"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "student_identity_cards"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "school_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "student_identity_cards"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "student_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "student_identity_cards"
+    },
+    {
+      "type": "varchar(64)",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "serial_number",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "student_identity_cards"
+    },
+    {
+      "type": "varchar(64)",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "token_hash",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "student_identity_cards"
+    },
+    {
+      "type": "student_identity_card_status",
+      "typeSchema": "public",
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'ACTIVE'",
+      "generated": null,
+      "identity": null,
+      "name": "status",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "student_identity_cards"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "issued_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "student_identity_cards"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "expires_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "student_identity_cards"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "deactivated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "student_identity_cards"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "student_identity_cards"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "student_identity_cards"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attendance_policies"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "school_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attendance_policies"
+    },
+    {
+      "type": "varchar(120)",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "name",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attendance_policies"
+    },
+    {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "false",
+      "generated": null,
+      "identity": null,
+      "name": "is_default",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attendance_policies"
+    },
+    {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "true",
+      "generated": null,
+      "identity": null,
+      "name": "is_active",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attendance_policies"
+    },
+    {
+      "type": "date",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "valid_from",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attendance_policies"
+    },
+    {
+      "type": "date",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "valid_to",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attendance_policies"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attendance_policies"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attendance_policies"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attendance_policy_days"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "school_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attendance_policy_days"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "policy_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attendance_policy_days"
+    },
+    {
+      "type": "smallint",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "weekday",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attendance_policy_days"
+    },
+    {
+      "type": "time",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "check_in_opens_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attendance_policy_days"
+    },
+    {
+      "type": "time",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "on_time_until",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attendance_policy_days"
+    },
+    {
+      "type": "time",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "check_in_closes_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attendance_policy_days"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attendance_policy_days"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attendance_policy_days"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attendance_sessions"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "school_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attendance_sessions"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "policy_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attendance_sessions"
+    },
+    {
+      "type": "date",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "attendance_date",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attendance_sessions"
+    },
+    {
+      "type": "attendance_session_status",
+      "typeSchema": "public",
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'PLANNED'",
+      "generated": null,
+      "identity": null,
+      "name": "status",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attendance_sessions"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "opened_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attendance_sessions"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "closed_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attendance_sessions"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attendance_sessions"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attendance_sessions"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attendance_terminals"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "school_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attendance_terminals"
+    },
+    {
+      "type": "varchar(120)",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "name",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attendance_terminals"
+    },
+    {
+      "type": "varchar(64)",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "terminal_code",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attendance_terminals"
+    },
+    {
+      "type": "varchar(64)",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "secret_hash",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attendance_terminals"
+    },
+    {
+      "type": "attendance_terminal_status",
+      "typeSchema": "public",
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'ACTIVE'",
+      "generated": null,
+      "identity": null,
+      "name": "status",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attendance_terminals"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "provisioned_by_membership_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attendance_terminals"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "last_seen_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attendance_terminals"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attendance_terminals"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attendance_terminals"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attendance_verification_attempts"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "school_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attendance_verification_attempts"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "session_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attendance_verification_attempts"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "terminal_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attendance_verification_attempts"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "student_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attendance_verification_attempts"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "card_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attendance_verification_attempts"
+    },
+    {
+      "type": "varchar(64)",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "scanned_token_hash",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attendance_verification_attempts"
+    },
+    {
+      "type": "attendance_card_result",
+      "typeSchema": "public",
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'PENDING'",
+      "generated": null,
+      "identity": null,
+      "name": "card_result",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attendance_verification_attempts"
+    },
+    {
+      "type": "attendance_face_result",
+      "typeSchema": "public",
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'NOT_RUN'",
+      "generated": null,
+      "identity": null,
+      "name": "face_result",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attendance_verification_attempts"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "face_confidence_bps",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attendance_verification_attempts"
+    },
+    {
+      "type": "attendance_liveness_result",
+      "typeSchema": "public",
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'NOT_RUN'",
+      "generated": null,
+      "identity": null,
+      "name": "liveness_result",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attendance_verification_attempts"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "liveness_confidence_bps",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attendance_verification_attempts"
+    },
+    {
+      "type": "attendance_time_result",
+      "typeSchema": "public",
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'NOT_RUN'",
+      "generated": null,
+      "identity": null,
+      "name": "time_result",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attendance_verification_attempts"
+    },
+    {
+      "type": "attendance_attempt_outcome",
+      "typeSchema": "public",
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'PENDING'",
+      "generated": null,
+      "identity": null,
+      "name": "outcome",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attendance_verification_attempts"
+    },
+    {
+      "type": "varchar(80)",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "reason_code",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attendance_verification_attempts"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "manual_verified_by_membership_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attendance_verification_attempts"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "occurred_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attendance_verification_attempts"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "completed_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attendance_verification_attempts"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "attendance_verification_attempts"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "student_attendance_records"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "school_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "student_attendance_records"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "session_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "student_attendance_records"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "student_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "student_attendance_records"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "terminal_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "student_attendance_records"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "card_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "student_attendance_records"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "source_attempt_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "student_attendance_records"
+    },
+    {
+      "type": "attendance_record_status",
+      "typeSchema": "public",
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "status",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "student_attendance_records"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "verified_by_membership_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "student_attendance_records"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "recorded_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "student_attendance_records"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "student_attendance_records"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "academic_sessions"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "school_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "academic_sessions"
+    },
+    {
+      "type": "varchar(80)",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "name",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "academic_sessions"
+    },
+    {
+      "type": "date",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "starts_on",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "academic_sessions"
+    },
+    {
+      "type": "date",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "ends_on",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "academic_sessions"
+    },
+    {
+      "type": "academic_period_status",
+      "typeSchema": "public",
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'PLANNED'",
+      "generated": null,
+      "identity": null,
+      "name": "status",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "academic_sessions"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "academic_sessions"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "academic_sessions"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "academic_terms"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "school_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "academic_terms"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "academic_session_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "academic_terms"
+    },
+    {
+      "type": "varchar(80)",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "name",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "academic_terms"
+    },
+    {
+      "type": "smallint",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "position",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "academic_terms"
+    },
+    {
+      "type": "date",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "starts_on",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "academic_terms"
+    },
+    {
+      "type": "date",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "ends_on",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "academic_terms"
+    },
+    {
+      "type": "academic_period_status",
+      "typeSchema": "public",
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'PLANNED'",
+      "generated": null,
+      "identity": null,
+      "name": "status",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "academic_terms"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "academic_terms"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "academic_terms"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "class_arms"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "school_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "class_arms"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "class_level_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "class_arms"
+    },
+    {
+      "type": "varchar(80)",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "name",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "class_arms"
+    },
+    {
+      "type": "varchar(32)",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "code",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "class_arms"
+    },
+    {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "true",
+      "generated": null,
+      "identity": null,
+      "name": "is_active",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "class_arms"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "class_arms"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "class_arms"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "class_levels"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "school_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "class_levels"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "section_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "class_levels"
+    },
+    {
+      "type": "varchar(100)",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "name",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "class_levels"
+    },
+    {
+      "type": "varchar(32)",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "code",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "class_levels"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "0",
+      "generated": null,
+      "identity": null,
+      "name": "sort_order",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "class_levels"
+    },
+    {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "true",
+      "generated": null,
+      "identity": null,
+      "name": "is_active",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "class_levels"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "class_levels"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "class_levels"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "school_sections"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "school_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "school_sections"
+    },
+    {
+      "type": "varchar(100)",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "name",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "school_sections"
+    },
+    {
+      "type": "varchar(32)",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "code",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "school_sections"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "0",
+      "generated": null,
+      "identity": null,
+      "name": "sort_order",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "school_sections"
+    },
+    {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "true",
+      "generated": null,
+      "identity": null,
+      "name": "is_active",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "school_sections"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "school_sections"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "school_sections"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "school_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "role",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "school_membership_roles_school_role_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "school_membership_roles"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "user_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "school_memberships_user_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "school_memberships"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "school_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "status",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "school_memberships_school_status_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "school_memberships"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "user_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "auth_sessions_user_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "auth_sessions"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "expires_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "auth_sessions_expires_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "auth_sessions"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "user_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "created_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "auth_login_events_user_created_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "auth_login_events"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "identifier_hash",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "created_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "auth_login_events_identifier_created_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "auth_login_events"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "event_type",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "created_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "auth_login_events_type_created_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "auth_login_events"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "blocked_until",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "auth_rate_limits_blocked_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "auth_rate_limits"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "school_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "status",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "students_school_status_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "students"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "school_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "last_name",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "first_name",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "students_school_name_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "students"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "school_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "membership_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": "\"membership_id\" is not null",
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "guardians_school_membership_unique_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "guardians"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "school_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "status",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "guardians_school_status_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "guardians"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "school_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "student_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": "\"is_primary\" = true",
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "student_guardians_one_primary_per_student_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "student_guardians"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "school_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "guardian_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "student_guardians_guardian_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "student_guardians"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "school_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "student_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": "\"status\" = 'ACTIVE'",
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "student_enrollments_one_active_per_student_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "student_enrollments"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "school_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "class_arm_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "status",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "student_enrollments_class_arm_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "student_enrollments"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "school_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "academic_session_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "student_enrollments_session_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "student_enrollments"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "school_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "student_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "created_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "student_identity_card_events_student_created_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "student_identity_card_events"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "school_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "card_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "created_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "student_identity_card_events_card_created_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "student_identity_card_events"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "school_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "student_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": "\"status\" = 'ACTIVE'",
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "student_identity_cards_one_active_per_student_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "student_identity_cards"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "school_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "student_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "status",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "student_identity_cards_student_status_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "student_identity_cards"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "school_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": "\"is_default\" = true and \"is_active\" = true",
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "attendance_policies_one_default_active_per_school_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "attendance_policies"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "school_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "is_active",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "attendance_policies_school_active_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "attendance_policies"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "school_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "status",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "attendance_date",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "attendance_sessions_school_status_date_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "attendance_sessions"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "school_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "status",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "attendance_terminals_school_status_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "attendance_terminals"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "school_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "session_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "occurred_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "attendance_attempts_session_occurred_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "attendance_verification_attempts"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "school_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "student_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "occurred_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "attendance_attempts_student_occurred_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "attendance_verification_attempts"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "school_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "outcome",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "occurred_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "attendance_attempts_outcome_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "attendance_verification_attempts"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "school_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "source_attempt_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": "\"source_attempt_id\" is not null",
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "student_attendance_records_source_attempt_unique_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "student_attendance_records"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "school_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "student_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "recorded_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "student_attendance_records_student_recorded_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "student_attendance_records"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "school_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "status",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "academic_sessions_school_status_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "academic_sessions"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "school_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "status",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "academic_terms_school_status_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "academic_terms"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "school_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "is_active",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "class_arms_school_active_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "class_arms"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "school_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "is_active",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "class_levels_school_active_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "class_levels"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "school_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "is_active",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "school_sections_school_active_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "school_sections"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "school_id",
+        "membership_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "school_memberships",
+      "columnsTo": [
+        "school_id",
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "school_membership_roles_school_membership_fk",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "school_membership_roles"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "school_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "schools",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "school_memberships_school_id_schools_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "school_memberships"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "user_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "users",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "school_memberships_user_id_users_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "school_memberships"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "user_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "users",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "auth_password_credentials_user_id_users_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "auth_password_credentials"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "user_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "users",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "auth_sessions_user_id_users_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "auth_sessions"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "user_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "users",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "SET NULL",
+      "name": "auth_login_events_user_id_users_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "auth_login_events"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "school_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "schools",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "students_school_id_schools_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "students"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "school_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "schools",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "guardians_school_id_schools_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "guardians"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "school_id",
+        "membership_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "school_memberships",
+      "columnsTo": [
+        "school_id",
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "guardians_school_membership_fk",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "guardians"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "school_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "schools",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "student_guardians_school_id_schools_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "student_guardians"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "school_id",
+        "student_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "students",
+      "columnsTo": [
+        "school_id",
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "student_guardians_school_student_fk",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "student_guardians"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "school_id",
+        "guardian_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "guardians",
+      "columnsTo": [
+        "school_id",
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "student_guardians_school_guardian_fk",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "student_guardians"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "school_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "schools",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "student_enrollments_school_id_schools_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "student_enrollments"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "school_id",
+        "student_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "students",
+      "columnsTo": [
+        "school_id",
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "student_enrollments_school_student_fk",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "student_enrollments"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "school_id",
+        "academic_session_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "academic_sessions",
+      "columnsTo": [
+        "school_id",
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "student_enrollments_school_session_fk",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "student_enrollments"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "school_id",
+        "class_arm_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "class_arms",
+      "columnsTo": [
+        "school_id",
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "student_enrollments_school_class_arm_fk",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "student_enrollments"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "school_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "schools",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "student_identity_card_events_school_id_schools_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "student_identity_card_events"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "school_id",
+        "student_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "students",
+      "columnsTo": [
+        "school_id",
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "student_identity_card_events_school_student_fk",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "student_identity_card_events"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "school_id",
+        "card_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "student_identity_cards",
+      "columnsTo": [
+        "school_id",
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "student_identity_card_events_school_card_fk",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "student_identity_card_events"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "school_id",
+        "actor_membership_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "school_memberships",
+      "columnsTo": [
+        "school_id",
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "student_identity_card_events_school_actor_membership_fk",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "student_identity_card_events"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "school_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "schools",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "student_identity_cards_school_id_schools_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "student_identity_cards"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "school_id",
+        "student_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "students",
+      "columnsTo": [
+        "school_id",
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "student_identity_cards_school_student_fk",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "student_identity_cards"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "school_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "schools",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "attendance_policies_school_id_schools_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "attendance_policies"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "school_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "schools",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "attendance_policy_days_school_id_schools_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "attendance_policy_days"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "school_id",
+        "policy_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "attendance_policies",
+      "columnsTo": [
+        "school_id",
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "attendance_policy_days_school_policy_fk",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "attendance_policy_days"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "school_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "schools",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "attendance_sessions_school_id_schools_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "attendance_sessions"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "school_id",
+        "policy_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "attendance_policies",
+      "columnsTo": [
+        "school_id",
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "attendance_sessions_school_policy_fk",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "attendance_sessions"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "school_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "schools",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "attendance_terminals_school_id_schools_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "attendance_terminals"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "school_id",
+        "provisioned_by_membership_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "school_memberships",
+      "columnsTo": [
+        "school_id",
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "attendance_terminals_school_provisioner_fk",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "attendance_terminals"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "school_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "schools",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "attendance_verification_attempts_school_id_schools_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "attendance_verification_attempts"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "school_id",
+        "session_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "attendance_sessions",
+      "columnsTo": [
+        "school_id",
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "attendance_attempts_school_session_fk",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "attendance_verification_attempts"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "school_id",
+        "terminal_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "attendance_terminals",
+      "columnsTo": [
+        "school_id",
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "attendance_attempts_school_terminal_fk",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "attendance_verification_attempts"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "school_id",
+        "student_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "students",
+      "columnsTo": [
+        "school_id",
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "attendance_attempts_school_student_fk",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "attendance_verification_attempts"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "school_id",
+        "card_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "student_identity_cards",
+      "columnsTo": [
+        "school_id",
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "attendance_attempts_school_card_fk",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "attendance_verification_attempts"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "school_id",
+        "manual_verified_by_membership_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "school_memberships",
+      "columnsTo": [
+        "school_id",
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "attendance_attempts_school_manual_verifier_fk",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "attendance_verification_attempts"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "school_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "schools",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "student_attendance_records_school_id_schools_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "student_attendance_records"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "school_id",
+        "session_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "attendance_sessions",
+      "columnsTo": [
+        "school_id",
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "student_attendance_records_school_session_fk",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "student_attendance_records"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "school_id",
+        "student_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "students",
+      "columnsTo": [
+        "school_id",
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "student_attendance_records_school_student_fk",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "student_attendance_records"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "school_id",
+        "terminal_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "attendance_terminals",
+      "columnsTo": [
+        "school_id",
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "student_attendance_records_school_terminal_fk",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "student_attendance_records"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "school_id",
+        "card_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "student_identity_cards",
+      "columnsTo": [
+        "school_id",
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "student_attendance_records_school_card_fk",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "student_attendance_records"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "school_id",
+        "source_attempt_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "attendance_verification_attempts",
+      "columnsTo": [
+        "school_id",
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "student_attendance_records_school_source_attempt_fk",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "student_attendance_records"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "school_id",
+        "verified_by_membership_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "school_memberships",
+      "columnsTo": [
+        "school_id",
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "student_attendance_records_school_verifier_fk",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "student_attendance_records"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "school_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "schools",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "academic_sessions_school_id_schools_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "academic_sessions"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "school_id",
+        "academic_session_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "academic_sessions",
+      "columnsTo": [
+        "school_id",
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "academic_terms_school_session_fk",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "academic_terms"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "school_id",
+        "class_level_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "class_levels",
+      "columnsTo": [
+        "school_id",
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "class_arms_school_level_fk",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "class_arms"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "school_id",
+        "section_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "school_sections",
+      "columnsTo": [
+        "school_id",
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "RESTRICT",
+      "name": "class_levels_school_section_fk",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "class_levels"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "school_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "schools",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "school_sections_school_id_schools_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "school_sections"
+    },
+    {
+      "columns": [
+        "scope",
+        "key_hash"
+      ],
+      "nameExplicit": true,
+      "name": "auth_rate_limits_pk",
+      "entityType": "pks",
+      "schema": "public",
+      "table": "auth_rate_limits"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "schools_pkey",
+      "schema": "public",
+      "table": "schools",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "school_membership_roles_pkey",
+      "schema": "public",
+      "table": "school_membership_roles",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "school_memberships_pkey",
+      "schema": "public",
+      "table": "school_memberships",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "users_pkey",
+      "schema": "public",
+      "table": "users",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "nameExplicit": false,
+      "name": "auth_password_credentials_pkey",
+      "schema": "public",
+      "table": "auth_password_credentials",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "auth_sessions_pkey",
+      "schema": "public",
+      "table": "auth_sessions",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "auth_login_events_pkey",
+      "schema": "public",
+      "table": "auth_login_events",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "students_pkey",
+      "schema": "public",
+      "table": "students",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "guardians_pkey",
+      "schema": "public",
+      "table": "guardians",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "student_guardians_pkey",
+      "schema": "public",
+      "table": "student_guardians",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "student_enrollments_pkey",
+      "schema": "public",
+      "table": "student_enrollments",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "student_identity_card_events_pkey",
+      "schema": "public",
+      "table": "student_identity_card_events",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "student_identity_cards_pkey",
+      "schema": "public",
+      "table": "student_identity_cards",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "attendance_policies_pkey",
+      "schema": "public",
+      "table": "attendance_policies",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "attendance_policy_days_pkey",
+      "schema": "public",
+      "table": "attendance_policy_days",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "attendance_sessions_pkey",
+      "schema": "public",
+      "table": "attendance_sessions",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "attendance_terminals_pkey",
+      "schema": "public",
+      "table": "attendance_terminals",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "attendance_verification_attempts_pkey",
+      "schema": "public",
+      "table": "attendance_verification_attempts",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "student_attendance_records_pkey",
+      "schema": "public",
+      "table": "student_attendance_records",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "academic_sessions_pkey",
+      "schema": "public",
+      "table": "academic_sessions",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "academic_terms_pkey",
+      "schema": "public",
+      "table": "academic_terms",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "class_arms_pkey",
+      "schema": "public",
+      "table": "class_arms",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "class_levels_pkey",
+      "schema": "public",
+      "table": "class_levels",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "school_sections_pkey",
+      "schema": "public",
+      "table": "school_sections",
+      "entityType": "pks"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "slug"
+      ],
+      "nullsNotDistinct": false,
+      "name": "schools_slug_unique",
+      "entityType": "uniques",
+      "schema": "public",
+      "table": "schools"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "membership_id",
+        "role"
+      ],
+      "nullsNotDistinct": false,
+      "name": "school_membership_roles_membership_role_unique",
+      "entityType": "uniques",
+      "schema": "public",
+      "table": "school_membership_roles"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "school_id",
+        "id"
+      ],
+      "nullsNotDistinct": false,
+      "name": "school_memberships_school_id_id_unique",
+      "entityType": "uniques",
+      "schema": "public",
+      "table": "school_memberships"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "school_id",
+        "user_id"
+      ],
+      "nullsNotDistinct": false,
+      "name": "school_memberships_school_user_unique",
+      "entityType": "uniques",
+      "schema": "public",
+      "table": "school_memberships"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "email"
+      ],
+      "nullsNotDistinct": false,
+      "name": "users_email_unique",
+      "entityType": "uniques",
+      "schema": "public",
+      "table": "users"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "phone"
+      ],
+      "nullsNotDistinct": false,
+      "name": "users_phone_unique",
+      "entityType": "uniques",
+      "schema": "public",
+      "table": "users"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "token_hash"
+      ],
+      "nullsNotDistinct": false,
+      "name": "auth_sessions_token_hash_unique",
+      "entityType": "uniques",
+      "schema": "public",
+      "table": "auth_sessions"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "school_id",
+        "id"
+      ],
+      "nullsNotDistinct": false,
+      "name": "students_school_id_id_unique",
+      "entityType": "uniques",
+      "schema": "public",
+      "table": "students"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "school_id",
+        "admission_number"
+      ],
+      "nullsNotDistinct": false,
+      "name": "students_school_admission_number_unique",
+      "entityType": "uniques",
+      "schema": "public",
+      "table": "students"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "school_id",
+        "id"
+      ],
+      "nullsNotDistinct": false,
+      "name": "guardians_school_id_id_unique",
+      "entityType": "uniques",
+      "schema": "public",
+      "table": "guardians"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "school_id",
+        "id"
+      ],
+      "nullsNotDistinct": false,
+      "name": "student_guardians_school_id_id_unique",
+      "entityType": "uniques",
+      "schema": "public",
+      "table": "student_guardians"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "school_id",
+        "student_id",
+        "guardian_id"
+      ],
+      "nullsNotDistinct": false,
+      "name": "student_guardians_student_guardian_unique",
+      "entityType": "uniques",
+      "schema": "public",
+      "table": "student_guardians"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "school_id",
+        "id"
+      ],
+      "nullsNotDistinct": false,
+      "name": "student_enrollments_school_id_id_unique",
+      "entityType": "uniques",
+      "schema": "public",
+      "table": "student_enrollments"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "school_id",
+        "id"
+      ],
+      "nullsNotDistinct": false,
+      "name": "student_identity_card_events_school_id_id_unique",
+      "entityType": "uniques",
+      "schema": "public",
+      "table": "student_identity_card_events"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "school_id",
+        "id"
+      ],
+      "nullsNotDistinct": false,
+      "name": "student_identity_cards_school_id_id_unique",
+      "entityType": "uniques",
+      "schema": "public",
+      "table": "student_identity_cards"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "school_id",
+        "serial_number"
+      ],
+      "nullsNotDistinct": false,
+      "name": "student_identity_cards_school_serial_unique",
+      "entityType": "uniques",
+      "schema": "public",
+      "table": "student_identity_cards"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "token_hash"
+      ],
+      "nullsNotDistinct": false,
+      "name": "student_identity_cards_token_hash_unique",
+      "entityType": "uniques",
+      "schema": "public",
+      "table": "student_identity_cards"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "school_id",
+        "id"
+      ],
+      "nullsNotDistinct": false,
+      "name": "attendance_policies_school_id_id_unique",
+      "entityType": "uniques",
+      "schema": "public",
+      "table": "attendance_policies"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "school_id",
+        "id"
+      ],
+      "nullsNotDistinct": false,
+      "name": "attendance_policy_days_school_id_id_unique",
+      "entityType": "uniques",
+      "schema": "public",
+      "table": "attendance_policy_days"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "school_id",
+        "policy_id",
+        "weekday"
+      ],
+      "nullsNotDistinct": false,
+      "name": "attendance_policy_days_policy_weekday_unique",
+      "entityType": "uniques",
+      "schema": "public",
+      "table": "attendance_policy_days"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "school_id",
+        "id"
+      ],
+      "nullsNotDistinct": false,
+      "name": "attendance_sessions_school_id_id_unique",
+      "entityType": "uniques",
+      "schema": "public",
+      "table": "attendance_sessions"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "school_id",
+        "attendance_date"
+      ],
+      "nullsNotDistinct": false,
+      "name": "attendance_sessions_school_date_unique",
+      "entityType": "uniques",
+      "schema": "public",
+      "table": "attendance_sessions"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "school_id",
+        "id"
+      ],
+      "nullsNotDistinct": false,
+      "name": "attendance_terminals_school_id_id_unique",
+      "entityType": "uniques",
+      "schema": "public",
+      "table": "attendance_terminals"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "school_id",
+        "terminal_code"
+      ],
+      "nullsNotDistinct": false,
+      "name": "attendance_terminals_school_code_unique",
+      "entityType": "uniques",
+      "schema": "public",
+      "table": "attendance_terminals"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "secret_hash"
+      ],
+      "nullsNotDistinct": false,
+      "name": "attendance_terminals_secret_hash_unique",
+      "entityType": "uniques",
+      "schema": "public",
+      "table": "attendance_terminals"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "school_id",
+        "id"
+      ],
+      "nullsNotDistinct": false,
+      "name": "attendance_verification_attempts_school_id_id_unique",
+      "entityType": "uniques",
+      "schema": "public",
+      "table": "attendance_verification_attempts"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "school_id",
+        "id"
+      ],
+      "nullsNotDistinct": false,
+      "name": "student_attendance_records_school_id_id_unique",
+      "entityType": "uniques",
+      "schema": "public",
+      "table": "student_attendance_records"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "school_id",
+        "session_id",
+        "student_id"
+      ],
+      "nullsNotDistinct": false,
+      "name": "student_attendance_records_session_student_unique",
+      "entityType": "uniques",
+      "schema": "public",
+      "table": "student_attendance_records"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "school_id",
+        "id"
+      ],
+      "nullsNotDistinct": false,
+      "name": "academic_sessions_school_id_id_unique",
+      "entityType": "uniques",
+      "schema": "public",
+      "table": "academic_sessions"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "school_id",
+        "name"
+      ],
+      "nullsNotDistinct": false,
+      "name": "academic_sessions_school_name_unique",
+      "entityType": "uniques",
+      "schema": "public",
+      "table": "academic_sessions"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "school_id",
+        "id"
+      ],
+      "nullsNotDistinct": false,
+      "name": "academic_terms_school_id_id_unique",
+      "entityType": "uniques",
+      "schema": "public",
+      "table": "academic_terms"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "academic_session_id",
+        "position"
+      ],
+      "nullsNotDistinct": false,
+      "name": "academic_terms_session_position_unique",
+      "entityType": "uniques",
+      "schema": "public",
+      "table": "academic_terms"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "academic_session_id",
+        "name"
+      ],
+      "nullsNotDistinct": false,
+      "name": "academic_terms_session_name_unique",
+      "entityType": "uniques",
+      "schema": "public",
+      "table": "academic_terms"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "school_id",
+        "id"
+      ],
+      "nullsNotDistinct": false,
+      "name": "class_arms_school_id_id_unique",
+      "entityType": "uniques",
+      "schema": "public",
+      "table": "class_arms"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "class_level_id",
+        "name"
+      ],
+      "nullsNotDistinct": false,
+      "name": "class_arms_level_name_unique",
+      "entityType": "uniques",
+      "schema": "public",
+      "table": "class_arms"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "school_id",
+        "id"
+      ],
+      "nullsNotDistinct": false,
+      "name": "class_levels_school_id_id_unique",
+      "entityType": "uniques",
+      "schema": "public",
+      "table": "class_levels"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "school_id",
+        "name"
+      ],
+      "nullsNotDistinct": false,
+      "name": "class_levels_school_name_unique",
+      "entityType": "uniques",
+      "schema": "public",
+      "table": "class_levels"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "school_id",
+        "id"
+      ],
+      "nullsNotDistinct": false,
+      "name": "school_sections_school_id_id_unique",
+      "entityType": "uniques",
+      "schema": "public",
+      "table": "school_sections"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        "school_id",
+        "name"
+      ],
+      "nullsNotDistinct": false,
+      "name": "school_sections_school_name_unique",
+      "entityType": "uniques",
+      "schema": "public",
+      "table": "school_sections"
+    },
+    {
+      "value": "\"slug\" ~ '^[a-z0-9]+(?:-[a-z0-9]+)*$'",
+      "name": "schools_slug_format_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "schools"
+    },
+    {
+      "value": "length(trim(\"name\")) > 0",
+      "name": "schools_name_not_blank_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "schools"
+    },
+    {
+      "value": "\"email\" is not null or \"phone\" is not null",
+      "name": "users_identity_required_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "users"
+    },
+    {
+      "value": "length(trim(\"full_name\")) > 0",
+      "name": "users_full_name_not_blank_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "users"
+    },
+    {
+      "value": "\"email\" is null or \"email\" = lower(trim(\"email\"))",
+      "name": "users_email_normalized_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "users"
+    },
+    {
+      "value": "\"phone\" is null or \"phone\" ~ '^+[1-9][0-9]{7,14}$'",
+      "name": "users_phone_e164_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "users"
+    },
+    {
+      "value": "length(trim(\"password_hash\")) > 0",
+      "name": "auth_password_credentials_hash_not_blank_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "auth_password_credentials"
+    },
+    {
+      "value": "\"token_hash\" ~ '^[0-9a-f]{64}$'",
+      "name": "auth_sessions_token_hash_format_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "auth_sessions"
+    },
+    {
+      "value": "\"expires_at\" > \"created_at\"",
+      "name": "auth_sessions_expiry_after_creation_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "auth_sessions"
+    },
+    {
+      "value": "\"identifier_hash\" ~ '^[0-9a-f]{64}$'",
+      "name": "auth_login_events_identifier_hash_format_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "auth_login_events"
+    },
+    {
+      "value": "\"source_address_hash\" is null or \"source_address_hash\" ~ '^[0-9a-f]{64}$'",
+      "name": "auth_login_events_source_hash_format_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "auth_login_events"
+    },
+    {
+      "value": "\"key_hash\" ~ '^[0-9a-f]{64}$'",
+      "name": "auth_rate_limits_key_hash_format_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "auth_rate_limits"
+    },
+    {
+      "value": "\"failure_count\" >= 0",
+      "name": "auth_rate_limits_failure_count_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "auth_rate_limits"
+    },
+    {
+      "value": "length(trim(\"admission_number\")) > 0",
+      "name": "students_admission_number_not_blank_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "students"
+    },
+    {
+      "value": "length(trim(\"first_name\")) > 0",
+      "name": "students_first_name_not_blank_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "students"
+    },
+    {
+      "value": "length(trim(\"last_name\")) > 0",
+      "name": "students_last_name_not_blank_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "students"
+    },
+    {
+      "value": "\"exit_date\" is null or \"exit_date\" >= \"admission_date\"",
+      "name": "students_exit_after_admission_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "students"
+    },
+    {
+      "value": "length(trim(\"full_name\")) > 0",
+      "name": "guardians_full_name_not_blank_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "guardians"
+    },
+    {
+      "value": "\"email\" is not null or \"phone\" is not null",
+      "name": "guardians_contact_required_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "guardians"
+    },
+    {
+      "value": "\"email\" is null or \"email\" = lower(\"email\")",
+      "name": "guardians_email_normalized_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "guardians"
+    },
+    {
+      "value": "length(trim(\"relationship_label\")) > 0",
+      "name": "student_guardians_relationship_not_blank_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "student_guardians"
+    },
+    {
+      "value": "\"ends_on\" is null or \"ends_on\" >= \"starts_on\"",
+      "name": "student_enrollments_dates_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "student_enrollments"
+    },
+    {
+      "value": "(\n          (\"status\" = 'ACTIVE' and \"ends_on\" is null)\n          or\n          (\"status\" <> 'ACTIVE' and \"ends_on\" is not null)\n        )",
+      "name": "student_enrollments_status_end_date_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "student_enrollments"
+    },
+    {
+      "value": "\"reason\" is null or length(trim(\"reason\")) > 0",
+      "name": "student_identity_card_events_reason_not_blank_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "student_identity_card_events"
+    },
+    {
+      "value": "length(trim(\"serial_number\")) > 0",
+      "name": "student_identity_cards_serial_not_blank_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "student_identity_cards"
+    },
+    {
+      "value": "\"token_hash\" ~ '^[0-9a-f]{64}$'",
+      "name": "student_identity_cards_token_hash_format_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "student_identity_cards"
+    },
+    {
+      "value": "\"expires_at\" is null or \"expires_at\" > \"issued_at\"",
+      "name": "student_identity_cards_expiry_after_issue_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "student_identity_cards"
+    },
+    {
+      "value": "length(trim(\"name\")) > 0",
+      "name": "attendance_policies_name_not_blank_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "attendance_policies"
+    },
+    {
+      "value": "\"valid_to\" is null or \"valid_to\" >= \"valid_from\"",
+      "name": "attendance_policies_valid_dates_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "attendance_policies"
+    },
+    {
+      "value": "\"weekday\" between 0 and 6",
+      "name": "attendance_policy_days_weekday_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "attendance_policy_days"
+    },
+    {
+      "value": "\"check_in_opens_at\" <= \"on_time_until\" and \"on_time_until\" <= \"check_in_closes_at\"",
+      "name": "attendance_policy_days_time_order_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "attendance_policy_days"
+    },
+    {
+      "value": "\"closed_at\" is null or (\"opened_at\" is not null and \"closed_at\" >= \"opened_at\")",
+      "name": "attendance_sessions_open_close_order_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "attendance_sessions"
+    },
+    {
+      "value": "(\n          (\"status\" = 'PLANNED' and \"opened_at\" is null and \"closed_at\" is null)\n          or\n          (\"status\" = 'OPEN' and \"opened_at\" is not null and \"closed_at\" is null)\n          or\n          (\"status\" = 'CLOSED' and \"opened_at\" is not null and \"closed_at\" is not null)\n          or\n          (\"status\" = 'CANCELLED')\n        )",
+      "name": "attendance_sessions_status_timestamps_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "attendance_sessions"
+    },
+    {
+      "value": "length(trim(\"name\")) > 0",
+      "name": "attendance_terminals_name_not_blank_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "attendance_terminals"
+    },
+    {
+      "value": "length(trim(\"terminal_code\")) > 0",
+      "name": "attendance_terminals_code_not_blank_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "attendance_terminals"
+    },
+    {
+      "value": "\"secret_hash\" ~ '^[0-9a-f]{64}$'",
+      "name": "attendance_terminals_secret_hash_format_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "attendance_terminals"
+    },
+    {
+      "value": "\"scanned_token_hash\" ~ '^[0-9a-f]{64}$'",
+      "name": "attendance_attempts_token_hash_format_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "attendance_verification_attempts"
+    },
+    {
+      "value": "\"face_confidence_bps\" is null or \"face_confidence_bps\" between 0 and 10000",
+      "name": "attendance_attempts_face_confidence_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "attendance_verification_attempts"
+    },
+    {
+      "value": "\"liveness_confidence_bps\" is null or \"liveness_confidence_bps\" between 0 and 10000",
+      "name": "attendance_attempts_liveness_confidence_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "attendance_verification_attempts"
+    },
+    {
+      "value": "\"card_result\" <> 'MATCHED' or (\"student_id\" is not null and \"card_id\" is not null)",
+      "name": "attendance_attempts_matched_card_identity_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "attendance_verification_attempts"
+    },
+    {
+      "value": "\"completed_at\" is null or \"completed_at\" >= \"occurred_at\"",
+      "name": "attendance_attempts_completed_timestamp_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "attendance_verification_attempts"
+    },
+    {
+      "value": "\"outcome\" = 'PENDING' or \"completed_at\" is not null",
+      "name": "attendance_attempts_final_outcome_completed_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "attendance_verification_attempts"
+    },
+    {
+      "value": "\"outcome\" <> 'MANUAL_REVIEW' or \"manual_verified_by_membership_id\" is not null",
+      "name": "attendance_attempts_manual_review_actor_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "attendance_verification_attempts"
+    },
+    {
+      "value": "\"status\" <> 'MANUAL' or \"verified_by_membership_id\" is not null",
+      "name": "student_attendance_records_manual_verifier_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "student_attendance_records"
+    },
+    {
+      "value": "\"ends_on\" >= \"starts_on\"",
+      "name": "academic_sessions_date_order_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "academic_sessions"
+    },
+    {
+      "value": "length(trim(\"name\")) > 0",
+      "name": "academic_sessions_name_not_blank_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "academic_sessions"
+    },
+    {
+      "value": "\"position\" > 0",
+      "name": "academic_terms_position_positive_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "academic_terms"
+    },
+    {
+      "value": "\"ends_on\" >= \"starts_on\"",
+      "name": "academic_terms_date_order_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "academic_terms"
+    },
+    {
+      "value": "length(trim(\"name\")) > 0",
+      "name": "academic_terms_name_not_blank_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "academic_terms"
+    },
+    {
+      "value": "length(trim(\"name\")) > 0",
+      "name": "class_arms_name_not_blank_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "class_arms"
+    },
+    {
+      "value": "length(trim(\"name\")) > 0",
+      "name": "class_levels_name_not_blank_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "class_levels"
+    },
+    {
+      "value": "length(trim(\"name\")) > 0",
+      "name": "school_sections_name_not_blank_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "school_sections"
+    }
+  ],
+  "renames": []
+}
