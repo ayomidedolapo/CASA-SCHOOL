@@ -17,3 +17,6 @@ export * from "./school-messaging";
 
 export * from "./biometric-enums";
 export * from "./student-biometrics";
+
+export * from "./passkey-enums";
+export * from "./passkeys";

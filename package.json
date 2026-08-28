@@ -16,11 +16,13 @@
     "card:selftest": "tsx scripts/student-card-selftest.ts",
     "attendance:selftest": "tsx scripts/attendance-presence-selftest.ts",
     "terminal:selftest": "tsx scripts/terminal-credential-selftest.ts",
-    "biometric:selftest": "tsx scripts/biometric-assertion-selftest.ts"
+    "biometric:selftest": "tsx scripts/biometric-assertion-selftest.ts",
+    "passkey:selftest": "tsx scripts/passkey-selftest.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
     "@node-rs/argon2": "^2.1.0",
+    "@simplewebauthn/server": "^13.3.3",
     "drizzle-orm": "^1.0.0-rc.4",
     "next": "16.3.3",
     "qrcode": "^1.5.4",

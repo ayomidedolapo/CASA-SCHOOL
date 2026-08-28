@@ -1,4 +1,4 @@
-# CASA School â€” Trusted Biometric Presence Finalization
+# CASA School Ã¢â‚¬â€ Trusted Biometric Presence Finalization
 
 ## Security rule
 
@@ -142,3 +142,12 @@ The next biometric layer will implement:
 - creation of the signed CASA biometric assertion.
 
 Only server-side trusted code may possess the assertion signing key.
+## Phase 3E Passkey foundation
+
+CASA School now has real WebAuthn/Passkey login and one-use, action-scoped Passkey step-up grants.
+
+The biometric enrollment/re-enrollment layer can therefore require `BIOMETRIC_ENROLL` or `BIOMETRIC_REENROLL` without substituting password approval.
+
+Early departure can later consume an `EARLY_DEPARTURE` grant.
+
+Passkey authentication still uses the same global CASA user and opaque session system.
