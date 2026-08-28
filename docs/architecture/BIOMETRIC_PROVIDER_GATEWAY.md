@@ -1,4 +1,4 @@
-# CASA School â€” Biometric Provider Gateway
+# CASA School Ã¢â‚¬â€ Biometric Provider Gateway
 
 ## Purpose
 
@@ -190,3 +190,15 @@ It does not store:
 - Passkey biometric information.
 
 Provider-side retention and deletion must be governed separately in the biometric-service deployment.
+## Phase 3G concrete adapter
+
+Amazon Rekognition is now implemented as CASA School's first session-based concrete biometric adapter.
+
+`CASA_BIOMETRIC_PROVIDER_MODE` selects exactly one provider path:
+
+- `HTTP_GATEWAY`
+- `AWS_REKOGNITION`
+
+The AWS path uses provider-bound liveness sessions, server-side result retrieval, school-specific Rekognition face collections, exact ACTIVE FaceId matching, and temporary liveness streaming credentials.
+
+The generic HTTP gateway remains available but cannot be accidentally used when AWS mode is active.

@@ -2,6 +2,7 @@ import {
   NextRequest,
   NextResponse,
 } from "next/server";
+import { z } from "zod";
 
 import {
   AuthRequiredError,
@@ -9,18 +10,9 @@ import {
   requireSchoolRole,
 } from "@/server/auth/authorization";
 import {
-  InvalidBiometricCaptureError,
-  readBiometricCapture,
-} from "@/server/biometrics/capture";
-import {
-  enrollStudentBiometric,
-} from "@/server/biometrics/enrollment";
-import {
-  BiometricProviderUnavailableError,
-} from "@/server/biometrics/provider";
-import {
-  assertBiometricProviderMode,
-} from "@/server/biometrics/provider-mode";
+  AwsBiometricUnavailableError,
+  completeAwsEnrollmentLiveness,
+} from "@/server/biometrics/aws-liveness";
 
 export const dynamic =
   "force-dynamic";
@@ -31,6 +23,12 @@ interface RouteContext {
     studentId: string;
   }>;
 }
+
+const bodySchema =
+  z.object({
+    livenessSessionId:
+      z.string().uuid(),
+  });
 
 export async function POST(
   request: NextRequest,
@@ -53,38 +51,39 @@ export async function POST(
         ],
       );
 
-    assertBiometricProviderMode(
-      "HTTP_GATEWAY",
-    );
-
-    const capture =
-      await readBiometricCapture(
-        request,
+    const body =
+      bodySchema.safeParse(
+        await request.json(),
       );
 
+    if (!body.success) {
+      return NextResponse.json(
+        {
+          message:
+            "Invalid liveness completion request.",
+        },
+        {
+          status: 400,
+        },
+      );
+    }
+
     const result =
-      await enrollStudentBiometric({
+      await completeAwsEnrollmentLiveness({
         access,
         studentId,
-        capture,
-        stepUpToken:
-          request.headers.get(
-            "x-casa-passkey-step-up",
-          ),
+        livenessSessionId:
+          body.data
+            .livenessSessionId,
       });
 
     if (!result.ok) {
       return NextResponse.json(
         {
           message:
-            "Biometric enrollment could not be completed.",
+            "Face enrollment liveness could not be completed.",
           code:
             result.code,
-          requiredAction:
-            "requiredAction" in
-              result
-              ? result.requiredAction
-              : undefined,
         },
         {
           status:
@@ -143,29 +142,14 @@ export async function POST(
 
     if (
       error instanceof
-      InvalidBiometricCaptureError
+      AwsBiometricUnavailableError
     ) {
       return NextResponse.json(
         {
           message:
-            error.message,
-        },
-        {
-          status: 400,
-        },
-      );
-    }
-
-    if (
-      error instanceof
-      BiometricProviderUnavailableError
-    ) {
-      return NextResponse.json(
-        {
-          message:
-            "Biometric provider is temporarily unavailable.",
+            "AWS biometric service is temporarily unavailable.",
           code:
-            "BIOMETRIC_PROVIDER_UNAVAILABLE",
+            "AWS_BIOMETRIC_UNAVAILABLE",
         },
         {
           status: 503,
@@ -177,21 +161,45 @@ export async function POST(
       error instanceof Error &&
       (
         error.message ===
-          "BIOMETRIC_PROVIDER_NOT_CONFIGURED" ||
+          "AWS_FACE_NOT_INDEXED" ||
         error.message ===
-          "BIOMETRIC_PROVIDER_INVALID_CONFIGURATION" ||
-        error.message ===
-          "BIOMETRIC_PROVIDER_HTTPS_REQUIRED" ||
-        error.message ===
-          "BIOMETRIC_POLICY_NOT_CONFIGURED" ||
-        error.message ===
-          "BIOMETRIC_POLICY_INVALID"
+          "AWS_MULTIPLE_FACES_DETECTED"
       )
     ) {
       return NextResponse.json(
         {
           message:
-            "Biometric service is not configured for use.",
+            "The enrollment face could not be accepted.",
+          code:
+            error.message,
+        },
+        {
+          status: 422,
+        },
+      );
+    }
+
+    if (
+      error instanceof Error &&
+      (
+        error.message ===
+          "BIOMETRIC_POLICY_NOT_CONFIGURED" ||
+        error.message ===
+          "BIOMETRIC_POLICY_INVALID" ||
+        error.message ===
+          "BIOMETRIC_PROVIDER_MODE_NOT_CONFIGURED" ||
+        error.message ===
+          "BIOMETRIC_PROVIDER_MODE_MISMATCH" ||
+        error.message ===
+          "AWS_BIOMETRIC_NOT_CONFIGURED" ||
+        error.message ===
+          "AWS_BIOMETRIC_INVALID_QUALITY_FILTER"
+      )
+    ) {
+      return NextResponse.json(
+        {
+          message:
+            "AWS biometric engine is not configured.",
           code:
             error.message,
         },

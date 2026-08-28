@@ -18,9 +18,12 @@
     "terminal:selftest": "tsx scripts/terminal-credential-selftest.ts",
     "biometric:selftest": "tsx scripts/biometric-assertion-selftest.ts",
     "passkey:selftest": "tsx scripts/passkey-selftest.ts",
-    "biometric-provider:selftest": "tsx scripts/biometric-provider-selftest.ts"
+    "biometric-provider:selftest": "tsx scripts/biometric-provider-selftest.ts",
+    "aws-biometric:selftest": "tsx scripts/aws-rekognition-selftest.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-rekognition": "^3.1120.0",
+    "@aws-sdk/client-sts": "^3.1111.0",
     "@neondatabase/serverless": "^1.1.0",
     "@node-rs/argon2": "^2.1.0",
     "@simplewebauthn/server": "^13.3.3",

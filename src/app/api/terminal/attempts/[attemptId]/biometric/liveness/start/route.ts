@@ -12,18 +12,9 @@ import {
   authenticateTerminalRequest,
 } from "@/server/attendance/terminal-auth";
 import {
-  InvalidBiometricCaptureError,
-  readBiometricCapture,
-} from "@/server/biometrics/capture";
-import {
-  BiometricProviderUnavailableError,
-} from "@/server/biometrics/provider";
-import {
-  assertBiometricProviderMode,
-} from "@/server/biometrics/provider-mode";
-import {
-  verifyAndFinalizeBiometricPresence,
-} from "@/server/biometrics/verification";
+  AwsBiometricUnavailableError,
+  startAwsVerificationLiveness,
+} from "@/server/biometrics/aws-liveness";
 
 export const dynamic =
   "force-dynamic";
@@ -71,33 +62,19 @@ export async function POST(
   }
 
   try {
-    assertBiometricProviderMode(
-      "HTTP_GATEWAY",
-    );
-
-    const capture =
-      await readBiometricCapture(
-        request,
-      );
-
     const result =
-      await verifyAndFinalizeBiometricPresence({
+      await startAwsVerificationLiveness({
         access,
         attemptId,
-        capture,
       });
 
     if (!result.ok) {
       return NextResponse.json(
         {
           message:
-            "Biometric verification could not be accepted.",
+            "Face liveness could not be started.",
           code:
             result.code,
-          scores:
-            "scores" in result
-              ? result.scores
-              : undefined,
         },
         {
           status:
@@ -110,12 +87,11 @@ export async function POST(
 
     return NextResponse.json(
       {
-        presence:
-          result.presence,
-        scores:
-          result.scores,
+        liveness:
+          result.session,
       },
       {
+        status: 201,
         headers:
           attendanceNoStoreHeaders,
       },
@@ -123,31 +99,14 @@ export async function POST(
   } catch (error) {
     if (
       error instanceof
-      InvalidBiometricCaptureError
+      AwsBiometricUnavailableError
     ) {
       return NextResponse.json(
         {
           message:
-            error.message,
-        },
-        {
-          status: 400,
-          headers:
-            attendanceNoStoreHeaders,
-        },
-      );
-    }
-
-    if (
-      error instanceof
-      BiometricProviderUnavailableError
-    ) {
-      return NextResponse.json(
-        {
-          message:
-            "Biometric provider is temporarily unavailable.",
+            "AWS biometric service is temporarily unavailable.",
           code:
-            "BIOMETRIC_PROVIDER_UNAVAILABLE",
+            "AWS_BIOMETRIC_UNAVAILABLE",
         },
         {
           status: 503,
@@ -161,21 +120,19 @@ export async function POST(
       error instanceof Error &&
       (
         error.message ===
-          "BIOMETRIC_PROVIDER_NOT_CONFIGURED" ||
+          "BIOMETRIC_PROVIDER_MODE_NOT_CONFIGURED" ||
         error.message ===
-          "BIOMETRIC_PROVIDER_INVALID_CONFIGURATION" ||
+          "BIOMETRIC_PROVIDER_MODE_MISMATCH" ||
         error.message ===
-          "BIOMETRIC_PROVIDER_HTTPS_REQUIRED" ||
+          "AWS_BIOMETRIC_NOT_CONFIGURED" ||
         error.message ===
-          "BIOMETRIC_POLICY_NOT_CONFIGURED" ||
-        error.message ===
-          "BIOMETRIC_POLICY_INVALID"
+          "AWS_BIOMETRIC_INVALID_QUALITY_FILTER"
       )
     ) {
       return NextResponse.json(
         {
           message:
-            "Biometric service is not configured for use.",
+            "AWS biometric engine is not configured.",
           code:
             error.message,
         },

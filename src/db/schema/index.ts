@@ -22,3 +22,5 @@ export * from "./passkey-enums";
 export * from "./passkeys";
 
 export * from "./biometric-profile-events";
+
+export * from "./biometric-provider-sessions";
