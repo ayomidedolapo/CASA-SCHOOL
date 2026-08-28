@@ -1,4 +1,4 @@
-# CASA School Ã¢â‚¬â€ Passkey Identity & Step-Up
+# CASA School ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â Passkey Identity & Step-Up
 
 ## CASA signature identity
 
@@ -158,3 +158,18 @@ The required action is:
 The operational school role does not bypass this step-up.
 
 This is the first sensitive CASA School workflow wired to the reusable Phase 3E Passkey authorization primitive.
+## Phase 3H terminal lifecycle integration
+
+Terminal lifecycle is now a real Passkey-sensitive CASA workflow.
+
+The mutation API consumes:
+
+- `TERMINAL_PROVISION`
+- `TERMINAL_ROTATE`
+- `TERMINAL_SUSPEND`
+- `TERMINAL_REACTIVATE`
+- `TERMINAL_REVOKE`
+
+before changing terminal trust state or returning a new one-time device secret.
+
+The Scanner's terminal credential never substitutes for human Passkey authorization.

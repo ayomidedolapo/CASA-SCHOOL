@@ -1585,6 +1585,80 @@ export async function completeAwsVerificationLiveness(
   };
 }
 
+export async function cancelAwsVerificationLiveness(
+  input: {
+    access:
+      TerminalAccess;
+    attemptId:
+      string;
+    livenessSessionId:
+      string;
+  },
+) {
+  assertBiometricProviderMode(
+    "AWS_REKOGNITION",
+  );
+
+  const db = getDb();
+
+  const rows =
+    await db
+      .update(
+        biometricLivenessSessions,
+      )
+      .set({
+        status:
+          "FAILED",
+        failureCode:
+          "CLIENT_CANCELLED",
+        updatedAt:
+          new Date(),
+      })
+      .where(
+        and(
+          eq(
+            biometricLivenessSessions.schoolId,
+            input.access.school.id,
+          ),
+          eq(
+            biometricLivenessSessions.id,
+            input.livenessSessionId,
+          ),
+          eq(
+            biometricLivenessSessions.attemptId,
+            input.attemptId,
+          ),
+          eq(
+            biometricLivenessSessions.terminalId,
+            input.access.terminal.id,
+          ),
+          eq(
+            biometricLivenessSessions.purpose,
+            "VERIFICATION",
+          ),
+          eq(
+            biometricLivenessSessions.provider,
+            AWS_REKOGNITION_PROVIDER,
+          ),
+          eq(
+            biometricLivenessSessions.status,
+            "CREATED",
+          ),
+        ),
+      )
+      .returning({
+        id:
+          biometricLivenessSessions.id,
+      });
+
+  return {
+    ok:
+      Boolean(
+        rows[0],
+      ),
+  };
+}
+
 export {
   AwsBiometricUnavailableError,
   awsCollectionIdForSchool,

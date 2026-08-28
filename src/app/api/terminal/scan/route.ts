@@ -26,6 +26,9 @@ import {
   parseStudentCardPayload,
 } from "@/server/attendance/scan";
 import {
+  resolveTerminalScanOperation,
+} from "@/server/attendance/scan-operation";
+import {
   authenticateTerminalRequest,
 } from "@/server/attendance/terminal-auth";
 import {
@@ -393,6 +396,14 @@ export async function POST(
   let requiresStaffAuthorization =
     false;
 
+  let resolvedOperation:
+    | "CHECK_IN"
+    | "CHECK_OUT" =
+      parsed.data.operation ===
+        "AUTO"
+        ? "CHECK_IN"
+        : parsed.data.operation;
+
   if (!card) {
     outcome = "REJECTED";
     reasonCode =
@@ -454,8 +465,15 @@ export async function POST(
     const record =
       existingRecords[0];
 
+    resolvedOperation =
+      resolveTerminalScanOperation(
+        parsed.data.operation,
+        record?.presenceState ??
+          null,
+      );
+
     if (
-      parsed.data.operation ===
+      resolvedOperation ===
       "CHECK_IN"
     ) {
       classification =
@@ -589,7 +607,7 @@ export async function POST(
         scannedTokenHash:
           cardCredential.tokenHash,
         operation:
-          parsed.data.operation,
+          resolvedOperation,
         cardResult,
         timeResult,
         departureResult,

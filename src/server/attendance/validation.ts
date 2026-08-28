@@ -68,6 +68,7 @@ export const terminalScanSchema =
         /^[A-Za-z0-9_-]{8,64}$/,
       ),
     operation: z.enum([
+      "AUTO",
       "CHECK_IN",
       "CHECK_OUT",
     ]),

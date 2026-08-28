@@ -1,4 +1,4 @@
-# CASA School Ã¢â‚¬â€ Scanner PWA Trust Boundary
+# CASA School ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â Scanner PWA Trust Boundary
 
 ## Principle
 
@@ -183,3 +183,16 @@ Normal CHECK_IN/CHECK_OUT finalization is atomic.
 Normal CHECK_OUT also creates the school's guardian WhatsApp outbox rows when an ACTIVE school sender and eligible guardian destinations exist.
 
 EARLY departure remains blocked until real CASA Passkey step-up authorization is implemented.
+## Phase 3H installed PWA
+
+The trusted boundary is now exercised by the `/scanner` installable PWA.
+
+The PWA stores the terminal bearer credential only in device IndexedDB, uses `Authorization: Bearer` for terminal API requests, and deliberately omits browser user cookies from those calls.
+
+Student scans use `AUTO`; the server resolves CHECK_IN/CHECK_OUT from authoritative presence state before persistence.
+
+AWS STS liveness credentials remain ephemeral React state.
+
+The service worker performs no fetch caching in this phase.
+
+Terminal provisioning, rotation, suspension, reactivation, and revocation now consume CASA Passkey step-up grants.

@@ -21,6 +21,9 @@ import {
   createTerminalCredential,
 } from "@/server/attendance/terminal-credential";
 import {
+  requirePasskeyStepUpGrant,
+} from "@/server/auth/passkey-step-up";
+import {
   terminalProvisionSchema,
 } from "@/server/attendance/validation";
 
@@ -157,6 +160,16 @@ export async function POST(
       );
     }
 
+    await requirePasskeyStepUpGrant({
+      token:
+        request.headers.get(
+          "x-casa-passkey-step-up",
+        ),
+      access,
+      action:
+        "TERMINAL_PROVISION",
+    });
+
     const credential =
       createTerminalCredential();
 
@@ -240,6 +253,28 @@ export async function POST(
       },
     );
   } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message ===
+        "PASSKEY_STEP_UP_REQUIRED"
+    ) {
+      return NextResponse.json(
+        {
+          message:
+            "Passkey authorization is required.",
+          code:
+            "PASSKEY_STEP_UP_REQUIRED",
+          requiredAction:
+            "TERMINAL_PROVISION",
+        },
+        {
+          status: 403,
+          headers:
+            attendanceNoStoreHeaders,
+        },
+      );
+    }
+
     const response =
       attendanceAuthErrorResponse(
         error,

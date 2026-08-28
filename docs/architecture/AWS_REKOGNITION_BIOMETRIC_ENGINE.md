@@ -1,4 +1,4 @@
-# CASA School â€” Amazon Rekognition Biometric Engine Adapter
+# CASA School Ã¢â‚¬â€ Amazon Rekognition Biometric Engine Adapter
 
 ## Position in CASA
 
@@ -184,3 +184,12 @@ Phase 3G is backend infrastructure.
 The next Scanner PWA phase will add the actual AWS Amplify `FaceLivenessDetector` camera experience and custom temporary-credential provider.
 
 Production rollout also still requires CASA biometric threshold calibration.
+## Phase 3H Scanner integration
+
+The `/scanner` PWA now uses Amplify UI `FaceLivenessDetectorCore` with a custom credentials provider.
+
+The provider returns only the temporary STS credentials that Phase 3G created for the bound session. CASA does not require Cognito user migration.
+
+On analysis completion the browser asks CASA to complete the bound liveness session. The browser does not evaluate AWS confidence scores itself.
+
+Client cancellation marks the provider session FAILED and permits a fresh liveness session for the same still-pending attendance attempt.

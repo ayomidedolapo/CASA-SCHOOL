@@ -21,6 +21,10 @@ import {
   createRotatedTerminalSecret,
 } from "@/server/attendance/terminal-credential";
 import {
+  requirePasskeyStepUpGrant,
+  type PasskeyStepUpAction,
+} from "@/server/auth/passkey-step-up";
+import {
   terminalLifecycleSchema,
 } from "@/server/attendance/validation";
 
@@ -148,6 +152,35 @@ export async function PATCH(
         },
       );
     }
+
+    const passkeyActionByLifecycle: Record<
+      typeof parsed.data.action,
+      PasskeyStepUpAction
+    > = {
+      ROTATE_CREDENTIAL:
+        "TERMINAL_ROTATE",
+      SUSPEND:
+        "TERMINAL_SUSPEND",
+      REACTIVATE:
+        "TERMINAL_REACTIVATE",
+      REVOKE:
+        "TERMINAL_REVOKE",
+    };
+
+    const requiredPasskeyAction =
+      passkeyActionByLifecycle[
+        parsed.data.action
+      ];
+
+    await requirePasskeyStepUpGrant({
+      token:
+        request.headers.get(
+          "x-casa-passkey-step-up",
+        ),
+      access,
+      action:
+        requiredPasskeyAction,
+    });
 
     const now =
       new Date().toISOString();
@@ -325,6 +358,26 @@ export async function PATCH(
       },
     );
   } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message ===
+        "PASSKEY_STEP_UP_REQUIRED"
+    ) {
+      return NextResponse.json(
+        {
+          message:
+            "Passkey authorization is required.",
+          code:
+            "PASSKEY_STEP_UP_REQUIRED",
+        },
+        {
+          status: 403,
+          headers:
+            attendanceNoStoreHeaders,
+        },
+      );
+    }
+
     const response =
       attendanceAuthErrorResponse(
         error,
