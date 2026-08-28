@@ -1,4 +1,4 @@
-# CASA School Ã¢â‚¬â€ Trusted Biometric Presence Finalization
+# CASA School ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â Trusted Biometric Presence Finalization
 
 ## Security rule
 
@@ -151,3 +151,12 @@ The biometric enrollment/re-enrollment layer can therefore require `BIOMETRIC_EN
 Early departure can later consume an `EARLY_DEPARTURE` grant.
 
 Passkey authentication still uses the same global CASA user and opaque session system.
+## Phase 3F provider gateway
+
+CASA School now has Passkey-protected student face enrollment and a server-configured biometric provider gateway.
+
+The Scanner can submit transient camera capture to the authenticated attempt verification endpoint.
+
+Only the server talks to the provider, evaluates CASA thresholds, creates the signed CASA biometric assertion, and invokes atomic finalization.
+
+The Scanner still cannot self-report face/liveness success.

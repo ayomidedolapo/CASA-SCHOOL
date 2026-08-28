@@ -1,4 +1,4 @@
-# CASA School â€” Passkey Identity & Step-Up
+# CASA School Ã¢â‚¬â€ Passkey Identity & Step-Up
 
 ## CASA signature identity
 
@@ -146,3 +146,15 @@ The next implementation phases will wire it into:
 - privileged role/security changes.
 
 No fake password substitute is used for operations CASA has designated Passkey-sensitive.
+## Phase 3F biometric enrollment integration
+
+Student biometric enrollment now consumes a real one-use Passkey step-up grant.
+
+The required action is:
+
+- `BIOMETRIC_ENROLL` when no ACTIVE profile exists;
+- `BIOMETRIC_REENROLL` when replacing an ACTIVE profile.
+
+The operational school role does not bypass this step-up.
+
+This is the first sensitive CASA School workflow wired to the reusable Phase 3E Passkey authorization primitive.

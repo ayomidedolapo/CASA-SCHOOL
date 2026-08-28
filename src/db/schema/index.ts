@@ -20,3 +20,5 @@ export * from "./student-biometrics";
 
 export * from "./passkey-enums";
 export * from "./passkeys";
+
+export * from "./biometric-profile-events";

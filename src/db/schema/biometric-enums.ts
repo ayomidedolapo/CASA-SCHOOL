@@ -9,3 +9,13 @@ export const studentBiometricProfileStatusEnum =
       "REVOKED",
     ],
   );
+export const studentBiometricProfileEventTypeEnum =
+  pgEnum(
+    "student_biometric_profile_event_type",
+    [
+      "ENROLLED",
+      "REENROLLED",
+      "SUSPENDED",
+      "REVOKED",
+    ],
+  );

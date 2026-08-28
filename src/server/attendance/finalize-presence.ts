@@ -7,7 +7,6 @@ import {
 import { getDb } from "@/db";
 import {
   attendanceVerificationAttempts,
-  biometricVerificationEvidence,
   studentAttendanceRecords,
   studentBiometricProfiles,
   studentPresenceEvents,
