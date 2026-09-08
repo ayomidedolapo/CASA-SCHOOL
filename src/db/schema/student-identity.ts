@@ -164,9 +164,37 @@ export const studentIdentityCardEvents =
         .notNull(),
       cardId: uuid("card_id")
         .notNull(),
+      actorKind: varchar(
+
+        "actor_kind",
+
+        {
+
+          length: 32,
+
+        },
+
+      )
+
+        .$type<
+
+          | "SCHOOL_MEMBER"
+
+          | "CASA_INTERNAL"
+
+        >()
+
+        .default(
+
+          "SCHOOL_MEMBER",
+
+        )
+
+        .notNull(),
+
       actorMembershipId: uuid(
         "actor_membership_id",
-      ).notNull(),
+      ),
       eventType:
         studentIdentityCardEventTypeEnum(
           "event_type",
@@ -241,5 +269,26 @@ export const studentIdentityCardEvents =
         "student_identity_card_events_reason_not_blank_check",
         sql`${table.reason} is null or length(trim(${table.reason})) > 0`,
       ),
+    index(
+      "student_identity_card_events_actor_created_idx",
+    ).on(
+      table.schoolId,
+      table.actorKind,
+      table.createdAt,
+    ),
+    check(
+      "student_identity_card_events_actor_authority_check",
+      sql`
+        (
+          ${table.actorKind} = 'SCHOOL_MEMBER'
+          and ${table.actorMembershipId} is not null
+        )
+        or
+        (
+          ${table.actorKind} = 'CASA_INTERNAL'
+          and ${table.actorMembershipId} is null
+        )
+      `,
+    ),
     ],
   );

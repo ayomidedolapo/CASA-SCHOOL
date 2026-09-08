@@ -60,7 +60,11 @@ export const studentBiometricProfiles =
       enrolledByMembershipId:
         uuid(
           "enrolled_by_membership_id",
-        ).notNull(),
+        ),
+      enrolledByInternalMembershipId:
+        uuid(
+          "enrolled_by_internal_membership_id",
+        ),
       enrolledAt: timestamp(
         "enrolled_at",
         {
@@ -145,6 +149,20 @@ export const studentBiometricProfiles =
         ],
         name: "student_biometric_profiles_school_enroller_fk",
       }),
+      check(
+        "student_biometric_profiles_enroller_scope_check",
+        sql`(
+          (
+            ${table.enrolledByMembershipId} is not null
+            and ${table.enrolledByInternalMembershipId} is null
+          )
+          or
+          (
+            ${table.enrolledByMembershipId} is null
+            and ${table.enrolledByInternalMembershipId} is not null
+          )
+        )`,
+      ),
       check(
         "student_biometric_profiles_provider_not_blank_check",
         sql`length(trim(${table.provider})) > 0`,

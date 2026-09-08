@@ -12,7 +12,7 @@ export function getPasskeyRpConfig():
     process.env
       .CASA_WEBAUTHN_RP_NAME
       ?.trim() ||
-    "CASA School";
+    "CASA";
 
   const configuredRpID =
     process.env

@@ -17,6 +17,10 @@ import {
   consumePasskeyStepUpGrantWithId,
 } from "@/server/auth/passkey-step-up";
 
+import {
+  getAttendanceScopeRejection,
+  resolveAttendanceOperationalScope,
+} from "./operational-scope";
 export async function authorizeEarlyDeparture(
   input: {
     access:
@@ -37,7 +41,9 @@ export async function authorizeEarlyDeparture(
         id:
           attendanceVerificationAttempts.id,
         sessionId:
-          attendanceVerificationAttempts.sessionId,
+          attendanceVerificationAttempts.sessionId,        terminalId:
+          attendanceVerificationAttempts.terminalId,
+
         studentId:
           attendanceVerificationAttempts.studentId,
         cardId:
@@ -160,7 +166,34 @@ export async function authorizeEarlyDeparture(
       code:
         "EARLY_DEPARTURE_NOT_PENDING_AUTHORIZATION",
     };
+  }  const operationalScope =
+    await resolveAttendanceOperationalScope({
+      schoolId:
+        input.access.school.id,
+      sessionId:
+        candidate.sessionId,
+      terminalId:
+        candidate.terminalId,
+      studentId:
+        candidate.studentId,
+    });
+
+  const scopeRejection =
+    getAttendanceScopeRejection(
+      operationalScope,
+      "CHECK_OUT",
+    );
+
+  if (scopeRejection) {
+    return {
+      ok: false as const,
+      status: 409 as const,
+      code:
+        scopeRejection.code,
+    };
   }
+
+
 
   if (!input.stepUpToken) {
     return {

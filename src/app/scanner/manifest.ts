@@ -28,6 +28,36 @@ export default function manifest():
     icons: [
       {
         src:
+          "/casa-scanner-icon-192.png",
+        sizes:
+          "192x192",
+        type:
+          "image/png",
+        purpose:
+          "any",
+      },
+      {
+        src:
+          "/casa-scanner-icon-512.png",
+        sizes:
+          "512x512",
+        type:
+          "image/png",
+        purpose:
+          "any",
+      },
+      {
+        src:
+          "/casa-scanner-icon-512.png",
+        sizes:
+          "512x512",
+        type:
+          "image/png",
+        purpose:
+          "maskable",
+      },
+      {
+        src:
           "/casa-scanner-icon.svg",
         sizes:
           "any",

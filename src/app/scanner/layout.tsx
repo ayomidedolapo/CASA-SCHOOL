@@ -5,14 +5,16 @@ import type {
 
 import "@aws-amplify/ui-react/styles.css";
 
+import ScannerInstallControl from "./scanner-install-control";
+
 export const metadata:
   Metadata = {
   title:
-    "CASA School Scanner",
+    "CASA",
   description:
-    "Identity-verified school attendance terminal.",
+    "Identity-verified attendance terminal.",
   manifest:
-    "/manifest.webmanifest",
+    "/scanner/manifest.webmanifest",
   robots: {
     index: false,
     follow: false,
@@ -20,7 +22,7 @@ export const metadata:
   appleWebApp: {
     capable: true,
     title:
-      "CASA Scanner",
+      "CASA",
     statusBarStyle:
       "black-translucent",
   },
@@ -46,5 +48,10 @@ export default function ScannerLayout(
       React.ReactNode;
   }>,
 ) {
-  return children;
+  return (
+    <>
+      <ScannerInstallControl />
+      {children}
+    </>
+  );
 }

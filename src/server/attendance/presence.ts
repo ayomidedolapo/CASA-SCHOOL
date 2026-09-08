@@ -9,16 +9,31 @@ export type CheckOutClassification =
   | "NORMAL"
   | "OUTSIDE_WINDOW";
 
-function assertClock(value: string): void {
-  if (
-    !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(
+function clockToSeconds(
+  value: string,
+): number {
+  const match =
+    /^(?:([01]\d|2[0-3])):([0-5]\d)(?::([0-5]\d))?$/.exec(
       value,
-    )
-  ) {
+    );
+
+  if (!match) {
     throw new Error(
-      `Invalid HH:MM clock value: ${value}`,
+      `Invalid HH:MM or HH:MM:SS clock value: ${value}`,
     );
   }
+
+  return (
+    Number(match[1]) *
+      60 *
+      60 +
+    Number(match[2]) *
+      60 +
+    Number(
+      match[3] ??
+        "0",
+    )
+  );
 }
 
 export function classifyCheckIn(
@@ -27,17 +42,32 @@ export function classifyCheckIn(
   onTimeUntil: string,
   closesAt: string,
 ): CheckInClassification {
-  [
-    clock,
-    opensAt,
-    onTimeUntil,
-    closesAt,
-  ].forEach(assertClock);
+  const clockSeconds =
+    clockToSeconds(
+      clock,
+    );
+
+  const opensAtSeconds =
+    clockToSeconds(
+      opensAt,
+    );
+
+  const onTimeUntilSeconds =
+    clockToSeconds(
+      onTimeUntil,
+    );
+
+  const closesAtSeconds =
+    clockToSeconds(
+      closesAt,
+    );
 
   if (
     !(
-      opensAt <= onTimeUntil &&
-      onTimeUntil <= closesAt
+      opensAtSeconds <=
+        onTimeUntilSeconds &&
+      onTimeUntilSeconds <=
+        closesAtSeconds
     )
   ) {
     throw new Error(
@@ -45,15 +75,24 @@ export function classifyCheckIn(
     );
   }
 
-  if (clock < opensAt) {
+  if (
+    clockSeconds <
+    opensAtSeconds
+  ) {
     return "BEFORE_WINDOW";
   }
 
-  if (clock <= onTimeUntil) {
+  if (
+    clockSeconds <=
+    onTimeUntilSeconds
+  ) {
     return "ON_TIME";
   }
 
-  if (clock <= closesAt) {
+  if (
+    clockSeconds <=
+    closesAtSeconds
+  ) {
     return "LATE";
   }
 
@@ -65,26 +104,41 @@ export function classifyCheckOut(
   normalDismissalAt: string,
   checkOutClosesAt: string,
 ): CheckOutClassification {
-  [
-    clock,
-    normalDismissalAt,
-    checkOutClosesAt,
-  ].forEach(assertClock);
+  const clockSeconds =
+    clockToSeconds(
+      clock,
+    );
+
+  const normalDismissalSeconds =
+    clockToSeconds(
+      normalDismissalAt,
+    );
+
+  const checkOutClosesSeconds =
+    clockToSeconds(
+      checkOutClosesAt,
+    );
 
   if (
-    normalDismissalAt >
-    checkOutClosesAt
+    normalDismissalSeconds >
+    checkOutClosesSeconds
   ) {
     throw new Error(
       "Invalid check-out window ordering.",
     );
   }
 
-  if (clock < normalDismissalAt) {
+  if (
+    clockSeconds <
+    normalDismissalSeconds
+  ) {
     return "EARLY";
   }
 
-  if (clock <= checkOutClosesAt) {
+  if (
+    clockSeconds <=
+    checkOutClosesSeconds
+  ) {
     return "NORMAL";
   }
 

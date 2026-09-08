@@ -9,5 +9,6 @@ export const attendanceSessionEventTypeEnum =
       "CREATED",
       "OPENED",
       "CLOSED",
+      "REOPENED",
     ],
   );

@@ -19,6 +19,13 @@ import type {
   TerminalAccess,
 } from "./terminal-auth";
 
+import {
+  getAttendanceScopeRejection,
+  resolveAttendanceOperationalScope,
+} from "./operational-scope";
+import {
+  resolveTransportPunctuality,
+} from "./transport-punctuality";
 export type FinalizePresenceResult =
   | {
       ok: true;
@@ -78,6 +85,8 @@ export async function finalizeVerifiedPresence(
           attendanceVerificationAttempts.outcome,
         reasonCode:
           attendanceVerificationAttempts.reasonCode,
+        occurredAt:
+          attendanceVerificationAttempts.occurredAt,
       })
       .from(
         attendanceVerificationAttempts,
@@ -355,12 +364,56 @@ export async function finalizeVerifiedPresence(
     };
   }
 
+    const operationalScope =
+    await resolveAttendanceOperationalScope({
+      schoolId:
+        access.school.id,
+      sessionId:
+        attempt.sessionId,
+      terminalId:
+        attempt.terminalId,
+      studentId:
+        attempt.studentId,
+    });
+
+  const scopeRejection =
+    getAttendanceScopeRejection(
+      operationalScope,
+      attempt.operation,
+    );
+
+  if (scopeRejection) {
+    return {
+      ok: false,
+      status: 409,
+      code:
+        scopeRejection.code,
+      message:
+        scopeRejection.message,
+    };
+  }
+
   const now =
     new Date().toISOString();
 
+  const punctuality =
+    attempt.operation ===
+      "CHECK_IN"
+      ? await resolveTransportPunctuality({
+          schoolId:
+            access.school.id,
+          studentId:
+            attempt.studentId,
+          sessionId:
+            attempt.sessionId,
+          occurredAt:
+            attempt.occurredAt,
+        })
+      : null;
+
   const status =
-    attempt.timeResult ===
-    "LATE"
+    punctuality?.outcome ===
+      "LATE"
       ? "LATE"
       : "ON_TIME";
 
@@ -407,6 +460,14 @@ export async function finalizeVerifiedPresence(
           card_id,
           source_attempt_id,
           status,
+          official_start_time,
+          actual_arrival_at,
+          arrival_method,
+          arrival_method_assignment_id,
+          grace_minutes_used,
+          minutes_after_official_start,
+          punctuality_outcome,
+          punctuality_policy_id,
           presence_state,
           departure_result,
           recorded_at,
@@ -420,6 +481,14 @@ export async function finalizeVerifiedPresence(
           candidate.card_id,
           candidate.id,
           ${status}::attendance_record_status,
+          ${punctuality?.officialStartTime ?? null}::time,
+          ${punctuality?.actualArrivalAt ?? null}::timestamptz,
+          ${punctuality?.arrivalMethod ?? null},
+          ${punctuality?.arrivalMethodAssignmentId ?? null}::uuid,
+          ${punctuality?.graceMinutesUsed ?? null},
+          ${punctuality?.minutesAfterOfficialStart ?? null},
+          ${punctuality?.outcome ?? null},
+          ${punctuality?.policyId ?? null}::uuid,
           'ON_CAMPUS'::attendance_presence_state,
           'NOT_RUN'::attendance_departure_result,
           ${now}::timestamptz,

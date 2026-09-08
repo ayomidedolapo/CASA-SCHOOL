@@ -1,166 +1,640 @@
 "use client";
 
 import {
-  FormEvent,
+  type FormEvent,
   useState,
 } from "react";
+import {
+  browserSupportsWebAuthn,
+  startAuthentication,
+  type PublicKeyCredentialRequestOptionsJSON,
+} from "@simplewebauthn/browser";
 import { useRouter } from "next/navigation";
 
 interface LoginFormProps {
   initialSchoolSlug: string;
+  initialNextPath: string;
+}
+
+type LoginMethod =
+  | "PASSWORD"
+  | "PASSKEY";
+
+type JsonBody = {
+  message?: string;
+  authenticated?: boolean;
+  ceremonyId?: string;
+  options?: unknown;
+  mustChangePassword?: boolean;
+  roles?: string[];
+};
+
+function safeNextPath(value: string): string {
+  if (!value.startsWith("/") || value.startsWith("//")) return "";
+
+  return value === "/internal" ||
+    value.startsWith("/internal/") ||
+    value.startsWith("/schools/") ||
+    value.startsWith("/security/")
+    ? value
+    : "";
 }
 
 export function LoginForm({
   initialSchoolSlug,
+  initialNextPath,
 }: LoginFormProps) {
-  const router = useRouter();
-  const [schoolSlug, setSchoolSlug] =
-    useState(initialSchoolSlug);
-  const [identifier, setIdentifier] =
+  const router =
+    useRouter();
+
+  const nextPath =
+    safeNextPath(
+      initialNextPath,
+    );
+
+  const needsSchoolWorkspace =
+    !nextPath.startsWith(
+      "/internal",
+    );
+
+  const [
+    method,
+    setMethod,
+  ] =
+    useState<LoginMethod>(
+      "PASSWORD",
+    );
+
+  const [
+    schoolSlug,
+    setSchoolSlug,
+  ] =
+    useState(
+      initialSchoolSlug,
+    );
+
+  const [
+    identifier,
+    setIdentifier,
+  ] =
     useState("");
-  const [password, setPassword] =
+
+  const [
+    password,
+    setPassword,
+  ] =
     useState("");
-  const [error, setError] =
-    useState<string | null>(null);
-  const [busy, setBusy] =
+
+  const [
+    error,
+    setError,
+  ] =
+    useState<string | null>(
+      null,
+    );
+
+  const [
+    busy,
+    setBusy,
+  ] =
     useState(false);
 
-  async function submit(
-    event: FormEvent<HTMLFormElement>,
-  ) {
-    event.preventDefault();
-    setError(null);
-    setBusy(true);
+  function normalizedSchoolSlug() {
+    return schoolSlug
+      .trim()
+      .toLowerCase();
+  }
 
-    try {
-      const response = await fetch(
-        "/api/auth/login",
+  async function routeAfterAuthentication(
+    normalizedSlug: string,
+  ) {
+    const passwordStatusResponse =
+      await fetch(
+        "/api/auth/password/status",
         {
-          method: "POST",
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
-          body: JSON.stringify({
-            identifier,
-            password,
-          }),
+          cache:
+            "no-store",
         },
       );
 
-      const body =
-        (await response.json()) as {
-          message?: string;
-        };
+    const passwordStatus =
+      (await passwordStatusResponse
+        .json()
+        .catch(
+          () =>
+            ({}),
+        )) as JsonBody;
 
-      if (!response.ok) {
-        setError(
-          body.message ??
-            "Unable to sign in.",
+    if (
+      passwordStatusResponse.ok &&
+      passwordStatus
+        .mustChangePassword
+    ) {
+      const query =
+        new URLSearchParams();
+
+      if (normalizedSlug) {
+        query.set(
+          "school",
+          normalizedSlug,
         );
-        return;
       }
 
-      const normalizedSlug =
-        schoolSlug
-          .trim()
-          .toLowerCase();
-
-      if (!normalizedSlug) {
-        setError(
-          "Enter your school workspace slug.",
+      if (nextPath) {
+        query.set(
+          "next",
+          nextPath,
         );
-        return;
       }
 
+      router.push(
+        `/security/password?${query.toString()}`,
+      );
+      router.refresh();
+      return;
+    }
+
+    if (nextPath) {
+      router.push(nextPath);
+      router.refresh();
+      return;
+    }
+
+    const accessResponse =
+      await fetch(
+        `/api/schools/${encodeURIComponent(
+          normalizedSlug,
+        )}/access`,
+        {
+          cache:
+            "no-store",
+        },
+      );
+
+    const access =
+      (await accessResponse
+        .json()
+        .catch(
+          () =>
+            ({}),
+        )) as JsonBody;
+
+    if (
+      !accessResponse.ok ||
+      !Array.isArray(
+        access.roles,
+      )
+    ) {
+      throw new Error(
+        access.message ??
+          "Your account does not have access to this school workspace.",
+      );
+    }
+
+    const roles =
+      access.roles;
+
+    if (
+      roles.includes(
+        "OWNER",
+      ) ||
+      roles.includes(
+        "ADMIN",
+      )
+    ) {
       router.push(
         `/schools/${encodeURIComponent(
           normalizedSlug,
         )}/registry`,
       );
-      router.refresh();
-    } catch {
+    } else if (
+      roles.includes(
+        "SCHOOL_TECHNICIAN",
+      )
+    ) {
+      router.push(
+        `/schools/${encodeURIComponent(
+          normalizedSlug,
+        )}/technician`,
+      );
+    } else if (
+      roles.includes(
+        "STAFF",
+      )
+    ) {
+      router.push(
+        `/schools/${encodeURIComponent(
+          normalizedSlug,
+        )}/my-class`,
+      );
+    } else {
+      throw new Error(
+        "This account does not currently have an assigned CASA staff workspace.",
+      );
+    }
+
+    router.refresh();
+  }
+
+  async function submitPassword(
+    event:
+      FormEvent<HTMLFormElement>,
+  ) {
+    event.preventDefault();
+
+    setError(
+      null,
+    );
+    setBusy(
+      true,
+    );
+
+    try {
+      const normalizedSlug =
+        normalizedSchoolSlug();
+
+      if (
+        needsSchoolWorkspace &&
+        !normalizedSlug
+      ) {
+        throw new Error(
+          "Enter your school workspace slug.",
+        );
+      }
+
+      if (
+        !identifier.trim() ||
+        !password
+      ) {
+        throw new Error(
+          "Enter your email or phone and password.",
+        );
+      }
+
+      const response =
+        await fetch(
+          "/api/auth/login",
+          {
+            method:
+              "POST",
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+            body:
+              JSON.stringify({
+                identifier,
+                password,
+              }),
+          },
+        );
+
+      const body =
+        (await response
+          .json()
+          .catch(
+            () =>
+              ({}),
+          )) as JsonBody;
+
+      if (!response.ok) {
+        throw new Error(
+          body.message ??
+            "Unable to sign in.",
+        );
+      }
+
+      await routeAfterAuthentication(
+        normalizedSlug,
+      );
+    } catch (error) {
       setError(
-        "Unable to reach CASA School.",
+        error instanceof Error
+          ? error.message
+          : "Unable to reach CASA.",
       );
     } finally {
-      setBusy(false);
+      setBusy(
+        false,
+      );
+    }
+  }
+
+  async function submitPasskey() {
+    setError(
+      null,
+    );
+
+    const normalizedSlug =
+      normalizedSchoolSlug();
+
+    if (
+      needsSchoolWorkspace &&
+      !normalizedSlug
+    ) {
+      setError(
+        "Enter your school workspace slug.",
+      );
+      return;
+    }
+
+    if (
+      !browserSupportsWebAuthn()
+    ) {
+      setError(
+        "This browser does not support secure Passkey sign-in.",
+      );
+      return;
+    }
+
+    setBusy(
+      true,
+    );
+
+    try {
+      const optionsResponse =
+        await fetch(
+          "/api/auth/passkeys/login/options",
+          {
+            method:
+              "POST",
+          },
+        );
+
+      const optionsBody =
+        (await optionsResponse
+          .json()
+          .catch(
+            () =>
+              ({}),
+          )) as JsonBody;
+
+      if (
+        !optionsResponse.ok ||
+        typeof optionsBody
+          .ceremonyId !==
+          "string" ||
+        !optionsBody.options
+      ) {
+        throw new Error(
+          optionsBody.message ??
+            "Unable to start Passkey sign-in.",
+        );
+      }
+
+      const authenticationResponse =
+        await startAuthentication({
+          optionsJSON:
+            optionsBody.options as
+              PublicKeyCredentialRequestOptionsJSON,
+        });
+
+      const verifyResponse =
+        await fetch(
+          "/api/auth/passkeys/login/verify",
+          {
+            method:
+              "POST",
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+            body:
+              JSON.stringify({
+                ceremonyId:
+                  optionsBody
+                    .ceremonyId,
+                response:
+                  authenticationResponse,
+              }),
+          },
+        );
+
+      const verifyBody =
+        (await verifyResponse
+          .json()
+          .catch(
+            () =>
+              ({}),
+          )) as JsonBody;
+
+      if (
+        !verifyResponse.ok ||
+        !verifyBody
+          .authenticated
+      ) {
+        throw new Error(
+          verifyBody.message ??
+            "Passkey sign-in failed.",
+        );
+      }
+
+      await routeAfterAuthentication(
+        normalizedSlug,
+      );
+    } catch (error) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Unable to sign in with your Passkey.",
+      );
+    } finally {
+      setBusy(
+        false,
+      );
     }
   }
 
   return (
-    <form
-      className="space-y-5"
-      onSubmit={submit}
+    <div
+      className="grid gap-5"
     >
-      <label className="block">
-        <span className="mb-2 block text-sm font-medium">
-          School workspace
-        </span>
-        <input
-          required
-          value={schoolSlug}
-          onChange={(event) =>
-            setSchoolSlug(
-              event.target.value,
-            )
-          }
-          placeholder="school-slug"
-          autoComplete="organization"
-          className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 outline-none transition focus:border-slate-950 focus:ring-2 focus:ring-slate-950/10"
-        />
-      </label>
+      {needsSchoolWorkspace ? (
+        <label className="casa-label">
+          <span>
+            School workspace
+          </span>
+          <input
+            required
+            value={schoolSlug}
+            onChange={(event) =>
+              setSchoolSlug(event.target.value)
+            }
+            placeholder="school-slug"
+            autoComplete="organization"
+            className="casa-field"
+          />
+        </label>
+      ) : (
+        <div className="border-y border-black/15 py-4">
+          <p className="casa-kicker text-black/40">
+            CASA internal access
+          </p>
+          <p className="mt-2 text-sm leading-6 text-black/50">
+            Sign in with your existing CASA internal identity to continue.
+          </p>
+        </div>
+      )}
 
-      <label className="block">
-        <span className="mb-2 block text-sm font-medium">
-          Email or phone
-        </span>
-        <input
-          required
-          value={identifier}
-          onChange={(event) =>
-            setIdentifier(
-              event.target.value,
-            )
+      <div
+        className="grid grid-cols-2 border-y border-black"
+        role="tablist"
+        aria-label="Sign-in method"
+      >
+        <button
+          type="button"
+          role="tab"
+          aria-selected={
+            method ===
+            "PASSWORD"
           }
-          autoComplete="username"
-          className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 outline-none transition focus:border-slate-950 focus:ring-2 focus:ring-slate-950/10"
-        />
-      </label>
-
-      <label className="block">
-        <span className="mb-2 block text-sm font-medium">
+          className={`min-h-12 border-r border-black px-3 text-left font-mono text-[10px] font-semibold uppercase tracking-[0.12em] ${
+            method ===
+            "PASSWORD"
+              ? "bg-black text-white"
+              : "bg-transparent text-black/55"
+          }`}
+          onClick={() => {
+            setMethod(
+              "PASSWORD",
+            );
+            setError(
+              null,
+            );
+          }}
+        >
           Password
-        </span>
-        <input
-          required
-          type="password"
-          value={password}
-          onChange={(event) =>
-            setPassword(
-              event.target.value,
-            )
+        </button>
+
+        <button
+          type="button"
+          role="tab"
+          aria-selected={
+            method ===
+            "PASSKEY"
           }
-          autoComplete="current-password"
-          className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 outline-none transition focus:border-slate-950 focus:ring-2 focus:ring-slate-950/10"
-        />
-      </label>
+          className={`min-h-12 px-3 text-left font-mono text-[10px] font-semibold uppercase tracking-[0.12em] ${
+            method ===
+            "PASSKEY"
+              ? "bg-black text-white"
+              : "bg-transparent text-black/55"
+          }`}
+          onClick={() => {
+            setMethod(
+              "PASSKEY",
+            );
+            setError(
+              null,
+            );
+          }}
+        >
+          Passkey
+        </button>
+      </div>
+
+      {method ===
+      "PASSWORD" ? (
+        <form
+          className="grid gap-5"
+          onSubmit={
+            submitPassword
+          }
+        >
+          <label className="casa-label">
+            <span>
+              Email or phone
+            </span>
+            <input
+              required
+              value={
+                identifier
+              }
+              onChange={(
+                event,
+              ) =>
+                setIdentifier(
+                  event
+                    .target
+                    .value,
+                )
+              }
+              autoComplete="username"
+              className="casa-field"
+            />
+          </label>
+
+          <label className="casa-label">
+            <span>
+              Password
+            </span>
+            <input
+              required
+              type="password"
+              value={
+                password
+              }
+              onChange={(
+                event,
+              ) =>
+                setPassword(
+                  event
+                    .target
+                    .value,
+                )
+              }
+              autoComplete="current-password"
+              className="casa-field"
+            />
+          </label>
+
+          <button
+            disabled={
+              busy
+            }
+            className="casa-button w-full"
+            type="submit"
+          >
+            {busy
+              ? "Signing in..."
+              : "Sign in →"}
+          </button>
+        </form>
+      ) : (
+        <div>
+          <p className="text-sm leading-6 text-black/55">
+            Use the Passkey registered to your own CASA identity.
+            Shared devices are supported, but staff accounts must never be shared.
+          </p>
+
+          <button
+            disabled={
+              busy
+            }
+            className="casa-button mt-5 w-full"
+            type="button"
+            onClick={() =>
+              void submitPasskey()
+            }
+          >
+            {busy
+              ? "Verifying..."
+              : "Continue with Passkey →"}
+          </button>
+        </div>
+      )}
 
       {error ? (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+        <div
+          className="casa-error"
+          role="alert"
+        >
           {error}
         </div>
       ) : null}
 
-      <button
-        disabled={busy}
-        className="w-full rounded-xl bg-slate-950 px-4 py-3 font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-        type="submit"
-      >
-        {busy
-          ? "Signing inâ€¦"
-          : "Sign in"}
-      </button>
-    </form>
+      <p className="text-xs leading-5 text-black/40">
+        CASA routes Admins, Teachers and School Technicians to their own authorized workspace after sign-in.
+      </p>
+    </div>
   );
 }

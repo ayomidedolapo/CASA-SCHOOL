@@ -2,6 +2,7 @@ import {
   and,
   eq,
   gt,
+  isNull,
   sql,
 } from "drizzle-orm";
 import {
@@ -30,6 +31,7 @@ import type {
   SchoolAccess,
 } from "@/server/auth/authorization";
 import {
+  requireCasaInternalPasskeyStepUpGrant,
   requirePasskeyStepUpGrant,
 } from "@/server/auth/passkey-step-up";
 
@@ -50,6 +52,76 @@ import {
 import {
   assertBiometricProviderMode,
 } from "./provider-mode";
+
+type EnrollmentActorScope =
+  | "SCHOOL"
+  | "CASA_INTERNAL";
+
+interface EnrollmentAccess {
+  session: {
+    userId: string;
+  };
+  school: {
+    id: string;
+  };
+  membership: {
+    id: string;
+  };
+}
+
+function enrollmentActorIds(
+  access:
+    EnrollmentAccess,
+  scope:
+    EnrollmentActorScope,
+) {
+  return {
+    schoolMembershipId:
+      scope ===
+      "SCHOOL"
+        ? access.membership.id
+        : null,
+    internalMembershipId:
+      scope ===
+      "CASA_INTERNAL"
+        ? access.membership.id
+        : null,
+  };
+}
+
+function enrollmentLivenessActorCondition(
+  input: {
+    access:
+      EnrollmentAccess;
+    scope:
+      EnrollmentActorScope;
+  },
+) {
+  if (
+    input.scope ===
+    "SCHOOL"
+  ) {
+    return and(
+      eq(
+        biometricLivenessSessions.initiatedByMembershipId,
+        input.access.membership.id,
+      ),
+      isNull(
+        biometricLivenessSessions.initiatedByInternalMembershipId,
+      ),
+    );
+  }
+
+  return and(
+    isNull(
+      biometricLivenessSessions.initiatedByMembershipId,
+    ),
+    eq(
+      biometricLivenessSessions.initiatedByInternalMembershipId,
+      input.access.membership.id,
+    ),
+  );
+}
 
 function expired(
   value: Date,
@@ -133,6 +205,8 @@ async function createBoundLivenessSession(
     attemptId?: string | null;
     terminalId?: string | null;
     membershipId?: string | null;
+    internalMembershipId?:
+      string | null;
     purpose:
       | "ENROLLMENT"
       | "VERIFICATION";
@@ -170,6 +244,9 @@ async function createBoundLivenessSession(
           null,
         initiatedByMembershipId:
           input.membershipId ??
+          null,
+        initiatedByInternalMembershipId:
+          input.internalMembershipId ??
           null,
         purpose:
           input.purpose,
@@ -221,10 +298,12 @@ async function createBoundLivenessSession(
 export async function startAwsEnrollmentLiveness(
   input: {
     access:
-      SchoolAccess;
+      EnrollmentAccess;
     studentId: string;
     stepUpToken:
       string | null | undefined;
+    actorScope?:
+      EnrollmentActorScope;
   },
 ) {
   assertBiometricProviderMode(
@@ -240,8 +319,27 @@ export async function startAwsEnrollmentLiveness(
           students.id,
         status:
           students.status,
+        activeProfileId:
+          studentBiometricProfiles.id,
       })
       .from(students)
+      .leftJoin(
+        studentBiometricProfiles,
+        and(
+          eq(
+            studentBiometricProfiles.schoolId,
+            students.schoolId,
+          ),
+          eq(
+            studentBiometricProfiles.studentId,
+            students.id,
+          ),
+          eq(
+            studentBiometricProfiles.status,
+            "ACTIVE",
+          ),
+        ),
+      )
       .where(
         and(
           eq(
@@ -279,47 +377,37 @@ export async function startAwsEnrollmentLiveness(
         "STUDENT_NOT_ACTIVE",
     };
   }
-
-  const profileRows =
-    await db
-      .select({
-        id:
-          studentBiometricProfiles.id,
-      })
-      .from(
-        studentBiometricProfiles,
-      )
-      .where(
-        and(
-          eq(
-            studentBiometricProfiles.schoolId,
-            input.access.school.id,
-          ),
-          eq(
-            studentBiometricProfiles.studentId,
-            input.studentId,
-          ),
-          eq(
-            studentBiometricProfiles.status,
-            "ACTIVE",
-          ),
-        ),
-      )
-      .limit(1);
-
   const action =
-    profileRows[0]
+    student.activeProfileId
       ? "BIOMETRIC_REENROLL"
       : "BIOMETRIC_ENROLL";
 
+  const actorScope =
+    input.actorScope ??
+    "SCHOOL";
+
   try {
-    await requirePasskeyStepUpGrant({
-      token:
-        input.stepUpToken,
-      access:
-        input.access,
-      action,
-    });
+    if (
+      actorScope ===
+      "CASA_INTERNAL"
+    ) {
+      await requireCasaInternalPasskeyStepUpGrant({
+        token:
+          input.stepUpToken,
+        access:
+          input.access,
+        action,
+      });
+    } else {
+      await requirePasskeyStepUpGrant({
+        token:
+          input.stepUpToken,
+        access:
+          input.access as
+            SchoolAccess,
+        action,
+      });
+    }
   } catch {
     return {
       ok: false as const,
@@ -377,6 +465,12 @@ export async function startAwsEnrollmentLiveness(
     };
   }
 
+  const actorIds =
+    enrollmentActorIds(
+      input.access,
+      actorScope,
+    );
+
   const session =
     await createBoundLivenessSession({
       schoolId:
@@ -384,7 +478,9 @@ export async function startAwsEnrollmentLiveness(
       studentId:
         input.studentId,
       membershipId:
-        input.access.membership.id,
+        actorIds.schoolMembershipId,
+      internalMembershipId:
+        actorIds.internalMembershipId,
       purpose:
         "ENROLLMENT",
       authorizationAction:
@@ -401,10 +497,12 @@ export async function startAwsEnrollmentLiveness(
 export async function completeAwsEnrollmentLiveness(
   input: {
     access:
-      SchoolAccess;
+      EnrollmentAccess;
     studentId: string;
     livenessSessionId:
       string;
+    actorScope?:
+      EnrollmentActorScope;
   },
 ) {
   assertBiometricProviderMode(
@@ -412,6 +510,21 @@ export async function completeAwsEnrollmentLiveness(
   );
 
   const db = getDb();
+  const actorScope =
+    input.actorScope ??
+    "SCHOOL";
+  const actorIds =
+    enrollmentActorIds(
+      input.access,
+      actorScope,
+    );
+  const actorCondition =
+    enrollmentLivenessActorCondition({
+      access:
+        input.access,
+      scope:
+        actorScope,
+    });
 
   const sessionRows =
     await db
@@ -442,10 +555,7 @@ export async function completeAwsEnrollmentLiveness(
             biometricLivenessSessions.studentId,
             input.studentId,
           ),
-          eq(
-            biometricLivenessSessions.initiatedByMembershipId,
-            input.access.membership.id,
-          ),
+          actorCondition,
           eq(
             biometricLivenessSessions.purpose,
             "ENROLLMENT",
@@ -689,21 +799,26 @@ export async function completeAwsEnrollmentLiveness(
           provider_subject_ref,
           status,
           enrolled_by_membership_id,
+          enrolled_by_internal_membership_id,
           enrolled_at,
           created_at,
           updated_at
         )
-        values (
+        select
           ${input.access.school.id}::uuid,
           ${input.studentId}::uuid,
           ${AWS_REKOGNITION_PROVIDER},
           ${indexed.faceId},
           'ACTIVE'::student_biometric_profile_status,
-          ${input.access.membership.id}::uuid,
+          ${actorIds.schoolMembershipId}::uuid,
+          ${actorIds.internalMembershipId}::uuid,
           ${now}::timestamptz,
           ${now}::timestamptz,
           ${now}::timestamptz
-        )
+        from (
+          select count(*)
+          from previous_profile
+        ) as previous_profile_transition
         returning
           id,
           school_id,
@@ -718,6 +833,7 @@ export async function completeAwsEnrollmentLiveness(
           profile_id,
           previous_profile_id,
           actor_membership_id,
+          actor_internal_membership_id,
           event_type,
           provider,
           provider_subject_ref,
@@ -732,7 +848,8 @@ export async function completeAwsEnrollmentLiveness(
             from previous_profile
             limit 1
           ),
-          ${input.access.membership.id}::uuid,
+          ${actorIds.schoolMembershipId}::uuid,
+          ${actorIds.internalMembershipId}::uuid,
           case
             when exists (
               select 1
@@ -800,6 +917,49 @@ export async function completeAwsEnrollmentLiveness(
             ${session.id}::uuid
           and status =
             'CREATED'::biometric_liveness_status
+        returning id
+      ),
+      internal_audit as (
+        insert into casa_internal_audit_logs (
+          actor_membership_id,
+          school_id,
+          action,
+          subject_type,
+          subject_id,
+          metadata,
+          created_at
+        )
+        select
+          ${actorIds.internalMembershipId}::uuid,
+          inserted_profile.school_id,
+          case
+            when inserted_event.event_type =
+              'REENROLLED'::student_biometric_profile_event_type
+            then
+              'STUDENT_FACE_REENROLLED'
+            else
+              'STUDENT_FACE_ENROLLED'
+          end,
+          'STUDENT',
+          inserted_profile.student_id,
+          jsonb_build_object(
+            'biometricEvent',
+            inserted_event.event_type,
+            'authorizationAction',
+            ${session.authorizationAction}::text
+          ),
+          ${now}::timestamptz
+        from inserted_profile
+        join inserted_event
+          on inserted_event.profile_id =
+            inserted_profile.id
+        where
+          ${actorScope}::text =
+            'CASA_INTERNAL'
+          and exists (
+            select 1
+            from completed_session
+          )
         returning id
       )
       select
@@ -956,9 +1116,28 @@ export async function startAwsVerificationLiveness(
           attendanceVerificationAttempts.studentId,
         outcome:
           attendanceVerificationAttempts.outcome,
+        profileProvider:
+          studentBiometricProfiles.provider,
       })
       .from(
         attendanceVerificationAttempts,
+      )
+      .leftJoin(
+        studentBiometricProfiles,
+        and(
+          eq(
+            studentBiometricProfiles.schoolId,
+            attendanceVerificationAttempts.schoolId,
+          ),
+          eq(
+            studentBiometricProfiles.studentId,
+            attendanceVerificationAttempts.studentId,
+          ),
+          eq(
+            studentBiometricProfiles.status,
+            "ACTIVE",
+          ),
+        ),
       )
       .where(
         and(
@@ -1004,39 +1183,9 @@ export async function startAwsVerificationLiveness(
         "ATTEMPT_NOT_FINALIZABLE",
     };
   }
-
-  const profileRows =
-    await db
-      .select({
-        provider:
-          studentBiometricProfiles.provider,
-        providerSubjectRef:
-          studentBiometricProfiles.providerSubjectRef,
-      })
-      .from(
-        studentBiometricProfiles,
-      )
-      .where(
-        and(
-          eq(
-            studentBiometricProfiles.schoolId,
-            input.access.school.id,
-          ),
-          eq(
-            studentBiometricProfiles.studentId,
-            attempt.studentId,
-          ),
-          eq(
-            studentBiometricProfiles.status,
-            "ACTIVE",
-          ),
-        ),
-      )
-      .limit(1);
-
   if (
-    !profileRows[0] ||
-    profileRows[0].provider !==
+    !attempt.profileProvider ||
+    attempt.profileProvider !==
       AWS_REKOGNITION_PROVIDER
   ) {
     return {
@@ -1588,11 +1737,13 @@ export async function completeAwsVerificationLiveness(
 export async function cancelAwsEnrollmentLiveness(
   input: {
     access:
-      SchoolAccess;
+      EnrollmentAccess;
     studentId:
       string;
     livenessSessionId:
       string;
+    actorScope?:
+      EnrollmentActorScope;
   },
 ) {
   assertBiometricProviderMode(
@@ -1600,6 +1751,16 @@ export async function cancelAwsEnrollmentLiveness(
   );
 
   const db = getDb();
+  const actorScope =
+    input.actorScope ??
+    "SCHOOL";
+  const actorCondition =
+    enrollmentLivenessActorCondition({
+      access:
+        input.access,
+      scope:
+        actorScope,
+    });
 
   const rows =
     await db
@@ -1628,10 +1789,7 @@ export async function cancelAwsEnrollmentLiveness(
             biometricLivenessSessions.studentId,
             input.studentId,
           ),
-          eq(
-            biometricLivenessSessions.initiatedByMembershipId,
-            input.access.membership.id,
-          ),
+          actorCondition,
           eq(
             biometricLivenessSessions.purpose,
             "ENROLLMENT",

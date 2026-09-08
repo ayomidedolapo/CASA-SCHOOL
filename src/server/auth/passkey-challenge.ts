@@ -26,6 +26,8 @@ export async function savePasskeyChallenge(
     userId?: string | null;
     schoolId?: string | null;
     membershipId?: string | null;
+    internalMembershipId?:
+      string | null;
     webauthnUserId?:
       string | null;
     action?: string | null;
@@ -58,6 +60,9 @@ export async function savePasskeyChallenge(
           input.schoolId ?? null,
         membershipId:
           input.membershipId ??
+          null,
+        internalMembershipId:
+          input.internalMembershipId ??
           null,
         webauthnUserId:
           input.webauthnUserId ??

@@ -1,4 +1,4 @@
-# CASA School Ã¢â‚¬â€ Operating Model, Identity & Protected Card Production
+# CASA School ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â Operating Model, Identity & Protected Card Production
 
 ## 1. Student identity
 
@@ -107,7 +107,7 @@ Intended deployment:
 
 Target attendance sequence:
 
-**Scan ID Ã¢â€ â€™ Verify Face Ã¢â€ â€™ Verify Liveness Ã¢â€ â€™ Verify Time Ã¢â€ â€™ Record Attendance**
+**Scan ID ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ Verify Face ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ Verify Liveness ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ Verify Time ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ Record Attendance**
 
 The ID card identifies the student.
 
@@ -260,13 +260,13 @@ CASA School attendance is not complete at arrival.
 
 The target daily presence lifecycle is:
 
-**Check in â†’ On campus â†’ Dismissal window â†’ Sign out â†’ Guardian departure notification**
+**Check in Ã¢â€ â€™ On campus Ã¢â€ â€™ Dismissal window Ã¢â€ â€™ Sign out Ã¢â€ â€™ Guardian departure notification**
 
 Before a student leaves after school, the student must sign out at any ACTIVE Scanner PWA terminal assigned to that school.
 
 Sign-out must use the same identity principle as arrival:
 
-**Scan ID â†’ Verify Face â†’ Verify Liveness â†’ Verify Departure Time â†’ Record Sign-out**
+**Scan ID Ã¢â€ â€™ Verify Face Ã¢â€ â€™ Verify Liveness Ã¢â€ â€™ Verify Departure Time Ã¢â€ â€™ Record Sign-out**
 
 A successful sign-out creates a durable departure record/event and changes the student's daily presence state from on-campus to signed-out.
 
@@ -309,3 +309,12 @@ The eventual attendance lifecycle must prevent:
 Phase 3A currently provides the arrival-oriented persistence foundation.
 
 Before Scanner PWA terminal APIs are finalized, the next attendance implementation phase must extend that foundation to model CHECK_IN and CHECK_OUT explicitly rather than creating a parallel departure subsystem.
+## Phase 3K implementation
+
+The protected card-production architecture is now implemented.
+
+The reusable QR is rendered while its raw secret exists only in server memory.
+
+CASA persists the credential hash, template version, private artifact references, production snapshot/status, and a separate high-entropy public artifact key.
+
+The master template and layout remain CASA-only.

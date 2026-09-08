@@ -109,6 +109,16 @@ const policySchema =
     isDefault:
       z.boolean()
         .default(true),
+    schoolBusGraceMinutes:
+      z.number()
+        .int()
+        .min(0)
+        .max(240),
+    independentGraceMinutes:
+      z.number()
+        .int()
+        .min(0)
+        .max(240),
     days:
       z.array(
         daySchema,
@@ -279,6 +289,10 @@ export async function POST(
           null,
         isDefault:
           parsed.data.isDefault,
+        schoolBusGraceMinutes:
+          parsed.data.schoolBusGraceMinutes,
+        independentGraceMinutes:
+          parsed.data.independentGraceMinutes,
         days:
           parsed.data.days,
       });

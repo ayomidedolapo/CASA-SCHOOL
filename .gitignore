@@ -51,3 +51,11 @@ CASA_SCHOOL_PHASE_*.ps1
 .env.local
 .env.*.local
 !.env.example
+
+# CASA local/private state
+.env
+.env.local
+.env.*.local
+.casa-backups/
+.next/
+node_modules/

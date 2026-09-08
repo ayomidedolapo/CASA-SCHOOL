@@ -17,7 +17,7 @@ export function getDatabaseUrl(): string {
 
   if (!result.success) {
     throw new Error(
-      "CASA School database configuration is unavailable. Set DATABASE_URL in the runtime environment.",
+      "CASA database configuration is unavailable. Set DATABASE_URL in the runtime environment.",
     );
   }
 

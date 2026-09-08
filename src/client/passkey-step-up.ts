@@ -5,17 +5,15 @@ import {
   type PublicKeyCredentialRequestOptionsJSON,
 } from "@simplewebauthn/browser";
 
-export async function obtainPasskeyStepUpGrant(
+async function obtainPasskeyStepUpGrantFromBase(
   input: {
-    schoolSlug: string;
+    basePath: string;
     action: string;
   },
 ): Promise<string> {
   const optionsResponse =
     await fetch(
-      `/api/schools/${encodeURIComponent(
-        input.schoolSlug,
-      )}/auth/passkey/step-up/options`,
+      `${input.basePath}/options`,
       {
         method:
           "POST",
@@ -60,9 +58,7 @@ export async function obtainPasskeyStepUpGrant(
 
   const verifyResponse =
     await fetch(
-      `/api/schools/${encodeURIComponent(
-        input.schoolSlug,
-      )}/auth/passkey/step-up/verify`,
+      `${input.basePath}/verify`,
       {
         method:
           "POST",
@@ -101,4 +97,38 @@ export async function obtainPasskeyStepUpGrant(
   }
 
   return verifyBody.grant.token;
+}
+
+export async function obtainPasskeyStepUpGrant(
+  input: {
+    schoolSlug: string;
+    action: string;
+  },
+): Promise<string> {
+  return obtainPasskeyStepUpGrantFromBase({
+    basePath:
+      `/api/schools/${encodeURIComponent(
+        input.schoolSlug,
+      )}/auth/passkey/step-up`,
+    action:
+      input.action,
+  });
+}
+
+export async function obtainCasaInternalPasskeyStepUpGrant(
+  input: {
+    schoolId: string;
+    action:
+      | "BIOMETRIC_ENROLL"
+      | "BIOMETRIC_REENROLL";
+  },
+): Promise<string> {
+  return obtainPasskeyStepUpGrantFromBase({
+    basePath:
+      `/api/internal/onboarding/schools/${encodeURIComponent(
+        input.schoolId,
+      )}/auth/passkey/step-up`,
+    action:
+      input.action,
+  });
 }

@@ -6,6 +6,7 @@ export type TodayPresenceStatus =
 
 export type TodayAttendanceView =
   | "ALL"
+  | "PRESENT"
   | "NOT_ARRIVED"
   | "ABSENT"
   | "ON_CAMPUS"
@@ -55,6 +56,7 @@ export function isTodayView(
   TodayAttendanceView {
   return [
     "ALL",
+    "PRESENT",
     "NOT_ARRIVED",
     "ABSENT",
     "ON_CAMPUS",

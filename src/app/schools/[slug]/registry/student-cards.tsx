@@ -1,12 +1,15 @@
 "use client";
 
-import Image from "next/image";
 import {
+  useCallback,
   useEffect,
   useMemo,
   useState,
 } from "react";
-import QRCode from "qrcode";
+
+import {
+  obtainPasskeyStepUpGrant,
+} from "@/client/passkey-step-up";
 
 interface StudentCardsProps {
   apiBase: string;
@@ -23,484 +26,752 @@ interface CardRecord {
     | "REPLACED"
     | "EXPIRED";
   issuedAt: string;
-  expiresAt: string | null;
-  deactivatedAt: string | null;
+  expiresAt:
+    string | null;
+  deactivatedAt:
+    string | null;
 }
 
-interface CardCredential {
-  token: string;
-  payload: string;
+interface CardEvent {
+  id: string;
+  cardId: string;
+  eventType: string;
+  reason:
+    string | null;
+  createdAt: string;
+}
+
+interface ProductionJob {
+  id: string;
+  cardId: string;
+  status:
+    | "READY"
+    | "EXPORTED"
+    | "PRINTED";
+  publicLinkRevision:
+    number;
+  queuedAt: string;
+  exportedAt:
+    string | null;
+  printedAt:
+    string | null;
+  templateVersion:
+    string;
+  publicUrl:
+    string;
 }
 
 interface CardsResponse {
-  cards: CardRecord[];
-  events: Array<{
-    id: string;
-    cardId: string;
-    eventType: string;
-    reason: string | null;
-    createdAt: string;
-  }>;
+  cards:
+    CardRecord[];
+  events:
+    CardEvent[];
+}
+
+interface ProductionResponse {
+  jobs:
+    ProductionJob[];
+}
+
+function errorMessage(
+  value:
+    unknown,
+  fallback:
+    string,
+): string {
+  if (
+    typeof value ===
+      "object" &&
+    value !==
+      null &&
+    "message" in value &&
+    typeof value.message ===
+      "string"
+  ) {
+    return value.message;
+  }
+
+  if (
+    typeof value ===
+      "object" &&
+    value !==
+      null &&
+    "code" in value &&
+    typeof value.code ===
+      "string"
+  ) {
+    return value.code;
+  }
+
+  return fallback;
 }
 
 export function StudentCards({
   apiBase,
   studentId,
 }: StudentCardsProps) {
-  const [cards, setCards] =
-    useState<CardRecord[]>([]);
-  const [events, setEvents] =
+  const [
+    cards,
+    setCards,
+  ] =
     useState<
-      CardsResponse["events"]
+      CardRecord[]
     >([]);
-  const [credential, setCredential] =
-    useState<CardCredential | null>(
-      null,
-    );
-  const [qrDataUrl, setQrDataUrl] =
-    useState<string | null>(null);
-  const [busy, setBusy] =
+
+  const [
+    events,
+    setEvents,
+  ] =
+    useState<
+      CardEvent[]
+    >([]);
+
+  const [
+    jobs,
+    setJobs,
+  ] =
+    useState<
+      ProductionJob[]
+    >([]);
+
+  const [
+    busy,
+    setBusy,
+  ] =
     useState(false);
-  const [error, setError] =
-    useState<string | null>(null);
 
-  const endpoint = useMemo(
-    () =>
-      `${apiBase}/students/${studentId}/cards`,
-    [apiBase, studentId],
-  );
+  const [
+    error,
+    setError,
+  ] =
+    useState<
+      string | null
+    >(null);
 
-  const activeCard = cards.find(
-    (card) =>
-      card.status === "ACTIVE",
-  );
+  const [
+    notice,
+    setNotice,
+  ] =
+    useState<
+      string | null
+    >(null);
 
-  useEffect(() => {
-    let cancelled = false;
+  const [
+    reason,
+    setReason,
+  ] =
+    useState("");
 
-    void fetch(endpoint)
-      .then(async (response) => {
-        const body =
-          (await response.json()) as
-            CardsResponse & {
-              message?: string;
-            };
+  const endpoint =
+    useMemo(
+      () =>
+        `${apiBase}/students/${studentId}/cards`,
+      [
+        apiBase,
+        studentId,
+      ],
+    );
 
-        if (!response.ok) {
+  const productionEndpoint =
+    useMemo(
+      () =>
+        `${endpoint}/production`,
+      [
+        endpoint,
+      ],
+    );
+
+  const activeCard =
+    cards.find(
+      (card) =>
+        card.status ===
+        "ACTIVE",
+    ) ??
+    null;
+
+  const activeProduction =
+    activeCard
+      ? jobs.find(
+          (job) =>
+            job.cardId ===
+            activeCard.id,
+        ) ??
+        null
+      : null;
+
+  const reload =
+    useCallback(
+      async () => {
+        const [
+          cardsResponse,
+          productionResponse,
+        ] =
+          await Promise.all([
+            fetch(
+              endpoint,
+              {
+                credentials:
+                  "same-origin",
+                cache:
+                  "no-store",
+              },
+            ),
+            fetch(
+              productionEndpoint,
+              {
+                credentials:
+                  "same-origin",
+                cache:
+                  "no-store",
+              },
+            ),
+          ]);
+
+        const cardsBody:
+          unknown =
+            await cardsResponse.json();
+
+        const productionBody:
+          unknown =
+            await productionResponse.json();
+
+        if (
+          !cardsResponse.ok
+        ) {
           throw new Error(
-            body.message ??
+            errorMessage(
+              cardsBody,
               "Unable to load ID cards.",
+            ),
           );
         }
 
-        if (!cancelled) {
-          setCards(body.cards);
-          setEvents(body.events);
+        if (
+          !productionResponse.ok
+        ) {
+          throw new Error(
+            errorMessage(
+              productionBody,
+              "Unable to load card-production status.",
+            ),
+          );
         }
-      })
-      .catch(
-        (cause: unknown) => {
-          if (!cancelled) {
-            setError(
-              cause instanceof Error
-                ? cause.message
-                : "Unable to load ID cards.",
-            );
-          }
-        },
+
+        const cardData =
+          cardsBody as
+            CardsResponse;
+
+        const productionData =
+          productionBody as
+            ProductionResponse;
+
+        setCards(
+          cardData.cards,
+        );
+        setEvents(
+          cardData.events,
+        );
+        setJobs(
+          productionData.jobs,
+        );
+      },
+      [
+        endpoint,
+        productionEndpoint,
+      ],
+    );
+
+  useEffect(
+    () => {
+      const timer =
+        window.setTimeout(
+          () => {
+            void reload()
+              .catch(
+                (
+                  caught,
+                ) => {
+                  setError(
+                    caught instanceof
+                      Error
+                      ? caught.message
+                      : "Unable to load student-card status.",
+                  );
+                },
+              );
+          },
+          0,
+        );
+
+      return () => {
+        window.clearTimeout(
+          timer,
+        );
+      };
+    },
+    [
+      reload,
+    ],
+  );
+
+  async function produce() {
+    const action =
+      activeCard
+        ? "CARD_REISSUE"
+        : "CARD_ISSUE";
+
+    const actionReason =
+      reason.trim();
+
+    if (
+      activeCard &&
+      actionReason.length <
+        3
+    ) {
+      setError(
+        "Enter a clear reason before card reissue.",
       );
-
-    return () => {
-      cancelled = true;
-    };
-  }, [endpoint]);
-
-  useEffect(() => {
-    if (!credential) {
       return;
     }
 
-    let cancelled = false;
-
-    void QRCode.toDataURL(
-      credential.payload,
-      {
-        width: 260,
-        margin: 2,
-        errorCorrectionLevel: "M",
-      },
-    )
-      .then((value) => {
-        if (!cancelled) {
-          setQrDataUrl(value);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setError(
-            "The card was issued, but the QR preview could not be rendered.",
-          );
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [credential]);
-
-  async function reload() {
-    const response =
-      await fetch(endpoint);
-
-    const body =
-      (await response.json()) as
-        CardsResponse & {
-          message?: string;
-        };
-
-    if (!response.ok) {
-      throw new Error(
-        body.message ??
-          "Unable to reload ID cards.",
-      );
-    }
-
-    setCards(body.cards);
-    setEvents(body.events);
-  }
-
-  async function issue() {
-    setBusy(true);
-    setError(null);
-    setCredential(null);
-    setQrDataUrl(null);
+    setBusy(
+      true,
+    );
+    setError(
+      null,
+    );
+    setNotice(
+      null,
+    );
 
     try {
-      const response = await fetch(
-        endpoint,
-        {
-          method: "POST",
-        },
-      );
+      const schoolSlug =
+        decodeURIComponent(
+          apiBase
+            .split(
+              "/api/schools/",
+            )[1]
+            ?.split(
+              "/",
+            )[0] ??
+            "",
+        );
 
-      const body =
-        (await response.json()) as {
-          credential?: CardCredential;
-          message?: string;
-        };
+      if (!schoolSlug) {
+        throw new Error(
+          "Unable to resolve the school for Passkey authorization.",
+        );
+      }
+
+      const grant =
+        await obtainPasskeyStepUpGrant({
+          schoolSlug,
+          action,
+        });
+
+      const response =
+        await fetch(
+          productionEndpoint,
+          {
+            method:
+              "POST",
+            headers: {
+              "Content-Type":
+                "application/json",
+              "x-casa-passkey-step-up":
+                grant,
+            },
+            credentials:
+              "same-origin",
+            cache:
+              "no-store",
+            body:
+              JSON.stringify({
+                reason:
+                  activeCard
+                    ? actionReason
+                    : null,
+              }),
+          },
+        );
+
+      const body:
+        unknown =
+          await response.json();
 
       if (!response.ok) {
         throw new Error(
-          body.message ??
-            "Unable to issue ID card.",
+          errorMessage(
+            body,
+            "Student card could not be produced.",
+          ),
         );
       }
 
-      if (!body.credential) {
-        throw new Error(
-          "Card issued without its one-time credential.",
-        );
-      }
-
-      setCredential(
-        body.credential,
+      setNotice(
+        activeCard
+          ? "Replacement card rendered and queued for CASA production."
+          : "Student card rendered and queued for CASA production.",
       );
+      setReason("");
+
       await reload();
-    } catch (cause) {
+    } catch (caught) {
       setError(
-        cause instanceof Error
-          ? cause.message
-          : "Unable to issue ID card.",
+        caught instanceof
+          Error
+          ? caught.message
+          : "Student card could not be produced.",
       );
     } finally {
-      setBusy(false);
+      setBusy(
+        false,
+      );
     }
   }
 
   async function deactivate(
-    cardId: string,
+    cardId:
+      string,
     status:
-      | "LOST"
-      | "REVOKED"
-      | "EXPIRED",
+      "LOST" |
+      "REVOKED" |
+      "EXPIRED",
   ) {
-    const reason =
-      window.prompt(
-        `Optional reason for ${status.toLowerCase()}:`,
-      );
+    const actionReason =
+      reason.trim() ||
+      null;
 
-    setBusy(true);
-    setError(null);
+    setBusy(
+      true,
+    );
+    setError(
+      null,
+    );
+    setNotice(
+      null,
+    );
 
     try {
-      const response = await fetch(
-        `${endpoint}/${cardId}`,
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type":
-              "application/json",
+      const response =
+        await fetch(
+          `${endpoint}/${cardId}`,
+          {
+            method:
+              "PATCH",
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+            credentials:
+              "same-origin",
+            body:
+              JSON.stringify({
+                status,
+                reason:
+                  actionReason,
+              }),
           },
-          body: JSON.stringify({
-            status,
-            reason:
-              reason?.trim() ||
-              null,
-          }),
-        },
-      );
+        );
 
-      const body =
-        (await response.json()) as {
-          message?: string;
-        };
+      const body:
+        unknown =
+          await response.json();
 
       if (!response.ok) {
         throw new Error(
-          body.message ??
-            "Unable to update the ID card.",
+          errorMessage(
+            body,
+            "Unable to update ID card.",
+          ),
         );
       }
+
+      setNotice(
+        `Card marked ${status.toLowerCase()}.`,
+      );
+      setReason("");
 
       await reload();
-    } catch (cause) {
+    } catch (caught) {
       setError(
-        cause instanceof Error
-          ? cause.message
-          : "Unable to update the ID card.",
+        caught instanceof
+          Error
+          ? caught.message
+          : "Unable to update ID card.",
       );
     } finally {
-      setBusy(false);
-    }
-  }
-
-  async function replace(
-    cardId: string,
-  ) {
-    const reason =
-      window.prompt(
-        "Optional reason for replacing this card:",
+      setBusy(
+        false,
       );
-
-    setBusy(true);
-    setError(null);
-    setCredential(null);
-    setQrDataUrl(null);
-
-    try {
-      const response = await fetch(
-        `${endpoint}/${cardId}/replace`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
-          body: JSON.stringify({
-            reason:
-              reason?.trim() ||
-              null,
-          }),
-        },
-      );
-
-      const body =
-        (await response.json()) as {
-          credential?: CardCredential;
-          message?: string;
-        };
-
-      if (!response.ok) {
-        throw new Error(
-          body.message ??
-            "Unable to replace the ID card.",
-        );
-      }
-
-      if (!body.credential) {
-        throw new Error(
-          "Replacement card did not return its one-time credential.",
-        );
-      }
-
-      setCredential(
-        body.credential,
-      );
-      await reload();
-    } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "Unable to replace the ID card.",
-      );
-    } finally {
-      setBusy(false);
     }
   }
 
   return (
-    <div className="mt-6 border-t border-slate-100 pt-5">
-      <div className="flex items-start justify-between gap-3">
+    <section className="mt-7 border-t border-black pt-5">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h4 className="text-sm font-semibold">
-            School ID card
+          <p className="casa-kicker">
+            Student ID card
+          </p>
+          <h4 className="mt-2 text-lg font-semibold">
+            Card production & lifecycle
           </h4>
-          <p className="mt-1 text-xs leading-5 text-slate-500">
-            The QR identifies the student. Face verification will later verify the person.
+          <p className="mt-2 max-w-2xl text-xs leading-5 text-black/50">
+            CASA renders the personalized card server-side. The reusable QR
+            credential is never returned to this browser or stored for later
+            printing.
           </p>
         </div>
 
-        {!activeCard ? (
-          <button
-            disabled={busy}
-            onClick={() =>
-              void issue()
-            }
-            className="rounded-lg bg-slate-950 px-3 py-2 text-xs font-medium text-white disabled:opacity-50"
-          >
-            Issue card
-          </button>
-        ) : null}
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() =>
+            void produce()
+          }
+          className="casa-button"
+        >
+          {busy
+            ? "Working..."
+            : activeCard
+              ? "Reissue with Passkey"
+              : "Issue with Passkey"}
+        </button>
       </div>
 
       {error ? (
-        <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-900">
+        <p
+          className="casa-error mt-4"
+          role="alert"
+        >
           {error}
-        </div>
+        </p>
       ) : null}
 
-      {credential ? (
-        <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-4">
-          <p className="text-sm font-semibold text-amber-950">
-            One-time card credential
-          </p>
-          <p className="mt-1 text-xs leading-5 text-amber-900">
-            Print or securely transfer this QR now. CASA stores only its SHA-256 hash; this raw token cannot be retrieved later.
-          </p>
+      {notice ? (
+        <p
+          className="casa-notice mt-4 text-[var(--casa-positive)]"
+          role="status"
+        >
+          {notice}
+        </p>
+      ) : null}
 
-          {qrDataUrl ? (
-            <div className="mt-4 flex justify-center rounded-xl bg-white p-4">
-              <Image
-                src={qrDataUrl}
-                alt="Student ID card QR code"
-                width={260}
-                height={260}
-                unoptimized
-              />
+      {activeCard ? (
+        <div className="mt-5 border border-black">
+          <div className="grid sm:grid-cols-2">
+            <div className="border-b border-black p-4 sm:border-b-0 sm:border-r">
+              <p className="casa-kicker text-black/45">
+                Active card
+              </p>
+              <p className="mt-3 font-mono text-sm font-semibold">
+                {activeCard.serialNumber}
+              </p>
+              <p className="mt-2 text-xs text-black/50">
+                Issued{" "}
+                {new Date(
+                  activeCard.issuedAt,
+                ).toLocaleString()}
+              </p>
             </div>
-          ) : null}
 
-          <div className="mt-3 break-all rounded-lg bg-white p-3 font-mono text-[11px] text-slate-700">
-            {credential.payload}
-          </div>
-
-          <button
-            className="mt-3 text-xs font-semibold text-amber-950 underline"
-            onClick={() => {
-              setCredential(null);
-              setQrDataUrl(null);
-            }}
-          >
-            I have saved the card
-          </button>
-        </div>
-      ) : null}
-
-      <div className="mt-4 space-y-2">
-        {cards.length === 0 ? (
-          <p className="text-sm text-slate-500">
-            No ID card issued yet.
-          </p>
-        ) : (
-          cards.map((card) => (
-            <div
-              key={card.id}
-              className="rounded-lg bg-slate-50 p-3"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="font-mono text-xs font-semibold">
-                    {card.serialNumber}
-                  </p>
-                  <p className="mt-1 text-xs text-slate-500">
-                    {card.status} Â·{" "}
-                    {new Date(
-                      card.issuedAt,
-                    ).toLocaleDateString()}
-                  </p>
-                </div>
-
-                {card.status ===
-                "ACTIVE" ? (
-                  <div className="flex flex-wrap justify-end gap-1.5">
-                    <button
-                      disabled={busy}
-                      onClick={() =>
-                        void replace(
-                          card.id,
-                        )
-                      }
-                      className="rounded-md border border-slate-300 bg-white px-2 py-1 text-[11px] font-medium"
-                    >
-                      Replace
-                    </button>
-                    <button
-                      disabled={busy}
-                      onClick={() =>
-                        void deactivate(
-                          card.id,
-                          "LOST",
-                        )
-                      }
-                      className="rounded-md border border-slate-300 bg-white px-2 py-1 text-[11px] font-medium"
-                    >
-                      Mark lost
-                    </button>
-                    <button
-                      disabled={busy}
-                      onClick={() =>
-                        void deactivate(
-                          card.id,
-                          "REVOKED",
-                        )
-                      }
-                      className="rounded-md border border-slate-300 bg-white px-2 py-1 text-[11px] font-medium"
-                    >
-                      Revoke
-                    </button>
-                  </div>
+            <div className="p-4">
+              <p className="casa-kicker text-black/45">
+                Production
+              </p>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <span
+                  className={`casa-status ${
+                    activeProduction
+                      ? "casa-status-positive"
+                      : "casa-status-warning"
+                  }`}
+                >
+                  {activeProduction?.status ??
+                    "Legacy card"}
+                </span>
+                {activeProduction ? (
+                  <span className="font-mono text-[9px] uppercase tracking-[0.08em] text-black/45">
+                    Template{" "}
+                    {
+                      activeProduction.templateVersion
+                    }
+                  </span>
                 ) : null}
               </div>
             </div>
-          ))
-        )}
-      </div>
+          </div>
+
+          {activeProduction ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-black p-4">
+              <a
+                href={
+                  activeProduction.publicUrl
+                }
+                target="_blank"
+                rel="noreferrer"
+                className="casa-button-secondary"
+              >
+                View finished card
+              </a>
+
+              <span className="font-mono text-[9px] uppercase tracking-[0.08em] text-black/45">
+                Public link revision{" "}
+                {
+                  activeProduction.publicLinkRevision
+                }
+              </span>
+            </div>
+          ) : (
+            <p className="border-t border-black p-4 text-xs leading-5 text-[var(--casa-warning)]">
+              This card predates the production engine. It remains valid for
+              Scanner identity resolution, but no CASA-rendered production
+              artifact exists for it.
+            </p>
+          )}
+
+          <div className="border-t border-black p-4">
+            <label className="casa-label">
+              <span>
+                Card action reason
+              </span>
+              <input
+                className="casa-field"
+                onChange={(event) =>
+                  setReason(
+                    event.target.value,
+                  )
+                }
+                placeholder="Required for reissue; optional for status changes"
+                value={reason}
+              />
+            </label>
+          </div>
+
+          <div className="flex flex-wrap gap-2 border-t border-black p-4">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() =>
+                void deactivate(
+                  activeCard.id,
+                  "LOST",
+                )
+              }
+              className="casa-button-secondary"
+            >
+              Mark lost
+            </button>
+
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() =>
+                void deactivate(
+                  activeCard.id,
+                  "REVOKED",
+                )
+              }
+              className="casa-button-danger"
+            >
+              Revoke
+            </button>
+
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() =>
+                void deactivate(
+                  activeCard.id,
+                  "EXPIRED",
+                )
+              }
+              className="casa-button-secondary"
+            >
+              Mark expired
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-5 border-y border-black/25 py-5">
+          <p className="casa-kicker text-black/45">
+            Card status
+          </p>
+          <p className="mt-2 text-sm">
+            No active student card.
+          </p>
+        </div>
+      )}
+
+      {jobs.length > 0 ? (
+        <div className="mt-6">
+          <p className="casa-kicker">
+            Production history
+          </p>
+
+          <div className="mt-3 border-t border-black">
+            {jobs.map(
+              (job) => (
+                <div
+                  key={job.id}
+                  className="grid gap-3 border-b border-black/20 py-3 sm:grid-cols-[1fr_auto] sm:items-center"
+                >
+                  <div>
+                    <strong className="text-xs">
+                      {job.status}
+                    </strong>
+                    <p className="mt-1 font-mono text-[9px] uppercase tracking-[0.07em] text-black/45">
+                      {job.templateVersion} ·{" "}
+                      {new Date(
+                        job.queuedAt,
+                      ).toLocaleString()}
+                    </p>
+                  </div>
+
+                  <a
+                    href={
+                      job.publicUrl
+                    }
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-mono text-[10px] font-semibold uppercase tracking-[0.1em] underline"
+                  >
+                    Finished card
+                  </a>
+                </div>
+              ),
+            )}
+          </div>
+        </div>
+      ) : null}
 
       {events.length > 0 ? (
-        <details className="mt-4">
-          <summary className="cursor-pointer text-xs font-medium text-slate-600">
-            Card history
+        <details className="mt-6 border-t border-black pt-4">
+          <summary className="cursor-pointer font-mono text-[10px] font-semibold uppercase tracking-[0.12em]">
+            Card lifecycle history
           </summary>
-          <div className="mt-2 space-y-2">
-            {events
-              .slice(0, 10)
-              .map((event) => (
+
+          <div className="mt-3 border-t border-black/25">
+            {events.map(
+              (event) => (
                 <div
                   key={event.id}
-                  className="text-xs text-slate-500"
+                  className="border-b border-black/20 py-3 text-xs text-black/55"
                 >
-                  {event.eventType} Â·{" "}
+                  {event.eventType} ·{" "}
                   {new Date(
                     event.createdAt,
                   ).toLocaleString()}
                   {event.reason
-                    ? ` Â· ${event.reason}`
+                    ? ` · ${event.reason}`
                     : ""}
                 </div>
-              ))}
+              ),
+            )}
           </div>
         </details>
       ) : null}
-    </div>
+    </section>
   );
 }

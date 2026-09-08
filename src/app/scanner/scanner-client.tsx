@@ -51,7 +51,7 @@ const FaceLivenessDetectorCore =
             styles.message
           }
         >
-          Preparing face cameraÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦
+          Preparing face camera...
         </div>
       ),
     },
@@ -139,6 +139,278 @@ async function terminalFetch(
   );
 }
 
+type ScannerWakeLockSentinel = {
+  released:
+    boolean;
+  release:
+    () =>
+      Promise<void>;
+};
+
+type ScannerNavigatorWithWakeLock =
+  Navigator & {
+    wakeLock?: {
+      request:
+        (
+          type:
+            "screen",
+        ) =>
+          Promise<ScannerWakeLockSentinel>;
+    };
+    standalone?:
+      boolean;
+  };
+
+type ScannerBeforeInstallPromptEvent =
+  Event & {
+    prompt:
+      () =>
+        Promise<void>;
+    userChoice:
+      Promise<{
+        outcome:
+          "accepted" |
+          "dismissed";
+        platform:
+          string;
+      }>;
+  };
+
+type CameraFacing =
+  | "environment"
+  | "user";
+
+function ScannerInstallControl() {
+  const [
+    installPrompt,
+    setInstallPrompt,
+  ] =
+    useState<
+      ScannerBeforeInstallPromptEvent | null
+    >(null);
+
+  const [
+    installed,
+    setInstalled,
+  ] =
+    useState(false);
+
+  useEffect(
+    () => {
+      const standaloneMedia =
+        window.matchMedia(
+          "(display-mode: standalone)",
+        );
+
+      const syncInstalledState =
+        () => {
+          setInstalled(
+            standaloneMedia.matches ||
+              (
+                navigator as
+                  ScannerNavigatorWithWakeLock
+              ).standalone ===
+                true,
+          );
+        };
+
+      const initialInstalledStateFrame =
+        window.requestAnimationFrame(
+          syncInstalledState,
+        );
+
+      standaloneMedia.addEventListener(
+        "change",
+        syncInstalledState,
+      );
+
+      const capturePrompt =
+        (
+          event:
+            Event,
+        ) => {
+          event.preventDefault();
+
+          setInstallPrompt(
+            event as
+              ScannerBeforeInstallPromptEvent,
+          );
+        };
+
+      const markInstalled =
+        () => {
+          setInstalled(
+            true,
+          );
+          setInstallPrompt(
+            null,
+          );
+        };
+
+      window.addEventListener(
+        "beforeinstallprompt",
+        capturePrompt,
+      );
+
+      window.addEventListener(
+        "appinstalled",
+        markInstalled,
+      );
+
+      return () => {
+        window.cancelAnimationFrame(
+          initialInstalledStateFrame,
+        );
+
+        standaloneMedia.removeEventListener(
+          "change",
+          syncInstalledState,
+        );
+
+        window.removeEventListener(
+          "beforeinstallprompt",
+          capturePrompt,
+        );
+
+        window.removeEventListener(
+          "appinstalled",
+          markInstalled,
+        );
+      };
+    },
+    [],
+  );
+
+  const install =
+    useCallback(
+      async () => {
+        if (!installPrompt) {
+          return;
+        }
+
+        await installPrompt.prompt();
+        await installPrompt.userChoice;
+        setInstallPrompt(null);
+      },
+      [installPrompt],
+    );
+
+  if (installed) {
+    return (
+      <span className={styles.installState}>
+        Installed app
+      </span>
+    );
+  }
+
+  if (!installPrompt) {
+    return null;
+  }
+
+  return (
+    <button
+      type="button"
+      className={styles.installButton}
+      onClick={() => void install()}
+    >
+      Install CASA
+    </button>
+  );
+}
+
+function ScannerStageRail(
+  {
+    phase,
+  }: {
+    phase:
+      Phase;
+  },
+) {
+  const activeStep =
+    phase ===
+      "RESULT"
+      ? 4
+      : phase ===
+          "LIVENESS" ||
+        phase ===
+          "FACE_RETRY" ||
+        phase ===
+          "STAFF"
+        ? 2
+        : phase ===
+            "READY" ||
+          phase ===
+            "CARD"
+          ? 1
+          : 0;
+
+  const steps =
+    [
+      "Card",
+      "Face",
+      "Time",
+      "Done",
+    ];
+
+  return (
+    <ol
+      className={
+        styles.stageRail
+      }
+      aria-label="Attendance verification steps"
+    >
+      {steps.map(
+        (
+          label,
+          index,
+        ) => {
+          const number =
+            index + 1;
+
+          const state =
+            number <
+              activeStep
+              ? "done"
+              : number ===
+                  activeStep
+                ? "active"
+                : "pending";
+
+          return (
+            <li
+              key={
+                label
+              }
+              className={
+                styles.stageStep
+              }
+              data-state={
+                state
+              }
+            >
+              <span
+                className={
+                  styles.stageNumber
+                }
+              >
+                {String(
+                  number,
+                ).padStart(
+                  2,
+                  "0",
+                )}
+              </span>
+              <span>
+                {label}
+              </span>
+            </li>
+          );
+        },
+      )}
+    </ol>
+  );
+}
+
 function QrCamera(
   {
     onDecoded,
@@ -157,30 +429,176 @@ function QrCamera(
       null,
     );
 
-  useEffect(
-    () => {
-      let cancelled =
-        false;
+  const scannerRef =
+    useRef<{
+      start:
+        () =>
+          Promise<void>;
+      stop:
+        () =>
+          void;
+      destroy:
+        () =>
+          void;
+    } | null>(
+      null,
+    );
 
-      let scanner:
-        | {
-            start:
-              () =>
-                Promise<void>;
-            stop:
-              () =>
-                void;
-            destroy:
-              () =>
-                void;
+  const wakeLockRef =
+    useRef<ScannerWakeLockSentinel | null>(
+      null,
+    );
+
+  const disposedRef =
+    useRef(
+      false,
+    );
+
+  const handledRef =
+    useRef(
+      false,
+    );
+
+  const generationRef =
+    useRef(
+      0,
+    );
+
+  const startingGenerationRef =
+    useRef<number | null>(
+      null,
+    );
+
+  const lastRestartAtRef =
+    useRef(
+      0,
+    );
+
+  const [
+    cameraFacing,
+    setCameraFacing,
+  ] =
+    useState<CameraFacing>(
+      "environment",
+    );
+
+  const [
+    canSwitchCamera,
+    setCanSwitchCamera,
+  ] =
+    useState(false);
+
+  const stopVideoStream =
+    useCallback(
+      () => {
+        const video =
+          videoRef.current;
+
+        if (
+          video?.srcObject
+        ) {
+          const stream =
+            video.srcObject as
+              MediaStream;
+
+          for (
+            const track of
+            stream.getTracks()
+          ) {
+            track.stop();
           }
-        | null =
-          null;
 
-      let handled =
-        false;
+          video.srcObject =
+            null;
+        }
+      },
+      [],
+    );
 
-      async function start() {
+  const destroyScanner =
+    useCallback(
+      () => {
+        if (
+          scannerRef.current
+        ) {
+          scannerRef.current
+            .stop();
+          scannerRef.current
+            .destroy();
+          scannerRef.current =
+            null;
+        }
+
+        stopVideoStream();
+      },
+      [
+        stopVideoStream,
+      ],
+    );
+
+  const acquireWakeLock =
+    useCallback(
+      async () => {
+        if (
+          disposedRef.current ||
+          document.visibilityState !==
+            "visible"
+        ) {
+          return;
+        }
+
+        const wakeLock =
+          (
+            navigator as
+              ScannerNavigatorWithWakeLock
+          ).wakeLock;
+
+        if (
+          !wakeLock ||
+          (
+            wakeLockRef.current &&
+            !wakeLockRef.current
+              .released
+          )
+        ) {
+          return;
+        }
+
+        try {
+          wakeLockRef.current =
+            await wakeLock.request(
+              "screen",
+            );
+        } catch {
+          // Wake Lock is best effort.
+        }
+      },
+      [],
+    );
+
+  const startScanner =
+    useCallback(
+      async (
+        generation:
+          number,
+      ) => {
+        if (
+          disposedRef.current ||
+          handledRef.current ||
+          generation !==
+            generationRef.current
+        ) {
+          return;
+        }
+
+        if (
+          startingGenerationRef
+            .current ===
+          generation
+        ) {
+          return;
+        }
+
         if (
           !navigator.mediaDevices
             ?.getUserMedia
@@ -190,6 +608,9 @@ function QrCamera(
           );
           return;
         }
+
+        startingGenerationRef.current =
+          generation;
 
         try {
           const {
@@ -201,21 +622,31 @@ function QrCamera(
             );
 
           if (
-            cancelled ||
+            disposedRef.current ||
+            handledRef.current ||
+            generation !==
+              generationRef.current ||
             !videoRef.current
           ) {
             return;
           }
 
+          destroyScanner();
+
+          const video =
+            videoRef.current;
+
           const instance =
             new QrScanner(
-              videoRef.current,
+              video,
               (
                 result,
               ) => {
                 if (
-                  cancelled ||
-                  handled
+                  disposedRef.current ||
+                  handledRef.current ||
+                  generation !==
+                    generationRef.current
                 ) {
                   return;
                 }
@@ -227,7 +658,7 @@ function QrCamera(
                   return;
                 }
 
-                handled =
+                handledRef.current =
                   true;
 
                 instance.stop();
@@ -238,7 +669,7 @@ function QrCamera(
               },
               {
                 preferredCamera:
-                  "environment",
+                  cameraFacing,
                 returnDetailedScanResult:
                   true,
                 highlightScanRegion:
@@ -248,42 +679,320 @@ function QrCamera(
               },
             );
 
-          scanner =
+          scannerRef.current =
             instance;
 
           await instance.start();
-        } catch {
-          if (!cancelled) {
-            onFailure(
-              "Camera access failed. Allow camera permission and try again.",
+
+          if (
+            disposedRef.current ||
+            handledRef.current ||
+            generation !==
+              generationRef.current
+          ) {
+            instance.stop();
+            instance.destroy();
+            return;
+          }
+
+          await video
+            .play()
+            .catch(
+              () =>
+                undefined,
+            );
+
+          try {
+            const cameras =
+              await QrScanner
+                .listCameras(
+                  true,
+                );
+
+            if (
+              !disposedRef.current
+            ) {
+              setCanSwitchCamera(
+                cameras.length >
+                  1,
+              );
+            }
+          } catch {
+            setCanSwitchCamera(
+              false,
             );
           }
+
+          await acquireWakeLock();
+        } catch {
+          if (
+            !disposedRef.current &&
+            !handledRef.current &&
+            generation ===
+              generationRef.current
+          ) {
+            onFailure(
+              "Camera paused or became unavailable. Tap the scanner to restart it.",
+            );
+          }
+        } finally {
+          if (
+            startingGenerationRef
+              .current ===
+            generation
+          ) {
+            startingGenerationRef.current =
+              null;
+          }
+        }
+      },
+      [
+        acquireWakeLock,
+        cameraFacing,
+        destroyScanner,
+        onDecoded,
+        onFailure,
+      ],
+    );
+
+  const restartScanner =
+    useCallback(
+      async () => {
+        if (
+          disposedRef.current ||
+          handledRef.current
+        ) {
+          return;
+        }
+
+        const now =
+          Date.now();
+
+        if (
+          now -
+            lastRestartAtRef.current <
+          350
+        ) {
+          return;
+        }
+
+        lastRestartAtRef.current =
+          now;
+
+        const generation =
+          generationRef.current +
+          1;
+
+        generationRef.current =
+          generation;
+
+        startingGenerationRef.current =
+          null;
+
+        destroyScanner();
+
+        await new Promise<void>(
+          (
+            resolve,
+          ) => {
+            window.requestAnimationFrame(
+              () =>
+                resolve(),
+            );
+          },
+        );
+
+        if (
+          disposedRef.current ||
+          handledRef.current ||
+          generation !==
+            generationRef.current
+        ) {
+          return;
+        }
+
+        await acquireWakeLock();
+        await startScanner(
+          generation,
+        );
+      },
+      [
+        acquireWakeLock,
+        destroyScanner,
+        startScanner,
+      ],
+    );
+
+  useEffect(
+    () => {
+      disposedRef.current =
+        false;
+      handledRef.current =
+        false;
+
+      const initialGeneration =
+        generationRef.current +
+        1;
+
+      generationRef.current =
+        initialGeneration;
+
+      void acquireWakeLock();
+      void startScanner(
+        initialGeneration,
+      );
+
+      function recoverCamera() {
+        if (
+          document.visibilityState ===
+            "visible"
+        ) {
+          void acquireWakeLock();
+          void restartScanner();
         }
       }
 
-      void start();
+      document.addEventListener(
+        "visibilitychange",
+        recoverCamera,
+      );
+
+      window.addEventListener(
+        "pageshow",
+        recoverCamera,
+      );
+
+      window.addEventListener(
+        "focus",
+        recoverCamera,
+      );
+
+      const cameraHealthTimer =
+        window.setInterval(
+          () => {
+            if (
+              disposedRef.current ||
+              handledRef.current ||
+              document.visibilityState !==
+                "visible"
+            ) {
+              return;
+            }
+
+            const video =
+              videoRef.current;
+
+            if (!video) {
+              return;
+            }
+
+            const stream =
+              video.srcObject as
+                MediaStream | null;
+
+            const tracks =
+              stream?.getVideoTracks() ??
+              [];
+
+            const liveTrack =
+              tracks.some(
+                (
+                  track,
+                ) =>
+                  track.readyState ===
+                    "live" &&
+                  !track.muted,
+              );
+
+            const renderingFrames =
+              video.readyState >= 2 &&
+              video.videoWidth > 0 &&
+              video.videoHeight > 0;
+
+            if (
+              !liveTrack ||
+              !renderingFrames
+            ) {
+              void restartScanner();
+            }
+          },
+          2500,
+        );
 
       return () => {
-        cancelled =
+        disposedRef.current =
           true;
+        generationRef.current +=
+          1;
+        startingGenerationRef.current =
+          null;
 
-        if (scanner) {
-          scanner.stop();
-          scanner.destroy();
+        document.removeEventListener(
+          "visibilitychange",
+          recoverCamera,
+        );
+
+        window.removeEventListener(
+          "pageshow",
+          recoverCamera,
+        );
+
+        window.removeEventListener(
+          "focus",
+          recoverCamera,
+        );
+
+        window.clearInterval(
+          cameraHealthTimer,
+        );
+
+        destroyScanner();
+
+        if (
+          wakeLockRef.current &&
+          !wakeLockRef.current
+            .released
+        ) {
+          void wakeLockRef.current
+            .release();
         }
+
+        wakeLockRef.current =
+          null;
       };
     },
     [
-      onDecoded,
-      onFailure,
+      acquireWakeLock,
+      cameraFacing,
+      destroyScanner,
+      restartScanner,
+      startScanner,
     ],
   );
+
+  const switchCamera =
+    useCallback(
+      () => {
+        setCameraFacing(
+          (
+            current,
+          ) =>
+            current ===
+              "environment"
+              ? "user"
+              : "environment",
+        );
+      },
+      [],
+    );
 
   return (
     <div
       className={
         styles.cameraFrame
       }
+      role="group"
+      aria-label="CASA student card scanner camera"
     >
       <video
         ref={
@@ -294,16 +1003,113 @@ function QrCamera(
         }
         muted
         playsInline
+        onClick={
+          () => {
+            void restartScanner();
+          }
+        }
       />
+
+      <div
+        className={
+          styles.cameraHud
+        }
+        aria-hidden="true"
+      >
+        <span>
+          CASA / LIVE
+        </span>
+        <span>
+          {cameraFacing ===
+            "environment"
+            ? "REAR CAMERA"
+            : "FRONT CAMERA"}
+        </span>
+      </div>
+
       <div
         className={
           styles.scanMark
         }
         aria-hidden="true"
-      />
+      >
+        <div
+          className={
+            styles.scanLine
+          }
+        />
+      </div>
+
+      <div
+        className={
+          styles.cameraCaption
+        }
+      >
+        Align the card QR inside the frame
+      </div>
+
+      <div
+        className={
+          styles.cameraControls
+        }
+      >
+        <button
+          type="button"
+          className={
+            styles.cameraControl
+          }
+          onClick={
+            (
+              event,
+            ) => {
+              event.stopPropagation();
+
+              void restartScanner();
+            }
+          }
+        >
+          Restart
+        </button>
+
+        {canSwitchCamera && (
+          <button
+            type="button"
+            className={
+              styles.cameraControl
+            }
+            onClick={
+              (
+                event,
+              ) => {
+                event.stopPropagation();
+                switchCamera();
+              }
+            }
+            onKeyDown={
+              (
+                event,
+              ) => {
+                event.stopPropagation();
+              }
+            }
+            aria-label={
+              cameraFacing ===
+                "environment"
+                ? "Switch to front camera"
+                : "Switch to rear camera"
+            }
+          >
+            {cameraFacing ===
+              "environment"
+              ? "Front camera"
+              : "Rear camera"}
+          </button>
+        )}
+      </div>
     </div>
   );
 }
+
 export default function ScannerClient() {
   const [
     phase,
@@ -334,7 +1140,7 @@ export default function ScannerClient() {
     setMessage,
   ] =
     useState(
-      "Starting scannerÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦",
+      "Starting scanner...",
     );
 
   const [
@@ -694,7 +1500,7 @@ export default function ScannerClient() {
         true,
       );
       setMessage(
-        "Verifying this scannerÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦",
+        "Verifying this scanner...",
       );
 
       try {
@@ -791,7 +1597,7 @@ export default function ScannerClient() {
           "CARD",
         );
         setMessage(
-          "Preparing face verificationÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦",
+          "Preparing face verification...",
         );
 
         try {
@@ -919,7 +1725,7 @@ export default function ScannerClient() {
                 .requiresBiometric
             ) {
               setMessage(
-                "Staff authorization received. Preparing face verificationâ€¦",
+                "Staff authorization received. Preparing face verification...",
               );
 
               await startFace(
@@ -975,7 +1781,7 @@ export default function ScannerClient() {
           "CARD",
         );
         setMessage(
-          "Identifying studentÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦",
+          "Identifying student...",
         );
 
         const requestId =
@@ -1177,7 +1983,7 @@ export default function ScannerClient() {
           liveness;
 
         setMessage(
-          "Verifying identityÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦",
+          "Verifying identity...",
         );
 
         try {
@@ -1415,8 +2221,6 @@ export default function ScannerClient() {
           }
         >
           CASA
-          <br />
-          SCHOOL
         </h1>
 
         <div
@@ -1442,6 +2246,7 @@ export default function ScannerClient() {
               )
             : "Attendance Scanner"}
         </div>
+        <ScannerInstallControl />
       </header>
 
       <main
@@ -1483,6 +2288,12 @@ export default function ScannerClient() {
           {message}
         </p>
 
+        <ScannerStageRail
+          phase={
+            phase
+          }
+        />
+
         {phase ===
           "UNPROVISIONED" && (
           <div
@@ -1506,7 +2317,7 @@ export default function ScannerClient() {
                       .value,
                   )
               }
-              placeholder="CASAT1.ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦"
+              placeholder="CASAT1..."
               autoComplete="off"
               autoCapitalize="none"
               spellCheck={
@@ -1529,7 +2340,7 @@ export default function ScannerClient() {
               }
             >
               {provisioning
-                ? "VerifyingÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦"
+                ? "Verifying..."
                 : "Provision this device"}
             </button>
 
@@ -1538,7 +2349,7 @@ export default function ScannerClient() {
                 styles.message
               }
             >
-              Install this page from the browser menu after provisioning. The credential stays in this device&apos;s private browser storage and is never placed in the URL.
+              The terminal credential stays in this device&apos;s private browser storage and is never placed in the URL. When this browser offers CASA as an installable app, the native install action appears automatically.
             </p>
           </div>
         )}
@@ -1865,7 +2676,7 @@ export default function ScannerClient() {
                   terminalSession
                     ?.terminal
                     .terminalCode ??
-                  "CASA scanner"
+                  "CASA terminal"
                 }
               </p>
               <p>

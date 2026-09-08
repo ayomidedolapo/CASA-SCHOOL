@@ -7,6 +7,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { StudentCards } from "./student-cards";
@@ -180,7 +181,7 @@ export function RegistryClient({
       if (!response.ok) {
         throw new Error(
           body.message ??
-            "CASA School could not complete the request.",
+            "CASA could not complete the request.",
         );
       }
 
@@ -625,6 +626,69 @@ export function RegistryClient({
     }
   }
 
+  async function updateStudent(
+    event: FormEvent<HTMLFormElement>,
+  ) {
+    event.preventDefault();
+
+    if (
+      !selectedStudentId ||
+      !studentDetail
+    ) {
+      return;
+    }
+
+    setError(null);
+    setNotice(null);
+    setBusy(true);
+
+    const form =
+      new FormData(
+        event.currentTarget,
+      );
+
+    try {
+      await request(
+        `/students/${selectedStudentId}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            firstName:
+              form.get("firstName"),
+            middleName:
+              form.get("middleName") ||
+              null,
+            lastName:
+              form.get("lastName"),
+            preferredName:
+              form.get("preferredName") ||
+              null,
+            sex:
+              form.get("sex"),
+            status:
+              form.get("status"),
+            exitDate:
+              form.get("exitDate") ||
+              null,
+          }),
+        },
+      );
+
+      setNotice(
+        "Student record updated.",
+      );
+      await refresh();
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Unable to update student.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function logout() {
     await fetch(
       "/api/auth/logout",
@@ -641,90 +705,93 @@ export function RegistryClient({
     router.refresh();
   }
 
-  return (
-    <main className="min-h-screen bg-slate-50 text-slate-950">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-[1500px] items-center justify-between gap-6 px-5 py-4 lg:px-8">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-              CASA School
-            </p>
-            <h1 className="mt-1 text-lg font-semibold">
-              {school.name}
-            </h1>
-          </div>
+  const selectedStudent =
+    studentDetail?.student ??
+    null;
 
-          <div className="flex items-center gap-4 text-sm">
-            <div className="hidden text-right sm:block">
-              <p className="font-medium">
-                {user.fullName}
-              </p>
-              <p className="text-slate-500">
-                {roles.join(" ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· ")}
-              </p>
+  return (
+    <main className="casa-noise min-h-screen bg-[#f2f2ef] text-[#0b0b0a]">
+      <header className="border-b border-black/15">
+        <div className="casa-container grid lg:grid-cols-[0.72fr_1.28fr]">
+          <section className="flex min-h-44 flex-col justify-between border-b border-black/15 px-5 py-5 sm:px-8 lg:border-r lg:border-b-0 lg:px-10 lg:py-8">
+            <div className="flex items-center justify-between gap-5">
+              <p className="casa-kicker">CASA</p>
+              <p className="font-mono text-[9px] uppercase tracking-[0.1em] text-black/35">School registry</p>
             </div>
-            <button
-              onClick={() =>
-                void logout()
-              }
-              className="rounded-lg border border-slate-300 bg-white px-3 py-2 font-medium hover:bg-slate-50"
-            >
-              Sign out
-            </button>
-          </div>
+            <div className="pt-10">
+              <p className="casa-kicker text-black/40">People & enrollment</p>
+              <h1 className="mt-3 max-w-[14ch] text-3xl font-semibold tracking-[-0.05em] sm:text-4xl">
+                {school.name}
+              </h1>
+            </div>
+          </section>
+
+          <section className="flex flex-col justify-between bg-white px-5 py-5 sm:px-8 lg:px-10 lg:py-8">
+            <div className="flex flex-wrap items-center justify-between gap-5">
+              <p className="casa-kicker text-black/40">CASA / Registry</p>
+              <nav className="flex flex-wrap gap-4 font-mono text-[10px] uppercase tracking-[0.1em]" aria-label="School operations">
+                <Link className="border-b border-black" href={`/schools/${encodeURIComponent(school.slug)}/attendance`}>Attendance</Link>
+                <Link className="border-b border-black" href={`/schools/${encodeURIComponent(school.slug)}/technician`}>Identity operations</Link>
+                {(roles.includes("OWNER") || roles.includes("ADMIN")) ? (
+                  <Link className="border-b border-black" href={`/schools/${encodeURIComponent(school.slug)}/staff-access`}>Staff & access</Link>
+                ) : null}
+                <Link className="border-b border-black" href="/security/passkeys">Security</Link>
+              </nav>
+            </div>
+
+            <div className="mt-12 grid gap-8 sm:grid-cols-[1fr_auto] sm:items-end">
+              <div>
+                <h2 className="casa-display-compact max-w-[8ch]">REGISTRY</h2>
+                <p className="mt-5 max-w-xl text-sm leading-6 text-black/50">
+                  The authoritative student, guardian, enrollment and school-issued identity record for this school.
+                </p>
+              </div>
+              <div className="grid grid-cols-2 border-l border-t border-black/15">
+                <div className="min-w-32 border-r border-b border-black/15 p-4">
+                  <strong className="block text-4xl font-semibold tracking-[-0.05em]">{studentTotal}</strong>
+                  <span className="casa-kicker mt-2 block text-black/40">Students</span>
+                </div>
+                <div className="min-w-32 border-r border-b border-black/15 p-4">
+                  <strong className="block text-4xl font-semibold tracking-[-0.05em]">{guardianTotal}</strong>
+                  <span className="casa-kicker mt-2 block text-black/40">Guardians</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-8 flex flex-wrap items-center justify-between gap-4 border-t border-black/15 pt-4">
+              <div>
+                <p className="text-xs font-semibold">{user.fullName}</p>
+                <p className="mt-1 font-mono text-[9px] uppercase tracking-[0.1em] text-black/45">{roles.join(" · ")}</p>
+              </div>
+              <button onClick={() => void logout()} className="casa-button-quiet" type="button">Sign out</button>
+            </div>
+          </section>
         </div>
       </header>
 
-      <div className="mx-auto max-w-[1500px] px-5 py-7 lg:px-8">
-        <div className="mb-7 flex flex-col justify-between gap-5 lg:flex-row lg:items-end">
-          <div>
-            <p className="text-sm font-medium text-slate-500">
-              People & enrollment
-            </p>
-            <h2 className="mt-1 text-3xl font-semibold tracking-tight">
-              School Registry
-            </h2>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-              The authoritative student, guardian and enrollment record for this school.
-            </p>
-          </div>
-
-          <div className="flex gap-3">
-            <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-              <p className="text-xs text-slate-500">
-                Students
-              </p>
-              <p className="mt-1 text-xl font-semibold">
-                {studentTotal}
-              </p>
-            </div>
-            <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-              <p className="text-xs text-slate-500">
-                Guardians
-              </p>
-              <p className="mt-1 text-xl font-semibold">
-                {guardianTotal}
-              </p>
-            </div>
-          </div>
-        </div>
-
+      <div className="casa-container bg-white px-5 py-6 sm:px-8">
         {notice ? (
-          <div className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+          <div
+            className="casa-notice mb-5 text-[var(--casa-positive)]"
+            role="status"
+          >
             {notice}
           </div>
         ) : null}
 
         {error ? (
-          <div className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
+          <div
+            className="casa-error mb-5"
+            role="alert"
+          >
             {error}
           </div>
         ) : null}
 
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.5fr)_minmax(360px,0.75fr)]">
-          <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-            <div className="flex flex-col gap-4 border-b border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex rounded-lg bg-slate-100 p-1">
+        <div className="grid border-t border-black xl:grid-cols-[minmax(0,1.15fr)_minmax(390px,0.85fr)]">
+          <section className="min-w-0 border-b border-black xl:border-b-0 xl:border-r">
+            <div className="grid gap-4 border-b border-black p-4 sm:grid-cols-[auto_1fr] sm:items-center sm:p-5">
+              <div className="flex border border-black">
                 {(
                   [
                     [
@@ -743,11 +810,15 @@ export function RegistryClient({
                       onClick={() =>
                         setTab(value)
                       }
-                      className={`rounded-md px-3 py-2 text-sm font-medium ${
+                      className={`min-h-10 px-3 font-mono text-[10px] uppercase tracking-[0.12em] ${
                         tab === value
-                          ? "bg-white shadow-sm"
-                          : "text-slate-600"
+                          ? "bg-black text-[#f2f2ef]"
+                          : "bg-transparent text-black"
                       }`}
+                      type="button"
+                      aria-pressed={
+                        tab === value
+                      }
                     >
                       {label}
                     </button>
@@ -755,110 +826,123 @@ export function RegistryClient({
                 )}
               </div>
 
-              <input
-                value={query}
-                onChange={(event) =>
-                  setQuery(
-                    event.target.value,
-                  )
-                }
-                placeholder="Search registryÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦"
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-950 sm:max-w-xs"
-              />
+              <label className="relative block">
+                <span className="casa-sr-only">
+                  Search registry
+                </span>
+                <input
+                  value={query}
+                  onChange={(event) =>
+                    setQuery(
+                      event.target.value,
+                    )
+                  }
+                  placeholder="Search name, CASA ID, admission, guardian..."
+                  className="casa-field"
+                />
+              </label>
             </div>
 
             {tab ===
             "students" ? (
-              <div className="divide-y divide-slate-100">
+              <div>
                 {students.length ===
                 0 ? (
-                  <div className="p-10 text-center">
-                    <p className="font-medium">
-                      No students yet
+                  <div className="px-5 py-12">
+                    <p className="casa-kicker">
+                      Empty registry
                     </p>
-                    <p className="mt-1 text-sm text-slate-500">
-                      Add the first student from the panel on the right.
+                    <p className="mt-3 max-w-md text-sm leading-6 text-black/55">
+                      No students match the current search. Register a new
+                      student from the operations panel.
                     </p>
                   </div>
                 ) : (
                   students.map(
-                    (student) => (
-                      <button
-                        key={
-                          student.id
-                        }
-                        onClick={() => {
-                          if (
-                            selectedStudentId !==
-                            student.id
-                          ) {
-                            setStudentDetail(
-                              null,
-                            );
-                          }
+                    (student) => {
+                      const selected =
+                        selectedStudentId ===
+                        student.id;
 
-                          setSelectedStudentId(
-                            student.id,
-                          );
-                        }}
-                        className={`grid w-full gap-3 px-5 py-4 text-left transition hover:bg-slate-50 sm:grid-cols-[1fr_150px_180px] ${
-                          selectedStudentId ===
-                          student.id
-                            ? "bg-slate-50"
-                            : ""
-                        }`}
-                      >
-                        <div>
-                          <p className="font-medium">
-                            {
-                              student.lastName
-                            }{" "}
-                            {
-                              student.firstName
+                      return (
+                        <button
+                          key={
+                            student.id
+                          }
+                          onClick={() => {
+                            if (
+                              !selected
+                            ) {
+                              setStudentDetail(
+                                null,
+                              );
                             }
-                          </p>
-                          <p className="mt-1 text-sm text-slate-500">
-                            {student.casaStudentId}
-                            {student.admissionNumber
-                              ? ` Ã‚Â· ${student.admissionNumber}`
-                              : ""}
-                          </p>
-                        </div>
-                        <div className="text-sm">
-                          <p className="text-slate-500">
-                            Status
-                          </p>
-                          <p className="mt-1 font-medium">
-                            {
-                              student.status
-                            }
-                          </p>
-                        </div>
-                        <div className="text-sm">
-                          <p className="text-slate-500">
-                            Current class
-                          </p>
-                          <p className="mt-1 font-medium">
-                            {student.classLevelName
-                              ? `${student.classLevelName} ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· ${student.classArmName}`
-                              : "Not enrolled"}
-                          </p>
-                        </div>
-                      </button>
-                    ),
+
+                            setSelectedStudentId(
+                              student.id,
+                            );
+                          }}
+                          className={`grid w-full gap-4 border-b border-black/20 px-5 py-4 text-left transition sm:grid-cols-[minmax(0,1fr)_130px_190px] ${
+                            selected
+                              ? "border-l-4 border-l-black bg-black/[0.035]"
+                              : "hover:bg-black/[0.025]"
+                          }`}
+                          type="button"
+                          aria-current={
+                            selected
+                              ? "true"
+                              : undefined
+                          }
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate font-semibold">
+                              {student.lastName}{" "}
+                              {student.firstName}
+                            </p>
+                            <p className="mt-1 truncate font-mono text-[10px] uppercase tracking-[0.08em] text-black/50">
+                              {student.casaStudentId}
+                              {student.admissionNumber
+                                ? ` · ${student.admissionNumber}`
+                                : ""}
+                            </p>
+                          </div>
+
+                          <div>
+                            <p className="casa-kicker text-black/45">
+                              Status
+                            </p>
+                            <p className="mt-2 text-xs font-semibold">
+                              {student.status}
+                            </p>
+                          </div>
+
+                          <div>
+                            <p className="casa-kicker text-black/45">
+                              Current class
+                            </p>
+                            <p className="mt-2 text-xs font-semibold">
+                              {student.classLevelName
+                                ? `${student.classLevelName} · ${student.classArmName ?? ""}`
+                                : "Not enrolled"}
+                            </p>
+                          </div>
+                        </button>
+                      );
+                    },
                   )
                 )}
               </div>
             ) : (
-              <div className="divide-y divide-slate-100">
+              <div>
                 {guardians.length ===
                 0 ? (
-                  <div className="p-10 text-center">
-                    <p className="font-medium">
-                      No guardians yet
+                  <div className="px-5 py-12">
+                    <p className="casa-kicker">
+                      No guardians
                     </p>
-                    <p className="mt-1 text-sm text-slate-500">
-                      Add guardians independently, then link them to students.
+                    <p className="mt-3 text-sm text-black/55">
+                      Add a guardian from the operations panel, then link the
+                      record to a student.
                     </p>
                   </div>
                 ) : (
@@ -868,26 +952,30 @@ export function RegistryClient({
                         key={
                           guardian.id
                         }
-                        className="grid gap-2 px-5 py-4 sm:grid-cols-[1fr_1fr]"
+                        className="grid gap-3 border-b border-black/20 px-5 py-4 sm:grid-cols-[1fr_auto] sm:items-center"
                       >
                         <div>
-                          <p className="font-medium">
-                            {
-                              guardian.fullName
-                            }
+                          <p className="font-semibold">
+                            {guardian.fullName}
                           </p>
-                          <p className="mt-1 text-sm text-slate-500">
+                          <p className="mt-1 text-xs text-black/50">
                             {guardian.email ??
-                              guardian.phone}
+                              guardian.phone ??
+                              "No contact detail"}
                           </p>
                         </div>
-                        <div className="text-sm sm:text-right">
-                          <span className="rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-700">
-                            {guardian.membershipId
-                              ? "Portal linked"
-                              : "No login account"}
-                          </span>
-                        </div>
+
+                        <span
+                          className={`casa-status ${
+                            guardian.membershipId
+                              ? "casa-status-positive"
+                              : ""
+                          }`}
+                        >
+                          {guardian.membershipId
+                            ? "Portal linked"
+                            : "No login account"}
+                        </span>
                       </div>
                     ),
                   )
@@ -896,176 +984,229 @@ export function RegistryClient({
             )}
           </section>
 
-          <aside className="space-y-6">
-            <section className="rounded-2xl border border-slate-200 bg-white p-5">
-              <h3 className="font-semibold">
-                Manual student registration
-              </h3>
-              <p className="mt-1 text-sm text-slate-500">
-                For exceptions and new admissions. Initial onboarding can be handled by CASA Technical or by the School Technician appointed by the school. A student record does not create a login account.
-              </p>
+          <aside className="min-w-0">
+            {selectedStudent ? (
+              <section className="border-b border-black p-5 sm:p-6">
+                <div className="flex flex-wrap items-start justify-between gap-4 border-b border-black pb-5">
+                  <div>
+                    <p className="casa-kicker">
+                      Selected student
+                    </p>
+                    <h3 className="mt-3 text-3xl font-semibold tracking-[-0.045em]">
+                      {selectedStudent.firstName}{" "}
+                      {selectedStudent.lastName}
+                    </h3>
+                    <p className="mt-2 font-mono text-[10px] uppercase tracking-[0.08em] text-black/50">
+                      {selectedStudent.casaStudentId}
+                      {selectedStudent.admissionNumber
+                        ? ` · ${selectedStudent.admissionNumber}`
+                        : ""}
+                    </p>
+                  </div>
 
-              <form
-                className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2"
-                onSubmit={
-                  createStudent
-                }
-              >
-                <input
-                  name="admissionNumber"
-                  placeholder="School student/admission number (optional)"
-                  className="rounded-lg border border-slate-300 px-3 py-2.5 text-sm"
-                />
-                <input
-                  required
-                  name="firstName"
-                  placeholder="First name"
-                  className="rounded-lg border border-slate-300 px-3 py-2.5 text-sm"
-                />
-                <input
-                  name="middleName"
-                  placeholder="Middle name"
-                  className="rounded-lg border border-slate-300 px-3 py-2.5 text-sm"
-                />
-                <input
-                  required
-                  name="lastName"
-                  placeholder="Last name"
-                  className="rounded-lg border border-slate-300 px-3 py-2.5 text-sm"
-                />
-                <input
-                  name="preferredName"
-                  placeholder="Preferred name"
-                  className="rounded-lg border border-slate-300 px-3 py-2.5 text-sm"
-                />
-                <select
-                  name="sex"
-                  defaultValue="UNSPECIFIED"
-                  className="rounded-lg border border-slate-300 px-3 py-2.5 text-sm"
-                >
-                  <option value="UNSPECIFIED">
-                    Sex unspecified
-                  </option>
-                  <option value="MALE">
-                    Male
-                  </option>
-                  <option value="FEMALE">
-                    Female
-                  </option>
-                </select>
-                <label className="text-xs text-slate-500">
-                  Date of birth
-                  <input
-                    required
-                    type="date"
-                    name="dateOfBirth"
-                    className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-950"
-                  />
-                </label>
-                <label className="text-xs text-slate-500">
-                  Admission date
-                  <input
-                    required
-                    type="date"
-                    name="admissionDate"
-                    className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-950"
-                  />
-                </label>
-                <button
-                  disabled={busy}
-                  className="rounded-lg bg-slate-950 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-60 sm:col-span-2 xl:col-span-1 2xl:col-span-2"
-                >
-                  Manual student registration
-                </button>
-              </form>
-            </section>
-
-            <section className="rounded-2xl border border-slate-200 bg-white p-5">
-              <h3 className="font-semibold">
-                Add guardian
-              </h3>
-              <p className="mt-1 text-sm text-slate-500">
-                Guardian records can exist before portal access is provisioned.
-              </p>
-
-              <form
-                className="mt-5 space-y-3"
-                onSubmit={
-                  createGuardian
-                }
-              >
-                <input
-                  required
-                  name="fullName"
-                  placeholder="Full name"
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm"
-                />
-                <input
-                  type="email"
-                  name="email"
-                  placeholder="Email"
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm"
-                />
-                <input
-                  name="phone"
-                  placeholder="Phone in E.164 format"
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm"
-                />
-                <button
-                  disabled={busy}
-                  className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-medium hover:bg-slate-50 disabled:opacity-60"
-                >
-                  Add guardian
-                </button>
-              </form>
-            </section>
-
-            {studentDetail ? (
-              <section className="rounded-2xl border border-slate-200 bg-white p-5">
-                <div>
-                  <p className="text-xs font-medium uppercase tracking-[0.15em] text-slate-500">
-                    Selected student
-                  </p>
-                  <h3 className="mt-2 text-lg font-semibold">
-                    {
-                      studentDetail
-                        .student
-                        .firstName
-                    }{" "}
-                    {
-                      studentDetail
-                        .student
-                        .lastName
-                    }
-                  </h3>
-                  <p className="mt-1 text-sm text-slate-500">
-                    {
-                      studentDetail
-                        .student
-                        .casaStudentId
-                    }
-                    {studentDetail.student.admissionNumber
-                      ? ` Ã‚Â· ${studentDetail.student.admissionNumber}`
-                      : ""}
-                  </p>
+                  <span
+                    className={`casa-status ${
+                      selectedStudent.status ===
+                      "ACTIVE"
+                        ? "casa-status-positive"
+                        : "casa-status-warning"
+                    }`}
+                  >
+                    {selectedStudent.status}
+                  </span>
                 </div>
+
+                <div className="mt-4 grid grid-cols-2 gap-2">
+                  <Link
+                    className="casa-button-secondary text-center"
+                    href={`/schools/${encodeURIComponent(
+                      school.slug,
+                    )}/technician`}
+                  >
+                    Face / identity
+                  </Link>
+                  <Link
+                    className="casa-button-secondary text-center"
+                    href={`/schools/${encodeURIComponent(
+                      school.slug,
+                    )}/attendance`}
+                  >
+                    Attendance
+                  </Link>
+                </div>
+
+                <details className="mt-6 border-t border-black pt-4">
+                  <summary className="cursor-pointer font-mono text-[10px] font-semibold uppercase tracking-[0.14em]">
+                    Edit student record
+                  </summary>
+
+                  <form
+                    key={
+                      selectedStudent.id
+                    }
+                    className="mt-5 grid gap-3 sm:grid-cols-2"
+                    onSubmit={
+                      updateStudent
+                    }
+                  >
+                    <label className="casa-label">
+                      <span>
+                        First name
+                      </span>
+                      <input
+                        className="casa-field"
+                        defaultValue={
+                          selectedStudent.firstName
+                        }
+                        name="firstName"
+                        required
+                      />
+                    </label>
+
+                    <label className="casa-label">
+                      <span>
+                        Last name
+                      </span>
+                      <input
+                        className="casa-field"
+                        defaultValue={
+                          selectedStudent.lastName
+                        }
+                        name="lastName"
+                        required
+                      />
+                    </label>
+
+                    <label className="casa-label">
+                      <span>
+                        Middle name
+                      </span>
+                      <input
+                        className="casa-field"
+                        defaultValue={
+                          selectedStudent.middleName ??
+                          ""
+                        }
+                        name="middleName"
+                      />
+                    </label>
+
+                    <label className="casa-label">
+                      <span>
+                        Preferred name
+                      </span>
+                      <input
+                        className="casa-field"
+                        defaultValue={
+                          selectedStudent.preferredName ??
+                          ""
+                        }
+                        name="preferredName"
+                      />
+                    </label>
+
+                    <label className="casa-label">
+                      <span>
+                        Sex
+                      </span>
+                      <select
+                        className="casa-field"
+                        defaultValue={
+                          selectedStudent.sex
+                        }
+                        name="sex"
+                      >
+                        <option value="UNSPECIFIED">
+                          Unspecified
+                        </option>
+                        <option value="MALE">
+                          Male
+                        </option>
+                        <option value="FEMALE">
+                          Female
+                        </option>
+                      </select>
+                    </label>
+
+                    <label className="casa-label">
+                      <span>
+                        Status
+                      </span>
+                      <select
+                        className="casa-field"
+                        defaultValue={
+                          selectedStudent.status
+                        }
+                        name="status"
+                      >
+                        <option value="ACTIVE">
+                          Active
+                        </option>
+                        <option value="INACTIVE">
+                          Inactive
+                        </option>
+                        <option value="GRADUATED">
+                          Graduated
+                        </option>
+                        <option value="WITHDRAWN">
+                          Withdrawn
+                        </option>
+                        <option value="ARCHIVED">
+                          Archived
+                        </option>
+                      </select>
+                    </label>
+
+                    <label className="casa-label sm:col-span-2">
+                      <span>
+                        Exit date / optional
+                      </span>
+                      <input
+                        className="casa-field"
+                        defaultValue={
+                          selectedStudent.exitDate ??
+                          ""
+                        }
+                        name="exitDate"
+                        type="date"
+                      />
+                    </label>
+
+                    <button
+                      className="casa-button sm:col-span-2"
+                      disabled={busy}
+                      type="submit"
+                    >
+                      Save student changes
+                    </button>
+                  </form>
+                </details>
 
                 <StudentCards
                   apiBase={apiBase}
                   studentId={
-                    studentDetail.student.id
+                    selectedStudent.id
                   }
                 />
 
-                <div className="mt-6 border-t border-slate-100 pt-5">
-                  <h4 className="text-sm font-semibold">
-                    Guardians
-                  </h4>
+                <div className="mt-7 border-t border-black pt-5">
+                  <div className="flex items-end justify-between gap-4">
+                    <div>
+                      <p className="casa-kicker">
+                        Guardians
+                      </p>
+                      <p className="mt-2 text-sm text-black/55">
+                        {studentDetail?.guardians.length ??
+                          0}{" "}
+                        linked record(s)
+                      </p>
+                    </div>
+                  </div>
 
-                  {studentDetail
-                    .guardians
-                    .length > 0 ? (
-                    <div className="mt-3 space-y-2">
+                  {studentDetail &&
+                  studentDetail.guardians.length >
+                    0 ? (
+                    <div className="mt-4 border-t border-black/25">
                       {studentDetail.guardians.map(
                         (
                           guardian,
@@ -1074,129 +1215,167 @@ export function RegistryClient({
                             key={
                               guardian.linkId
                             }
-                            className="rounded-lg bg-slate-50 p-3 text-sm"
+                            className="grid gap-2 border-b border-black/20 py-3 sm:grid-cols-[1fr_auto]"
                           >
-                            <p className="font-medium">
-                              {
-                                guardian.fullName
-                              }
-                            </p>
-                            <p className="mt-1 text-slate-500">
-                              {
-                                guardian.relationshipLabel
-                              }
-                              {guardian.isPrimary
-                                ? " ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· Primary"
-                                : ""}
-                            </p>
+                            <div>
+                              <p className="text-sm font-semibold">
+                                {guardian.fullName}
+                              </p>
+                              <p className="mt-1 text-xs text-black/50">
+                                {guardian.relationshipLabel}
+                                {guardian.isPrimary
+                                  ? " · Primary"
+                                  : ""}
+                              </p>
+                            </div>
+
+                            <div className="flex flex-wrap gap-1 sm:justify-end">
+                              {guardian.pickupAuthorized ? (
+                                <span className="casa-status">
+                                  Pickup
+                                </span>
+                              ) : null}
+                              {guardian.isEmergencyContact ? (
+                                <span className="casa-status casa-status-warning">
+                                  Emergency
+                                </span>
+                              ) : null}
+                            </div>
                           </div>
                         ),
                       )}
                     </div>
                   ) : (
-                    <p className="mt-2 text-sm text-slate-500">
+                    <p className="mt-4 text-sm text-black/50">
                       No guardian linked yet.
                     </p>
                   )}
 
                   <form
-                    className="mt-4 space-y-3"
+                    className="mt-5 grid gap-3"
                     onSubmit={
                       linkGuardian
                     }
                   >
-                    <select
-                      required
-                      name="guardianId"
-                      defaultValue=""
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm"
-                    >
-                      <option
-                        value=""
-                        disabled
+                    <label className="casa-label">
+                      <span>
+                        Existing guardian
+                      </span>
+                      <select
+                        required
+                        name="guardianId"
+                        defaultValue=""
+                        className="casa-field"
                       >
-                        Select guardian
-                      </option>
-                      {guardians.map(
-                        (guardian) => (
-                          <option
+                        <option
+                          value=""
+                          disabled
+                        >
+                          Select guardian
+                        </option>
+                        {guardians.map(
+                          (guardian) => (
+                            <option
+                              key={
+                                guardian.id
+                              }
+                              value={
+                                guardian.id
+                              }
+                            >
+                              {guardian.fullName}
+                            </option>
+                          ),
+                        )}
+                      </select>
+                    </label>
+
+                    <label className="casa-label">
+                      <span>
+                        Relationship
+                      </span>
+                      <input
+                        required
+                        name="relationshipLabel"
+                        placeholder="e.g. Mother"
+                        className="casa-field"
+                      />
+                    </label>
+
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      {[
+                        [
+                          "isPrimary",
+                          "Primary",
+                          false,
+                        ],
+                        [
+                          "isEmergencyContact",
+                          "Emergency",
+                          false,
+                        ],
+                        [
+                          "pickupAuthorized",
+                          "Pickup authorized",
+                          false,
+                        ],
+                        [
+                          "receivesNotifications",
+                          "Notifications",
+                          true,
+                        ],
+                      ].map(
+                        ([
+                          name,
+                          label,
+                          checked,
+                        ]) => (
+                          <label
+                            className="flex items-center gap-2 border border-black/25 p-2"
                             key={
-                              guardian.id
-                            }
-                            value={
-                              guardian.id
+                              String(name)
                             }
                           >
-                            {
-                              guardian.fullName
-                            }
-                          </option>
+                            <input
+                              type="checkbox"
+                              name={
+                                String(name)
+                              }
+                              defaultChecked={
+                                Boolean(
+                                  checked,
+                                )
+                              }
+                            />
+                            {label}
+                          </label>
                         ),
                       )}
-                    </select>
-                    <input
-                      required
-                      name="relationshipLabel"
-                      placeholder="Relationship, e.g. Mother"
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm"
-                    />
-                    <div className="grid grid-cols-2 gap-2 text-xs text-slate-600">
-                      <label>
-                        <input
-                          type="checkbox"
-                          name="isPrimary"
-                          className="mr-2"
-                        />
-                        Primary
-                      </label>
-                      <label>
-                        <input
-                          type="checkbox"
-                          name="isEmergencyContact"
-                          className="mr-2"
-                        />
-                        Emergency
-                      </label>
-                      <label>
-                        <input
-                          type="checkbox"
-                          name="pickupAuthorized"
-                          className="mr-2"
-                        />
-                        Pickup
-                      </label>
-                      <label>
-                        <input
-                          type="checkbox"
-                          name="receivesNotifications"
-                          defaultChecked
-                          className="mr-2"
-                        />
-                        Notifications
-                      </label>
                     </div>
+
                     <button
                       disabled={
                         busy ||
                         guardians.length ===
                           0
                       }
-                      className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-medium disabled:opacity-50"
+                      className="casa-button-secondary"
+                      type="submit"
                     >
                       Link guardian
                     </button>
                   </form>
                 </div>
 
-                <div className="mt-6 border-t border-slate-100 pt-5">
-                  <h4 className="text-sm font-semibold">
+                <div className="mt-7 border-t border-black pt-5">
+                  <p className="casa-kicker">
                     Enrollment
-                  </h4>
+                  </p>
 
-                  {studentDetail
-                    .enrollments
-                    .length > 0 ? (
-                    <div className="mt-3 space-y-2">
+                  {studentDetail &&
+                  studentDetail.enrollments.length >
+                    0 ? (
+                    <div className="mt-4 border-t border-black/25">
                       {studentDetail.enrollments.map(
                         (
                           enrollment,
@@ -1205,138 +1384,325 @@ export function RegistryClient({
                             key={
                               enrollment.id
                             }
-                            className="rounded-lg bg-slate-50 p-3 text-sm"
+                            className="border-b border-black/20 py-3"
                           >
-                            <p className="font-medium">
-                              {
-                                enrollment.classLevelName
-                              }{" "}
-                              ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â·{" "}
-                              {
-                                enrollment.classArmName
-                              }
+                            <p className="text-sm font-semibold">
+                              {enrollment.classLevelName}{" "}
+                              ·{" "}
+                              {enrollment.classArmName}
                             </p>
-                            <p className="mt-1 text-slate-500">
-                              {
-                                enrollment.academicSessionName
-                              }{" "}
-                              ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â·{" "}
-                              {
-                                enrollment.status
-                              }
+                            <p className="mt-1 text-xs text-black/50">
+                              {enrollment.academicSessionName}{" "}
+                              ·{" "}
+                              {enrollment.status}
                             </p>
                           </div>
                         ),
                       )}
                     </div>
                   ) : (
-                    <p className="mt-2 text-sm text-slate-500">
+                    <p className="mt-4 text-sm text-black/50">
                       No enrollment yet.
                     </p>
                   )}
 
-                  {academicOptions
-                    .sessions.length >
+                  {academicOptions.sessions.length >
                     0 &&
-                  academicOptions
-                    .classArms.length >
+                  academicOptions.classArms.length >
                     0 ? (
                     <form
-                      className="mt-4 space-y-3"
+                      className="mt-5 grid gap-3"
                       onSubmit={
                         createEnrollment
                       }
                     >
-                      <select
-                        required
-                        name="academicSessionId"
-                        defaultValue=""
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm"
-                      >
-                        <option
-                          value=""
-                          disabled
-                        >
+                      <label className="casa-label">
+                        <span>
                           Academic session
-                        </option>
-                        {academicOptions.sessions.map(
-                          (
-                            session,
-                          ) => (
-                            <option
-                              key={
-                                session.id
-                              }
-                              value={
-                                session.id
-                              }
-                            >
-                              {
-                                session.name
-                              }
-                            </option>
-                          ),
-                        )}
-                      </select>
-                      <select
-                        required
-                        name="classArmId"
-                        defaultValue=""
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm"
-                      >
-                        <option
-                          value=""
-                          disabled
+                        </span>
+                        <select
+                          required
+                          name="academicSessionId"
+                          defaultValue=""
+                          className="casa-field"
                         >
+                          <option
+                            value=""
+                            disabled
+                          >
+                            Select session
+                          </option>
+                          {academicOptions.sessions.map(
+                            (
+                              session,
+                            ) => (
+                              <option
+                                key={
+                                  session.id
+                                }
+                                value={
+                                  session.id
+                                }
+                              >
+                                {session.name}
+                              </option>
+                            ),
+                          )}
+                        </select>
+                      </label>
+
+                      <label className="casa-label">
+                        <span>
                           Class
-                        </option>
-                        {academicOptions.classArms.map(
-                          (arm) => (
-                            <option
-                              key={
-                                arm.id
-                              }
-                              value={
-                                arm.id
-                              }
-                            >
-                              {
-                                arm.classLevelName
-                              }{" "}
-                              ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â·{" "}
-                              {
-                                arm.name
-                              }
-                            </option>
-                          ),
-                        )}
-                      </select>
-                      <label className="block text-xs text-slate-500">
-                        Enrollment start date
+                        </span>
+                        <select
+                          required
+                          name="classArmId"
+                          defaultValue=""
+                          className="casa-field"
+                        >
+                          <option
+                            value=""
+                            disabled
+                          >
+                            Select class
+                          </option>
+                          {academicOptions.classArms.map(
+                            (arm) => (
+                              <option
+                                key={
+                                  arm.id
+                                }
+                                value={
+                                  arm.id
+                                }
+                              >
+                                {arm.classLevelName} · {arm.name}
+                              </option>
+                            ),
+                          )}
+                        </select>
+                      </label>
+
+                      <label className="casa-label">
+                        <span>
+                          Starts on
+                        </span>
                         <input
                           required
                           type="date"
                           name="startsOn"
-                          className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-950"
+                          className="casa-field"
                         />
                       </label>
+
                       <button
-                        disabled={
-                          busy
-                        }
-                        className="w-full rounded-lg bg-slate-950 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-60"
+                        disabled={busy}
+                        className="casa-button"
+                        type="submit"
                       >
                         Create enrollment
                       </button>
                     </form>
                   ) : (
-                    <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900">
-                      Academic sessions and class arms must be configured before enrollment can be created.
+                    <div className="casa-notice mt-4 text-[var(--casa-warning)]">
+                      Academic sessions and class arms must be configured before
+                      enrollment can be created.
                     </div>
                   )}
                 </div>
               </section>
-            ) : null}
+            ) : (
+              <section className="border-b border-black p-5 sm:p-6">
+                <p className="casa-kicker">
+                  Student workspace
+                </p>
+                <h3 className="casa-heading mt-4">
+                  Select a student.
+                </h3>
+                <p className="mt-4 max-w-md text-sm leading-6 text-black/55">
+                  Open a student to review identity, edit their record, manage
+                  guardians and enrollment, or continue to Passkey-protected
+                  face and card operations.
+                </p>
+              </section>
+            )}
+
+            <details
+              className="border-b border-black p-5 sm:p-6"
+              open={
+                studentTotal === 0
+              }
+            >
+              <summary className="cursor-pointer font-mono text-[10px] font-semibold uppercase tracking-[0.14em]">
+                Register new student
+              </summary>
+
+              <p className="mt-3 text-xs leading-5 text-black/50">
+                Use for new admissions and exceptions. Creating a student
+                record does not create a login account.
+              </p>
+
+              <form
+                className="mt-5 grid gap-3 sm:grid-cols-2"
+                onSubmit={
+                  createStudent
+                }
+              >
+                <label className="casa-label sm:col-span-2">
+                  <span>
+                    Admission number / optional
+                  </span>
+                  <input
+                    name="admissionNumber"
+                    className="casa-field"
+                  />
+                </label>
+                <label className="casa-label">
+                  <span>
+                    First name
+                  </span>
+                  <input
+                    required
+                    name="firstName"
+                    className="casa-field"
+                  />
+                </label>
+                <label className="casa-label">
+                  <span>
+                    Last name
+                  </span>
+                  <input
+                    required
+                    name="lastName"
+                    className="casa-field"
+                  />
+                </label>
+                <label className="casa-label">
+                  <span>
+                    Middle name
+                  </span>
+                  <input
+                    name="middleName"
+                    className="casa-field"
+                  />
+                </label>
+                <label className="casa-label">
+                  <span>
+                    Preferred name
+                  </span>
+                  <input
+                    name="preferredName"
+                    className="casa-field"
+                  />
+                </label>
+                <label className="casa-label">
+                  <span>
+                    Sex
+                  </span>
+                  <select
+                    name="sex"
+                    defaultValue="UNSPECIFIED"
+                    className="casa-field"
+                  >
+                    <option value="UNSPECIFIED">
+                      Unspecified
+                    </option>
+                    <option value="MALE">
+                      Male
+                    </option>
+                    <option value="FEMALE">
+                      Female
+                    </option>
+                  </select>
+                </label>
+                <label className="casa-label">
+                  <span>
+                    Date of birth
+                  </span>
+                  <input
+                    required
+                    type="date"
+                    name="dateOfBirth"
+                    className="casa-field"
+                  />
+                </label>
+                <label className="casa-label sm:col-span-2">
+                  <span>
+                    Admission date
+                  </span>
+                  <input
+                    required
+                    type="date"
+                    name="admissionDate"
+                    className="casa-field"
+                  />
+                </label>
+                <button
+                  disabled={busy}
+                  className="casa-button sm:col-span-2"
+                  type="submit"
+                >
+                  Register student
+                </button>
+              </form>
+            </details>
+
+            <details className="p-5 sm:p-6">
+              <summary className="cursor-pointer font-mono text-[10px] font-semibold uppercase tracking-[0.14em]">
+                Create guardian
+              </summary>
+
+              <p className="mt-3 text-xs leading-5 text-black/50">
+                Guardian records can be created before portal access is
+                provisioned, then linked to one or more students.
+              </p>
+
+              <form
+                className="mt-5 grid gap-3"
+                onSubmit={
+                  createGuardian
+                }
+              >
+                <label className="casa-label">
+                  <span>
+                    Full name
+                  </span>
+                  <input
+                    required
+                    name="fullName"
+                    className="casa-field"
+                  />
+                </label>
+                <label className="casa-label">
+                  <span>
+                    Email
+                  </span>
+                  <input
+                    type="email"
+                    name="email"
+                    className="casa-field"
+                  />
+                </label>
+                <label className="casa-label">
+                  <span>
+                    Phone / E.164
+                  </span>
+                  <input
+                    name="phone"
+                    placeholder="+234..."
+                    className="casa-field"
+                  />
+                </label>
+                <button
+                  disabled={busy}
+                  className="casa-button-secondary"
+                  type="submit"
+                >
+                  Add guardian
+                </button>
+              </form>
+            </details>
           </aside>
         </div>
       </div>

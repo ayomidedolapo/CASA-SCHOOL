@@ -1,0 +1,1 @@
+ALTER TYPE "public"."attendance_session_event_type" ADD VALUE IF NOT EXISTS 'REOPENED';

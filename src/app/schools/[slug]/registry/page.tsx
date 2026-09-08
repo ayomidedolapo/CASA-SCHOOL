@@ -26,7 +26,11 @@ export default async function RegistryPage({
     access =
       await requireSchoolRole(
         slug,
-        ["OWNER", "ADMIN", "SCHOOL_TECHNICIAN"],
+        [
+          "OWNER",
+          "ADMIN",
+          "SCHOOL_TECHNICIAN",
+        ],
       );
   } catch (error) {
     if (
@@ -45,16 +49,17 @@ export default async function RegistryPage({
       SchoolAccessDeniedError
     ) {
       return (
-        <main className="min-h-screen bg-slate-50 px-6 py-16 text-slate-950">
-          <div className="mx-auto max-w-2xl rounded-3xl border border-slate-200 bg-white p-8">
-            <p className="text-sm font-medium text-slate-500">
-              CASA School
+        <main className="casa-shell">
+          <div className="casa-container min-h-screen border-x border-black p-6 sm:p-10 lg:p-12">
+            <p className="casa-kicker">
+              CASA / Registry
             </p>
-            <h1 className="mt-3 text-2xl font-semibold">
-              Registry access denied
+            <h1 className="casa-display-compact mt-5 max-w-4xl">
+              Registry access denied.
             </h1>
-            <p className="mt-3 text-slate-600">
-              Your current school role does not permit registry administration.
+            <p className="mt-5 max-w-xl text-sm leading-6 text-black/55">
+              Your current school role does not permit Registry operations for
+              this workspace.
             </p>
           </div>
         </main>
@@ -67,14 +72,18 @@ export default async function RegistryPage({
   return (
     <RegistryClient
       school={{
-        slug: access.school.slug,
-        name: access.school.name,
+        slug:
+          access.school.slug,
+        name:
+          access.school.name,
       }}
       user={{
         fullName:
           access.session.fullName,
       }}
-      roles={access.roles}
+      roles={
+        access.roles
+      }
     />
   );
 }

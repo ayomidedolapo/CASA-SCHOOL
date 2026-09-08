@@ -81,15 +81,61 @@ if (
 const parts =
   token.split(".");
 
+const signature =
+  parts[2] ?? "";
+
+const base64UrlAlphabet =
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+
+const finalCharacter =
+  signature.slice(-1);
+
+const finalIndex =
+  base64UrlAlphabet.indexOf(
+    finalCharacter,
+  );
+
+if (
+  signature.length !== 43 ||
+  finalIndex < 0 ||
+  finalIndex % 4 !== 0 ||
+  finalIndex + 1 >=
+    base64UrlAlphabet.length
+) {
+  throw new Error(
+    "Biometric assertion signature was not canonical Base64URL.",
+  );
+}
+
+const nonCanonicalAlias =
+  `${signature.slice(
+    0,
+    -1,
+  )}${base64UrlAlphabet[
+    finalIndex + 1
+  ]}`;
+
+if (
+  !Buffer.from(
+    signature,
+    "base64url",
+  ).equals(
+    Buffer.from(
+      nonCanonicalAlias,
+      "base64url",
+    ),
+  )
+) {
+  throw new Error(
+    "Self-test could not construct an equivalent non-canonical signature alias.",
+  );
+}
+
 const tampered =
   [
     parts[0],
     parts[1],
-    (
-      parts[2]?.endsWith("A")
-        ? `${parts[2].slice(0, -1)}B`
-        : `${parts[2]?.slice(0, -1)}A`
-    ),
+    nonCanonicalAlias,
   ].join(".");
 
 let tamperRejected = false;
@@ -108,7 +154,7 @@ try {
 
 if (!tamperRejected) {
   throw new Error(
-    "Tampered biometric assertion was accepted.",
+    "Non-canonical biometric assertion signature alias was accepted.",
   );
 }
 

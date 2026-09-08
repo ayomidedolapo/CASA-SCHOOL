@@ -1,0 +1,12 @@
+-- CASA School Drizzle snapshot baseline alignment.
+--
+-- Migration18 (card-production authority) and Migration19
+-- (identity-card lifecycle authority) were intentionally hand-authored
+-- and already carry their authoritative SQL in the preceding immutable
+-- migration files. They therefore did not advance Drizzle Kit's generated
+-- snapshot chain.
+--
+-- This migration intentionally performs NO schema or data mutation.
+-- Its snapshot.json records the already-authoritative post-Migration19
+-- schema so future generated migrations do not replay Migration18/19.
+SELECT 1;

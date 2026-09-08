@@ -43,11 +43,15 @@ import {
 export const PASSKEY_STEP_UP_ACTIONS = [
   "BIOMETRIC_ENROLL",
   "BIOMETRIC_REENROLL",
+  "CARD_ISSUE",
+  "CARD_REISSUE",
   "TERMINAL_PROVISION",
   "TERMINAL_ROTATE",
   "TERMINAL_SUSPEND",
   "TERMINAL_REACTIVATE",
   "TERMINAL_REVOKE",
+  "ATTENDANCE_SESSION_POLICY_REBIND",
+  "ATTENDANCE_SESSION_REOPEN",
   "EARLY_DEPARTURE",
   "PASSKEY_REVOKE",
   "ROLE_CHANGE",
@@ -56,6 +60,22 @@ export const PASSKEY_STEP_UP_ACTIONS = [
 
 export type PasskeyStepUpAction =
   (typeof PASSKEY_STEP_UP_ACTIONS)[number];
+
+type PasskeyStepUpActorScope =
+  | "SCHOOL"
+  | "CASA_INTERNAL";
+
+interface PasskeyStepUpAccessLike {
+  session: {
+    userId: string;
+  };
+  school: {
+    id: string;
+  };
+  membership: {
+    id: string;
+  };
+}
 
 const STEP_UP_GRANT_LIFETIME_MS =
   5 * 60 * 1000;
@@ -83,10 +103,79 @@ export function isPasskeyStepUpAction(
   ).includes(value);
 }
 
-export async function beginPasskeyStepUp(
-  access: SchoolAccess,
+export function hasPasskeyStepUpReturnedRow(
+  result: unknown,
+): boolean {
+  if (Array.isArray(result)) {
+    return result.length > 0;
+  }
+
+  if (
+    result &&
+    typeof result === "object" &&
+    "rows" in result
+  ) {
+    const rows =
+      (
+        result as {
+          rows?: unknown;
+        }
+      ).rows;
+
+    return (
+      Array.isArray(rows) &&
+      rows.length > 0
+    );
+  }
+
+  return false;
+}
+
+function challengeMatchesActor(
+  input: {
+    scope:
+      PasskeyStepUpActorScope;
+    membershipId:
+      string;
+    challenge: {
+      membershipId:
+        string | null;
+      internalMembershipId:
+        string | null;
+    };
+  },
+): boolean {
+  if (
+    input.scope ===
+    "SCHOOL"
+  ) {
+    return (
+      input.challenge
+        .membershipId ===
+        input.membershipId &&
+      input.challenge
+        .internalMembershipId ===
+        null
+    );
+  }
+
+  return (
+    input.challenge
+      .membershipId ===
+      null &&
+    input.challenge
+      .internalMembershipId ===
+      input.membershipId
+  );
+}
+
+async function beginPasskeyStepUpForActor(
+  access:
+    PasskeyStepUpAccessLike,
   action:
     PasskeyStepUpAction,
+  scope:
+    PasskeyStepUpActorScope,
 ) {
   const db = getDb();
 
@@ -153,7 +242,15 @@ export async function beginPasskeyStepUp(
       schoolId:
         access.school.id,
       membershipId:
-        access.membership.id,
+        scope ===
+        "SCHOOL"
+          ? access.membership.id
+          : null,
+      internalMembershipId:
+        scope ===
+        "CASA_INTERNAL"
+          ? access.membership.id
+          : null,
       action,
     });
 
@@ -167,14 +264,17 @@ export async function beginPasskeyStepUp(
   };
 }
 
-export async function finishPasskeyStepUp(
+async function finishPasskeyStepUpForActor(
   input: {
-    access: SchoolAccess;
+    access:
+      PasskeyStepUpAccessLike;
     action:
       PasskeyStepUpAction;
     ceremonyId: string;
     response:
       AuthenticationResponseJSON;
+    scope:
+      PasskeyStepUpActorScope;
   },
 ) {
   const challenge =
@@ -189,8 +289,18 @@ export async function finishPasskeyStepUp(
       input.access.session.userId ||
     challenge.schoolId !==
       input.access.school.id ||
-    challenge.membershipId !==
-      input.access.membership.id ||
+    !challengeMatchesActor({
+      scope:
+        input.scope,
+      membershipId:
+        input.access.membership.id,
+      challenge: {
+        membershipId:
+          challenge.membershipId,
+        internalMembershipId:
+          challenge.internalMembershipId,
+      },
+    }) ||
     challenge.action !==
       input.action
   ) {
@@ -305,20 +415,27 @@ export async function finishPasskeyStepUp(
 
   const grantToken =
     createPasskeyStepUpGrantToken();
-
   const grantTokenHash =
     hashGrantToken(
       grantToken,
     );
-
   const now =
     new Date();
-
   const expiresAt =
     new Date(
       now.getTime() +
         STEP_UP_GRANT_LIFETIME_MS,
     );
+  const schoolMembershipId =
+    input.scope ===
+    "SCHOOL"
+      ? input.access.membership.id
+      : null;
+  const internalMembershipId =
+    input.scope ===
+    "CASA_INTERNAL"
+      ? input.access.membership.id
+      : null;
 
   const result =
     await db.execute(sql`
@@ -334,8 +451,10 @@ export async function finishPasskeyStepUp(
             ${input.access.session.userId}::uuid
           and school_id =
             ${input.access.school.id}::uuid
-          and membership_id =
-            ${input.access.membership.id}::uuid
+          and membership_id is not distinct from
+            ${schoolMembershipId}::uuid
+          and internal_membership_id is not distinct from
+            ${internalMembershipId}::uuid
           and purpose =
             'STEP_UP'::auth_webauthn_challenge_purpose
           and action =
@@ -366,6 +485,7 @@ export async function finishPasskeyStepUp(
         user_id,
         school_id,
         membership_id,
+        internal_membership_id,
         challenge_id,
         passkey_id,
         action,
@@ -376,7 +496,8 @@ export async function finishPasskeyStepUp(
       select
         ${input.access.session.userId}::uuid,
         ${input.access.school.id}::uuid,
-        ${input.access.membership.id}::uuid,
+        ${schoolMembershipId}::uuid,
+        ${internalMembershipId}::uuid,
         consumed.id,
         updated_passkey.id,
         ${input.action},
@@ -389,10 +510,7 @@ export async function finishPasskeyStepUp(
         id
     `);
 
-  if (
-    !Array.isArray(result) ||
-    !result[0]
-  ) {
+  if (!hasPasskeyStepUpReturnedRow(result)) {
     return {
       ok: false as const,
       status: 409 as const,
@@ -428,12 +546,15 @@ export async function finishPasskeyStepUp(
   };
 }
 
-export async function consumePasskeyStepUpGrantWithId(
+async function consumePasskeyStepUpGrantWithIdForActor(
   input: {
     token: string;
-    access: SchoolAccess;
+    access:
+      PasskeyStepUpAccessLike;
     action:
       PasskeyStepUpAction;
+    scope:
+      PasskeyStepUpActorScope;
   },
 ): Promise<string | null> {
   if (
@@ -445,9 +566,30 @@ export async function consumePasskeyStepUpGrantWithId(
   }
 
   const db = getDb();
-
   const now =
     new Date();
+
+  const actorCondition =
+    input.scope ===
+    "SCHOOL"
+      ? and(
+          eq(
+            authPasskeyStepUpGrants.membershipId,
+            input.access.membership.id,
+          ),
+          isNull(
+            authPasskeyStepUpGrants.internalMembershipId,
+          ),
+        )
+      : and(
+          isNull(
+            authPasskeyStepUpGrants.membershipId,
+          ),
+          eq(
+            authPasskeyStepUpGrants.internalMembershipId,
+            input.access.membership.id,
+          ),
+        );
 
   const rows =
     await db
@@ -473,10 +615,7 @@ export async function consumePasskeyStepUpGrantWithId(
             authPasskeyStepUpGrants.schoolId,
             input.access.school.id,
           ),
-          eq(
-            authPasskeyStepUpGrants.membershipId,
-            input.access.membership.id,
-          ),
+          actorCondition,
           eq(
             authPasskeyStepUpGrants.action,
             input.action,
@@ -496,6 +635,50 @@ export async function consumePasskeyStepUpGrantWithId(
       });
 
   return rows[0]?.id ?? null;
+}
+
+export async function beginPasskeyStepUp(
+  access: SchoolAccess,
+  action:
+    PasskeyStepUpAction,
+) {
+  return beginPasskeyStepUpForActor(
+    access,
+    action,
+    "SCHOOL",
+  );
+}
+
+export async function finishPasskeyStepUp(
+  input: {
+    access: SchoolAccess;
+    action:
+      PasskeyStepUpAction;
+    ceremonyId: string;
+    response:
+      AuthenticationResponseJSON;
+  },
+) {
+  return finishPasskeyStepUpForActor({
+    ...input,
+    scope:
+      "SCHOOL",
+  });
+}
+
+export async function consumePasskeyStepUpGrantWithId(
+  input: {
+    token: string;
+    access: SchoolAccess;
+    action:
+      PasskeyStepUpAction;
+  },
+): Promise<string | null> {
+  return consumePasskeyStepUpGrantWithIdForActor({
+    ...input,
+    scope:
+      "SCHOOL",
+  });
 }
 
 export async function consumePasskeyStepUpGrant(
@@ -526,6 +709,82 @@ export async function requirePasskeyStepUpGrant(
     !input.token ||
     !(
       await consumePasskeyStepUpGrant({
+        token:
+          input.token,
+        access:
+          input.access,
+        action:
+          input.action,
+      })
+    )
+  ) {
+    throw new Error(
+      "PASSKEY_STEP_UP_REQUIRED",
+    );
+  }
+}
+
+export async function beginCasaInternalPasskeyStepUp(
+  access:
+    PasskeyStepUpAccessLike,
+  action:
+    PasskeyStepUpAction,
+) {
+  return beginPasskeyStepUpForActor(
+    access,
+    action,
+    "CASA_INTERNAL",
+  );
+}
+
+export async function finishCasaInternalPasskeyStepUp(
+  input: {
+    access:
+      PasskeyStepUpAccessLike;
+    action:
+      PasskeyStepUpAction;
+    ceremonyId: string;
+    response:
+      AuthenticationResponseJSON;
+  },
+) {
+  return finishPasskeyStepUpForActor({
+    ...input,
+    scope:
+      "CASA_INTERNAL",
+  });
+}
+
+export async function consumeCasaInternalPasskeyStepUpGrantWithId(
+  input: {
+    token: string;
+    access:
+      PasskeyStepUpAccessLike;
+    action:
+      PasskeyStepUpAction;
+  },
+): Promise<string | null> {
+  return consumePasskeyStepUpGrantWithIdForActor({
+    ...input,
+    scope:
+      "CASA_INTERNAL",
+  });
+}
+
+export async function requireCasaInternalPasskeyStepUpGrant(
+  input: {
+    token:
+      string | null | undefined;
+    access:
+      PasskeyStepUpAccessLike;
+    action:
+      PasskeyStepUpAction;
+  },
+): Promise<void> {
+  if (
+    !input.token ||
+    !(
+      await consumeCasaInternalPasskeyStepUpGrantWithId({
         token:
           input.token,
         access:

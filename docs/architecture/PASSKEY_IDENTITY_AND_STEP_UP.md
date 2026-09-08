@@ -1,4 +1,4 @@
-# CASA School ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â Passkey Identity & Step-Up
+# CASA School ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â Passkey Identity & Step-Up
 
 ## CASA signature identity
 
@@ -197,3 +197,13 @@ The Technician workbench consumes the existing Passkey step-up actions for real 
 The browser never sends a terminal-management Passkey token to the Scanner PWA.
 
 Normal student attendance still uses the terminal credential rather than human Passkey.
+## Phase 3K card credential authorization
+
+Student ID-card issuance and reissue now consume real action-bound Passkey grants:
+
+- `CARD_ISSUE`
+- `CARD_REISSUE`
+
+The production engine stores the exact consumed grant ID with the rendered-card job.
+
+No password-only or raw-credential fallback issuance route remains for new cards.

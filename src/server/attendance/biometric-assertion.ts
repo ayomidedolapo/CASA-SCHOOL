@@ -165,16 +165,26 @@ export function verifyBiometricAssertion(
       secret,
     );
 
+  if (
+    !/^[A-Za-z0-9_-]{43}$/.test(
+      signature,
+    )
+  ) {
+    throw new Error(
+      "Invalid biometric assertion signature.",
+    );
+  }
+
   const actual =
     Buffer.from(
       signature,
-      "base64url",
+      "utf8",
     );
 
   const expected =
     Buffer.from(
       expectedSignature,
-      "base64url",
+      "utf8",
     );
 
   if (

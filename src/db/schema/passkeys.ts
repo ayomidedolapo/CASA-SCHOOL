@@ -173,6 +173,10 @@ export const authWebauthnChallenges =
       membershipId: uuid(
         "membership_id",
       ),
+      internalMembershipId:
+        uuid(
+          "internal_membership_id",
+        ),
       purpose:
         authWebauthnChallengePurposeEnum(
           "purpose",
@@ -263,10 +267,24 @@ export const authWebauthnChallenges =
         sql`${table.purpose} <> 'STEP_UP' or (
           ${table.userId} is not null
           and ${table.schoolId} is not null
-          and ${table.membershipId} is not null
+          and (
+            (
+              ${table.membershipId} is not null
+              and ${table.internalMembershipId} is null
+            )
+            or
+            (
+              ${table.membershipId} is null
+              and ${table.internalMembershipId} is not null
+            )
+          )
           and ${table.action} is not null
           and length(trim(${table.action})) > 0
         )`,
+      ),
+      check(
+        "auth_webauthn_challenges_non_step_up_internal_membership_check",
+        sql`${table.purpose} = 'STEP_UP' or ${table.internalMembershipId} is null`,
       ),
       check(
         "auth_webauthn_challenges_non_step_up_action_check",
@@ -304,7 +322,11 @@ export const authPasskeyStepUpGrants =
         ),
       membershipId: uuid(
         "membership_id",
-      ).notNull(),
+      ),
+      internalMembershipId:
+        uuid(
+          "internal_membership_id",
+        ),
       challengeId: uuid(
         "challenge_id",
       )
@@ -378,6 +400,18 @@ export const authPasskeyStepUpGrants =
         table.action,
         table.expiresAt,
       ),
+      index(
+        "auth_passkey_step_up_grants_internal_scope_idx",
+      )
+        .on(
+          table.schoolId,
+          table.internalMembershipId,
+          table.action,
+          table.expiresAt,
+        )
+        .where(
+          sql`${table.internalMembershipId} is not null`,
+        ),
       foreignKey({
         columns: [
           table.schoolId,
@@ -389,6 +423,20 @@ export const authPasskeyStepUpGrants =
         ],
         name: "auth_passkey_step_up_grants_school_membership_fk",
       }),
+      check(
+        "auth_passkey_step_up_grants_actor_scope_check",
+        sql`(
+          (
+            ${table.membershipId} is not null
+            and ${table.internalMembershipId} is null
+          )
+          or
+          (
+            ${table.membershipId} is null
+            and ${table.internalMembershipId} is not null
+          )
+        )`,
+      ),
       check(
         "auth_passkey_step_up_grants_action_not_blank_check",
         sql`length(trim(${table.action})) > 0`,

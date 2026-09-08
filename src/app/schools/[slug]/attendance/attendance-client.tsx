@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   useCallback,
   useEffect,
@@ -100,6 +101,17 @@ interface Policy {
   validFrom: string;
   validTo:
     string | null;
+  schoolBusGraceMinutes:
+    number;
+  independentGraceMinutes:
+    number;  days: Array<{
+    weekday: number;
+    checkInOpensAt: string;
+    onTimeUntil: string;
+    checkInClosesAt: string;
+    normalDismissalAt: string;
+    checkOutClosesAt: string;
+  }>;
 }
 
 const weekdayLabels = [
@@ -130,7 +142,7 @@ function formatTime(
     string | null,
 ): string {
   if (!value) {
-    return "ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â";
+    return "—";
   }
 
   const parsed =
@@ -378,10 +390,97 @@ export default function AttendanceClient(
               Policy[];
           };
 
-        setPolicies(
+        // Hydrate editable Attendance policy fields directly from the fetched persisted default.
+        const nextPolicies =
           body.policies ??
-            [],
+            [];
+
+        setPolicies(
+          nextPolicies,
         );
+
+        const persistedDefault =
+          nextPolicies.find(
+            (policy) =>
+              policy.isDefault &&
+              policy.isActive,
+          ) ??
+          null;
+
+        if (
+          persistedDefault &&
+          Array.isArray(
+            persistedDefault.days,
+          ) &&
+          persistedDefault.days.length >
+            0
+        ) {
+          const orderedDays =
+            [...persistedDefault.days]
+              .sort(
+                (
+                  left,
+                  right,
+                ) =>
+                  left.weekday -
+                  right.weekday,
+              );
+
+          const representativeDay =
+            orderedDays[0];
+
+          const normalizeTime =
+            (
+              value:
+                string,
+            ) =>
+              value.length >=
+                5
+                ? value.slice(
+                    0,
+                    5,
+                  )
+                : value;
+
+          setPolicyName(
+            persistedDefault.name,
+          );
+
+          setSelectedWeekdays(
+            orderedDays.map(
+              (day) =>
+                day.weekday,
+            ),
+          );
+
+          setTimes({
+            checkInOpensAt:
+              normalizeTime(
+                representativeDay
+                  .checkInOpensAt,
+              ),
+            onTimeUntil:
+              normalizeTime(
+                representativeDay
+                  .onTimeUntil,
+              ),
+            checkInClosesAt:
+              normalizeTime(
+                representativeDay
+                  .checkInClosesAt,
+              ),
+            normalDismissalAt:
+              normalizeTime(
+                representativeDay
+                  .normalDismissalAt,
+              ),
+            checkOutClosesAt:
+              normalizeTime(
+                representativeDay
+                  .checkOutClosesAt,
+              ),
+          });
+        }
       },
       [
         slug,
@@ -442,8 +541,43 @@ export default function AttendanceClient(
   async function mutateSession(
     action:
       | "OPEN"
-      | "CLOSE",
+      | "CLOSE"
+      | "REOPEN",
   ) {
+    let reason:
+      string | null =
+        null;
+
+    if (
+      action ===
+        "REOPEN"
+    ) {
+      const entered =
+        window.prompt(
+          "Why are you reopening today's attendance session? This reason is kept in the audit history.",
+          "Closed accidentally",
+        );
+
+      if (entered === null) {
+        return;
+      }
+
+      reason =
+        entered.trim();
+
+      if (
+        reason.length <
+          8 ||
+        reason.length >
+          240
+      ) {
+        setError(
+          "Enter a reopen reason between 8 and 240 characters.",
+        );
+        return;
+      }
+    }
+
     setBusy(
       true,
     );
@@ -455,6 +589,17 @@ export default function AttendanceClient(
     );
 
     try {
+      const grant =
+        action ===
+          "REOPEN"
+          ? await obtainPasskeyStepUpGrant({
+              schoolSlug:
+                slug,
+              action:
+                "ATTENDANCE_SESSION_REOPEN",
+            })
+          : null;
+
       const response =
         await fetch(
           `/api/schools/${encodeURIComponent(
@@ -466,23 +611,60 @@ export default function AttendanceClient(
             headers: {
               "Content-Type":
                 "application/json",
+              ...(grant
+                ? {
+                    "x-casa-passkey-step-up":
+                      grant,
+                  }
+                : {}),
             },
             credentials:
               "same-origin",
+            cache:
+              "no-store",
             body:
-              JSON.stringify({
-                action,
-              }),
+              JSON.stringify(
+                action ===
+                  "REOPEN"
+                  ? {
+                      action,
+                      reason,
+                    }
+                  : {
+                      action,
+                    },
+              ),
           },
         );
 
-      const body =
-        await response.json() as {
+      const raw =
+        await response.text();
+
+      let body:
+        {
           code?:
             string;
           message?:
             string;
-        };
+        } =
+          {};
+
+      if (raw) {
+        try {
+          body =
+            JSON.parse(
+              raw,
+            ) as {
+              code?:
+                string;
+              message?:
+                string;
+            };
+        } catch {
+          body =
+            {};
+        }
+      }
 
       if (!response.ok) {
         throw new Error(
@@ -496,7 +678,10 @@ export default function AttendanceClient(
         action ===
           "OPEN"
           ? "Attendance is open."
-          : "Attendance is closed.",
+          : action ===
+              "REOPEN"
+            ? "Attendance reopened. The original session and audit history were preserved."
+            : "Attendance is closed.",
       );
 
       await refreshToday();
@@ -506,6 +691,132 @@ export default function AttendanceClient(
           Error
           ? caught.message
           : "Attendance session action failed.",
+      );
+    } finally {
+      setBusy(
+        false,
+      );
+    }
+  }
+
+  async function rebindSessionPolicy() {
+    const entered =
+      window.prompt(
+        "Why should today's open attendance session use the current default policy? The reason and Passkey authorization are kept in the audit history.",
+        "Use corrected current attendance schedule",
+      );
+
+    if (entered === null) {
+      return;
+    }
+
+    const reason =
+      entered.trim();
+
+    if (
+      reason.length <
+        8 ||
+      reason.length >
+        240
+    ) {
+      setError(
+        "Enter a policy correction reason between 8 and 240 characters.",
+      );
+      return;
+    }
+
+    setBusy(
+      true,
+    );
+    setError(
+      null,
+    );
+    setNotice(
+      null,
+    );
+
+    try {
+      const grant =
+        await obtainPasskeyStepUpGrant({
+          schoolSlug:
+            slug,
+          action:
+            "ATTENDANCE_SESSION_POLICY_REBIND",
+        });
+
+      const response =
+        await fetch(
+          `/api/schools/${encodeURIComponent(
+            slug,
+          )}/attendance/sessions/today/policy-rebind`,
+          {
+            method:
+              "POST",
+            headers: {
+              "Content-Type":
+                "application/json",
+              "x-casa-passkey-step-up":
+                grant,
+            },
+            credentials:
+              "same-origin",
+            cache:
+              "no-store",
+            body:
+              JSON.stringify({
+                reason,
+              }),
+          },
+        );
+
+      const raw =
+        await response.text();
+
+      let body:
+        {
+          code?:
+            string;
+          message?:
+            string;
+        } =
+          {};
+
+      if (raw) {
+        try {
+          body =
+            JSON.parse(
+              raw,
+            ) as {
+              code?:
+                string;
+              message?:
+                string;
+            };
+        } catch {
+          body =
+            {};
+        }
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          body.code ??
+            body.message ??
+            "Attendance policy correction failed.",
+        );
+      }
+
+      setNotice(
+        "Today's open session now uses the current attendance policy. Earlier rejected scans remain preserved in audit history.",
+      );
+
+      await refreshToday();
+    } catch (caught) {
+      setError(
+        caught instanceof
+          Error
+          ? caught.message
+          : "Attendance policy correction failed.",
       );
     } finally {
       setBusy(
@@ -536,7 +847,35 @@ export default function AttendanceClient(
     );
 
     try {
-      const validFrom =
+            if (
+        !defaultPolicy ||
+        !Number.isInteger(
+          defaultPolicy
+            .schoolBusGraceMinutes,
+        ) ||
+        !Number.isInteger(
+          defaultPolicy
+            .independentGraceMinutes,
+        ) ||
+        defaultPolicy
+          .schoolBusGraceMinutes <
+          0 ||
+        defaultPolicy
+          .schoolBusGraceMinutes >
+          240 ||
+        defaultPolicy
+          .independentGraceMinutes <
+          0 ||
+        defaultPolicy
+          .independentGraceMinutes >
+          240
+      ) {
+        throw new Error(
+          "Current attendance grace settings are unavailable. Refresh Attendance before creating a schedule revision.",
+        );
+      }
+
+const validFrom =
         data?.clock
           .date ??
         new Date()
@@ -569,6 +908,12 @@ export default function AttendanceClient(
                   null,
                 isDefault:
                   true,
+                schoolBusGraceMinutes:
+                  defaultPolicy
+                    .schoolBusGraceMinutes,
+                independentGraceMinutes:
+                  defaultPolicy
+                    .independentGraceMinutes,
                 days:
                   selectedWeekdays.map(
                     (
@@ -777,36 +1122,69 @@ export default function AttendanceClient(
           styles.header
         }
       >
-        <h1
-          className={
-            styles.brand
-          }
-        >
-          TODAY
-          <br />
-          ATTENDANCE
-        </h1>
+        <div>
+          <p className={styles.kicker}>
+            CASA / Attendance
+          </p>
+          <h1
+            className={
+              styles.brand
+            }
+          >
+            TODAY
+            <br />
+            ATTENDANCE
+          </h1>
+        </div>
 
-        <div
-          className={
-            styles.school
-          }
-        >
-          <strong>
-            {schoolName}
-          </strong>
-          <br />
-          {
-            data?.clock
-              .date ??
-            "Loading dateÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦"
-          }
-          {" Ãƒâ€šÃ‚Â· "}
-          {
-            data?.clock
-              .clock ??
-            "ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â"
-          }
+        <div className={styles.headerContext}>
+          <div className={styles.school}>
+            <strong>
+              {schoolName}
+            </strong>
+            <br />
+            {
+              data?.clock
+                .date ??
+              "Loading date..."
+            }
+            {" · "}
+            {
+              data?.clock
+                .clock ??
+              "—"
+            }
+          </div>
+
+          <nav className={styles.headerActions} aria-label="Attendance navigation">
+            <Link
+              className={styles.headerLink}
+              href={`/schools/${encodeURIComponent(slug)}/registry`}
+            >
+              Registry
+            </Link>
+            <Link
+              className={styles.headerLink}
+              href={`/schools/${encodeURIComponent(slug)}/technician`}
+            >
+              Technical
+            </Link>
+            {canManage ? (
+              <Link
+                className={styles.headerLink}
+                href={`/schools/${encodeURIComponent(slug)}/attendance/transport`}
+              >
+                Transport &amp; grace
+              </Link>
+            ) : (
+              <Link
+                className={styles.headerLink}
+                href={`/schools/${encodeURIComponent(slug)}/technician/attendance`}
+              >
+                Operator view
+              </Link>
+            )}
+          </nav>
         </div>
       </header>
 
@@ -871,16 +1249,27 @@ export default function AttendanceClient(
                   styles.button
                 }
                 disabled={
-                  busy
+                  busy ||
+                  data?.session?.status ===
+                    "CANCELLED"
                 }
                 onClick={
                   () =>
                     void mutateSession(
-                      "OPEN",
+                      data?.session?.status ===
+                        "CLOSED"
+                        ? "REOPEN"
+                        : "OPEN",
                     )
                 }
               >
-                Open today
+                {data?.session?.status ===
+                "CLOSED"
+                  ? "Reopen today"
+                  : data?.session?.status ===
+                      "CANCELLED"
+                    ? "Session cancelled"
+                    : "Open today"}
               </button>
             ) : (
               <button
@@ -901,6 +1290,24 @@ export default function AttendanceClient(
                 Close today
               </button>
             )}
+            {data?.session?.status ===
+              "OPEN" && (
+              <button
+                type="button"
+                onClick={() =>
+                  void rebindSessionPolicy()
+                }
+                disabled={
+                  busy
+                }
+                className={
+                  styles.button
+                }
+              >
+                Use current policy
+              </button>
+            )}
+
           </div>
         )}
       </div>
@@ -1062,7 +1469,7 @@ export default function AttendanceClient(
                         styles.success
                       }
                     >
-                      Authorized ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â waiting for face verification.
+                      Authorized — waiting for face verification.
                     </div>
                   ) : (
                     <input
@@ -1319,7 +1726,7 @@ export default function AttendanceClient(
                       <td>
                         {
                           student.arrivalStatus ??
-                          "ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â"
+                          "—"
                         }
                       </td>
                       <td>
@@ -1451,7 +1858,7 @@ export default function AttendanceClient(
                 styles.muted
               }
             >
-              New version only ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â historical days remain intact.
+              New version only — historical days remain intact.
             </span>
           </div>
 

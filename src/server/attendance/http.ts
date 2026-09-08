@@ -79,6 +79,14 @@ export function terminalUnauthorizedResponse():
     },
   );
 }
+export async function requireAttendanceController(
+  schoolSlug: string,
+): Promise<SchoolAccess> {
+  return requireAttendanceOperator(
+    schoolSlug,
+  );
+}
+
 export async function requireAttendanceManager(
   schoolSlug: string,
 ): Promise<SchoolAccess> {

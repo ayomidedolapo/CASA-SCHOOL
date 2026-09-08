@@ -11,6 +11,9 @@ import {
   authSessions,
   users,
 } from "@/db/schema";
+import {
+  withTransientDatabaseReadRetry,
+} from "@/server/database/read-retry";
 
 import {
   createSessionToken,
@@ -45,8 +48,7 @@ export async function createAuthSession(
   const token = createSessionToken();
   const tokenHash = hashSessionToken(token);
   const expiresAt = new Date(
-    Date.now() +
-      SESSION_MAX_AGE_SECONDS * 1000,
+    Date.now() + SESSION_MAX_AGE_SECONDS * 1000,
   );
 
   await db.insert(authSessions).values({
@@ -55,10 +57,7 @@ export async function createAuthSession(
     expiresAt,
   });
 
-  return {
-    token,
-    expiresAt,
-  };
+  return { token, expiresAt };
 }
 
 export async function setAuthSessionCookie(
@@ -67,123 +66,79 @@ export async function setAuthSessionCookie(
 ): Promise<void> {
   const cookieStore = await cookies();
 
-  cookieStore.set(
-    getSessionCookieName(),
-    token,
-    {
-      httpOnly: true,
-      secure:
-        process.env.NODE_ENV ===
-        "production",
-      sameSite: "lax",
-      path: "/",
-      expires: expiresAt,
-      priority: "high",
-    },
-  );
+  cookieStore.set(getSessionCookieName(), token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    expires: expiresAt,
+    priority: "high",
+  });
 }
 
 export async function clearAuthSessionCookie(): Promise<void> {
   const cookieStore = await cookies();
 
-  cookieStore.set(
-    getSessionCookieName(),
-    "",
-    {
-      httpOnly: true,
-      secure:
-        process.env.NODE_ENV ===
-        "production",
-      sameSite: "lax",
-      path: "/",
-      expires: new Date(0),
-      priority: "high",
-    },
-  );
+  cookieStore.set(getSessionCookieName(), "", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    expires: new Date(0),
+    priority: "high",
+  });
 }
 
 export async function getCurrentAuthSession(): Promise<
   CurrentAuthSession | null
 > {
   const cookieStore = await cookies();
-  const token =
-    cookieStore.get(
-      getSessionCookieName(),
-    )?.value;
+  const token = cookieStore.get(getSessionCookieName())?.value;
 
-  if (!token) {
-    return null;
-  }
+  if (!token) return null;
 
-  const tokenHash =
-    hashSessionToken(token);
+  const tokenHash = hashSessionToken(token);
   const db = getDb();
 
-  const rows = await db
-    .select({
-      sessionId: authSessions.id,
-      userId: users.id,
-      fullName: users.fullName,
-      email: users.email,
-      phone: users.phone,
-      expiresAt: authSessions.expiresAt,
-    })
-    .from(authSessions)
-    .innerJoin(
-      users,
-      eq(
-        authSessions.userId,
-        users.id,
-      ),
-    )
-    .where(
-      and(
-        eq(
-          authSessions.tokenHash,
-          tokenHash,
+  const rows = await withTransientDatabaseReadRetry(() =>
+    db
+      .select({
+        sessionId: authSessions.id,
+        userId: users.id,
+        fullName: users.fullName,
+        email: users.email,
+        phone: users.phone,
+        expiresAt: authSessions.expiresAt,
+      })
+      .from(authSessions)
+      .innerJoin(users, eq(authSessions.userId, users.id))
+      .where(
+        and(
+          eq(authSessions.tokenHash, tokenHash),
+          isNull(authSessions.revokedAt),
+          gt(authSessions.expiresAt, new Date()),
+          eq(users.status, "ACTIVE"),
         ),
-        isNull(
-          authSessions.revokedAt,
-        ),
-        gt(
-          authSessions.expiresAt,
-          new Date(),
-        ),
-        eq(
-          users.status,
-          "ACTIVE",
-        ),
-      ),
-    )
-    .limit(1);
+      )
+      .limit(1),
+  );
 
   return rows[0] ?? null;
 }
 
 export async function revokeCurrentAuthSession(): Promise<void> {
   const cookieStore = await cookies();
-  const token =
-    cookieStore.get(
-      getSessionCookieName(),
-    )?.value;
+  const token = cookieStore.get(getSessionCookieName())?.value;
 
   if (token) {
     const db = getDb();
-
     await db
       .update(authSessions)
-      .set({
-        revokedAt: new Date(),
-      })
+      .set({ revokedAt: new Date() })
       .where(
         and(
-          eq(
-            authSessions.tokenHash,
-            hashSessionToken(token),
-          ),
-          isNull(
-            authSessions.revokedAt,
-          ),
+          eq(authSessions.tokenHash, hashSessionToken(token)),
+          isNull(authSessions.revokedAt),
         ),
       );
   }
@@ -198,18 +153,11 @@ export async function revokeAllAuthSessionsForUser(
 
   await db
     .update(authSessions)
-    .set({
-      revokedAt: new Date(),
-    })
+    .set({ revokedAt: new Date() })
     .where(
       and(
-        eq(
-          authSessions.userId,
-          userId,
-        ),
-        isNull(
-          authSessions.revokedAt,
-        ),
+        eq(authSessions.userId, userId),
+        isNull(authSessions.revokedAt),
       ),
     );
 }

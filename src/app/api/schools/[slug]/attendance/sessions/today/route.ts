@@ -7,12 +7,16 @@ import { z } from "zod";
 import {
   attendanceAuthErrorResponse,
   attendanceNoStoreHeaders,
-  requireAttendanceManager,
+  requireAttendanceController,
 } from "@/server/attendance/http";
 import {
   closeTodayAttendanceSession,
   openTodayAttendanceSession,
+  reopenTodayAttendanceSession,
 } from "@/server/attendance/session-management";
+import {
+  requirePasskeyStepUpGrant,
+} from "@/server/auth/passkey-step-up";
 
 export const dynamic =
   "force-dynamic";
@@ -24,13 +28,34 @@ interface RouteContext {
 }
 
 const bodySchema =
-  z.object({
-    action:
-      z.enum([
-        "OPEN",
-        "CLOSE",
-      ]),
-  });
+  z.discriminatedUnion(
+    "action",
+    [
+      z.object({
+        action:
+          z.literal(
+            "OPEN",
+          ),
+      }),
+      z.object({
+        action:
+          z.literal(
+            "CLOSE",
+          ),
+      }),
+      z.object({
+        action:
+          z.literal(
+            "REOPEN",
+          ),
+        reason:
+          z.string()
+            .trim()
+            .min(8)
+            .max(240),
+      }),
+    ],
+  );
 
 export async function POST(
   request:
@@ -45,7 +70,7 @@ export async function POST(
 
   try {
     const access =
-      await requireAttendanceManager(
+      await requireAttendanceController(
         slug,
       );
 
@@ -87,15 +112,38 @@ export async function POST(
       );
     }
 
-    const result =
+    let result;
+
+    if (
       body.data.action ===
-        "OPEN"
-        ? await openTodayAttendanceSession(
-            access,
-          )
-        : await closeTodayAttendanceSession(
-            access,
-          );
+        "REOPEN"
+    ) {
+      await requirePasskeyStepUpGrant({
+        token:
+          request.headers.get(
+            "x-casa-passkey-step-up",
+          ),
+        access,
+        action:
+          "ATTENDANCE_SESSION_REOPEN",
+      });
+
+      result =
+        await reopenTodayAttendanceSession(
+          access,
+          body.data.reason,
+        );
+    } else {
+      result =
+        body.data.action ===
+          "OPEN"
+          ? await openTodayAttendanceSession(
+              access,
+            )
+          : await closeTodayAttendanceSession(
+              access,
+            );
+    }
 
     if (!result.ok) {
       return NextResponse.json(
@@ -122,6 +170,28 @@ export async function POST(
       },
     );
   } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message ===
+        "PASSKEY_STEP_UP_REQUIRED"
+    ) {
+      return NextResponse.json(
+        {
+          message:
+            "Passkey authorization is required to reopen attendance.",
+          code:
+            "PASSKEY_STEP_UP_REQUIRED",
+          requiredAction:
+            "ATTENDANCE_SESSION_REOPEN",
+        },
+        {
+          status: 403,
+          headers:
+            attendanceNoStoreHeaders,
+        },
+      );
+    }
+
     const response =
       attendanceAuthErrorResponse(
         error,

@@ -1,0 +1,2 @@
+ALTER TABLE "attendance_session_events" DROP CONSTRAINT "attendance_session_events_session_type_unique";--> statement-breakpoint
+CREATE INDEX "attendance_session_events_session_type_idx" ON "attendance_session_events" ("school_id","session_id","event_type","occurred_at");

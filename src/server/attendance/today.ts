@@ -1,39 +1,76 @@
-import {
-  and,
-  asc,
-  desc,
-  eq,
-  inArray,
-  sql,
-} from "drizzle-orm";
+import { sql } from "drizzle-orm";
 
 import { getDb } from "@/db";
-import {
-  attendanceEarlyDepartureAuthorizations,
-  attendancePolicyDays,
-  attendanceSessions,
-  attendanceTerminals,
-  attendanceVerificationAttempts,
-  classArms,
-  classLevels,
-  schoolNotificationOutbox,
-  studentAttendanceRecords,
-  studentEnrollments,
-  studentPresenceEvents,
-  students,
-} from "@/db/schema";
 import type {
   SchoolAccess,
 } from "@/server/auth/authorization";
 
 import {
   classifyTodayPresence,
-  isTodayView,
-  type TodayAttendanceView,
 } from "./operations";
+
+type TodayAttendanceView =
+  | "ALL"
+  | "PRESENT"
+  | "NOT_ARRIVED"
+  | "ABSENT"
+  | "ON_CAMPUS"
+  | "SIGNED_OUT"
+  | "LATE"
+  | "EXCUSED"
+  | "NON_INSTRUCTIONAL"
+  | "BRANCH_UNASSIGNED";
+
+function isTodayAttendanceView(
+  value: string,
+): value is TodayAttendanceView {
+  return [
+    "ALL",
+    "PRESENT",
+    "NOT_ARRIVED",
+    "ABSENT",
+    "ON_CAMPUS",
+    "SIGNED_OUT",
+    "LATE",
+    "EXCUSED",
+    "NON_INSTRUCTIONAL",
+    "BRANCH_UNASSIGNED",
+  ].includes(
+    value,
+  );
+}
 import {
   getSchoolClock,
 } from "./terminal-session";
+
+function rowsOf<T>(
+  result: unknown,
+): T[] {
+  if (Array.isArray(result)) {
+    return result as T[];
+  }
+
+  if (
+    result &&
+    typeof result === "object" &&
+    "rows" in result &&
+    Array.isArray(
+      (
+        result as {
+          rows?: unknown;
+        }
+      ).rows,
+    )
+  ) {
+    return (
+      result as {
+        rows: T[];
+      }
+    ).rows;
+  }
+
+  return [];
+}
 
 export async function getTodayAttendanceOperations(
   input: {
@@ -47,6 +84,12 @@ export async function getTodayAttendanceOperations(
       number;
     pageSize:
       number;
+    branchId?:
+      string | null;
+    classArmId?:
+      string | null;
+    academicSessionId?:
+      string | null;
   },
 ) {
   const db = getDb();
@@ -57,259 +100,558 @@ export async function getTodayAttendanceOperations(
       input.access.school.timezone,
     );
 
-  const sessionRows =
-    await db
-      .select({
-        id:
-          attendanceSessions.id,
-        policyId:
-          attendanceSessions.policyId,
-        attendanceDate:
-          attendanceSessions.attendanceDate,
-        status:
-          attendanceSessions.status,
-        openedAt:
-          attendanceSessions.openedAt,
-        closedAt:
-          attendanceSessions.closedAt,
-      })
-      .from(
-        attendanceSessions,
-      )
-      .where(
-        and(
-          eq(
-            attendanceSessions.schoolId,
-            input.access.school.id,
-          ),
-          eq(
-            attendanceSessions.attendanceDate,
-            clock.date,
-          ),
-        ),
-      )
-      .limit(1);
+  const sessionResult =
+    await db.execute(sql`
+      select
+        session.id,
+        session.policy_id,
+        session.attendance_date,
+        session.status,
+        session.opened_at,
+        session.closed_at,
+        day.check_in_opens_at,
+        day.on_time_until,
+        day.check_in_closes_at,
+        day.normal_dismissal_at,
+        day.check_out_closes_at
+      from attendance_sessions
+        session
+      left join attendance_policy_days
+        day
+        on day.school_id =
+           session.school_id
+       and day.policy_id =
+           session.policy_id
+       and day.weekday =
+           ${clock.weekday}
+      where
+        session.school_id =
+          ${input.access.school.id}::uuid
+        and session.attendance_date =
+          ${clock.date}::date
+      limit 1
+    `);
+
+  const sessionRow =
+    rowsOf<{
+      id:
+        string;
+      policy_id:
+        string;
+      attendance_date:
+        string;
+      status:
+        | "PLANNED"
+        | "OPEN"
+        | "CLOSED"
+        | "CANCELLED";
+      opened_at:
+        Date | string | null;
+      closed_at:
+        Date | string | null;
+      check_in_opens_at:
+        string | null;
+      on_time_until:
+        string | null;
+      check_in_closes_at:
+        string | null;
+      normal_dismissal_at:
+        string | null;
+      check_out_closes_at:
+        string | null;
+    }>(
+      sessionResult,
+    )[0];
 
   const session =
-    sessionRows[0] ??
-    null;
+    sessionRow
+      ? {
+          id:
+            sessionRow.id,
+          policyId:
+            sessionRow.policy_id,
+          attendanceDate:
+            sessionRow.attendance_date,
+          status:
+            sessionRow.status,
+          openedAt:
+            sessionRow.opened_at,
+          closedAt:
+            sessionRow.closed_at,
+        }
+      : null;
 
-  let policyDay:
-    | {
-        checkInOpensAt:
-          string;
-        onTimeUntil:
-          string;
-        checkInClosesAt:
-          string;
-        normalDismissalAt:
-          string;
-        checkOutClosesAt:
-          string;
-      }
-    | null =
-      null;
-
-  if (session) {
-    const dayRows =
-      await db
-        .select({
+  const policyDay =
+    sessionRow &&
+    sessionRow.check_in_opens_at &&
+    sessionRow.on_time_until &&
+    sessionRow.check_in_closes_at &&
+    sessionRow.normal_dismissal_at &&
+    sessionRow.check_out_closes_at
+      ? {
           checkInOpensAt:
-            attendancePolicyDays.checkInOpensAt,
+            sessionRow.check_in_opens_at,
           onTimeUntil:
-            attendancePolicyDays.onTimeUntil,
+            sessionRow.on_time_until,
           checkInClosesAt:
-            attendancePolicyDays.checkInClosesAt,
+            sessionRow.check_in_closes_at,
           normalDismissalAt:
-            attendancePolicyDays.normalDismissalAt,
+            sessionRow.normal_dismissal_at,
           checkOutClosesAt:
-            attendancePolicyDays.checkOutClosesAt,
-        })
-        .from(
-          attendancePolicyDays,
-        )
-        .where(
-          and(
-            eq(
-              attendancePolicyDays.schoolId,
-              input.access.school.id,
-            ),
-            eq(
-              attendancePolicyDays.policyId,
-              session.policyId,
-            ),
-            eq(
-              attendancePolicyDays.weekday,
-              clock.weekday,
-            ),
-          ),
-        )
-        .limit(1);
+            sessionRow.check_out_closes_at,
+        }
+      : null;
 
-    policyDay =
-      dayRows[0] ??
-      null;
-  }
-
-  const expectedRows =
-    await db
-      .select({
-        studentId:
-          students.id,
-        casaStudentId:
-          students.casaStudentId,
-        admissionNumber:
-          students.admissionNumber,
-        firstName:
-          students.firstName,
-        middleName:
-          students.middleName,
-        lastName:
-          students.lastName,
-        classArmId:
-          classArms.id,
-        classArmName:
-          classArms.name,
-        classLevelName:
-          classLevels.name,
-      })
-      .from(
-        studentEnrollments,
-      )
-      .innerJoin(
-        students,
-        and(
-          eq(
-            students.schoolId,
-            studentEnrollments.schoolId,
-          ),
-          eq(
-            students.id,
-            studentEnrollments.studentId,
-          ),
-        ),
-      )
-      .innerJoin(
-        classArms,
-        and(
-          eq(
-            classArms.schoolId,
-            studentEnrollments.schoolId,
-          ),
-          eq(
-            classArms.id,
-            studentEnrollments.classArmId,
-          ),
-        ),
-      )
-      .innerJoin(
-        classLevels,
-        and(
-          eq(
-            classLevels.schoolId,
-            classArms.schoolId,
-          ),
-          eq(
-            classLevels.id,
-            classArms.classLevelId,
-          ),
-        ),
-      )
-      .where(
-        and(
-          eq(
-            studentEnrollments.schoolId,
-            input.access.school.id,
-          ),
-          eq(
-            studentEnrollments.status,
-            "ACTIVE",
-          ),
-          eq(
-            students.status,
-            "ACTIVE",
-          ),
-          sql`${studentEnrollments.startsOn} <= ${clock.date}::date`,
-          sql`(${studentEnrollments.endsOn} is null or ${studentEnrollments.endsOn} >= ${clock.date}::date)`,
-        ),
-      )
-      .orderBy(
-        asc(
-          classLevels.name,
-        ),
-        asc(
-          classArms.name,
-        ),
-        asc(
-          students.lastName,
-        ),
-        asc(
-          students.firstName,
-        ),
-      );
-
-  const records =
-    session
-      ? await db
-          .select({
-            id:
-              studentAttendanceRecords.id,
-            studentId:
-              studentAttendanceRecords.studentId,
-            status:
-              studentAttendanceRecords.status,
-            presenceState:
-              studentAttendanceRecords.presenceState,
-            recordedAt:
-              studentAttendanceRecords.recordedAt,
-            departureResult:
-              studentAttendanceRecords.departureResult,
-            checkedOutAt:
-              studentAttendanceRecords.checkedOutAt,
-          })
-          .from(
-            studentAttendanceRecords,
+  const [
+    stateResult,
+    terminalResult,
+    pending,
+    authorizationRows,
+    exceptionResult,
+  ] =
+    await Promise.all([
+      db.execute(sql`
+        select
+          student.id
+            as student_id,
+          student.casa_student_id,
+          student.admission_number,
+          student.first_name,
+          student.middle_name,
+          student.last_name,
+          arm.id
+            as class_arm_id,
+          arm.name
+            as class_arm_name,
+          level.name
+            as class_level_name,
+          branch_map.branch_id,
+          branch.name
+            as branch_name,
+          record.id
+            as attendance_record_id,
+          record.status
+            as arrival_status,
+          record.punctuality_outcome,
+          record.arrival_method,
+          record.official_start_time::text
+            as official_start_time,
+          record.actual_arrival_at,
+          record.grace_minutes_used,
+          record.minutes_after_official_start,
+          record.presence_state,
+          record.recorded_at,
+          record.departure_result,
+          record.checked_out_at,
+          calendar.id
+            as calendar_event_id,
+          calendar.kind
+            as calendar_event_kind,
+          calendar.title
+            as calendar_event_title,
+          excuse.id
+            as excuse_id,
+          excuse.reason
+            as excuse_reason
+        from student_enrollments
+          enrollment
+        join students student
+          on student.school_id =
+             enrollment.school_id
+         and student.id =
+             enrollment.student_id
+        join class_arms arm
+          on arm.school_id =
+             enrollment.school_id
+         and arm.id =
+             enrollment.class_arm_id
+        join class_levels level
+          on level.school_id =
+             arm.school_id
+         and level.id =
+             arm.class_level_id
+        left join school_branch_class_arms
+          branch_map
+          on branch_map.school_id =
+             enrollment.school_id
+         and branch_map.class_arm_id =
+             enrollment.class_arm_id
+        left join school_branches
+          branch
+          on branch.school_id =
+             branch_map.school_id
+         and branch.id =
+             branch_map.branch_id
+        left join student_attendance_records
+          record
+          on record.school_id =
+             enrollment.school_id
+         and record.session_id =
+             ${session?.id ?? null}::uuid
+         and record.student_id =
+             enrollment.student_id
+        left join lateral (
+          select
+            event.id,
+            event.kind,
+            event.title
+          from school_calendar_events
+            event
+          where
+            event.school_id =
+              enrollment.school_id
+            and event.starts_on <=
+              ${clock.date}::date
+            and event.ends_on >=
+              ${clock.date}::date
+            and (
+              event.branch_id is null
+              or event.branch_id =
+                 branch_map.branch_id
+            )
+          order by
+            case
+              when event.branch_id is null
+                then 0
+              else 1
+            end,
+            event.created_at asc
+          limit 1
+        ) calendar
+          on true
+        left join lateral (
+          select
+            approved.id,
+            approved.reason
+          from student_attendance_excuses
+            approved
+          where
+            approved.school_id =
+              enrollment.school_id
+            and approved.student_id =
+              enrollment.student_id
+            and approved.branch_id =
+              branch_map.branch_id
+            and approved.status =
+              'ACTIVE'::student_attendance_excuse_status
+            and approved.starts_on <=
+              ${clock.date}::date
+            and approved.ends_on >=
+              ${clock.date}::date
+          order by
+            approved.created_at asc
+          limit 1
+        ) excuse
+          on true
+        where
+          enrollment.school_id =
+            ${input.access.school.id}::uuid
+          and enrollment.status =
+            'ACTIVE'::student_enrollment_status
+          and student.status =
+            'ACTIVE'::student_status
+          and enrollment.starts_on <=
+            ${clock.date}::date
+          and (
+            enrollment.ends_on is null
+            or enrollment.ends_on >=
+               ${clock.date}::date
           )
-          .where(
-            and(
-              eq(
-                studentAttendanceRecords.schoolId,
-                input.access.school.id,
-              ),
-              eq(
-                studentAttendanceRecords.sessionId,
-                session.id,
-              ),
-            ),
+          and (
+            ${input.branchId ?? null}::uuid
+              is null
+            or branch_map.branch_id =
+               ${input.branchId ?? null}::uuid
           )
-      : [];
+          and (
+            ${input.classArmId ?? null}::uuid
+              is null
+            or enrollment.class_arm_id =
+               ${input.classArmId ?? null}::uuid
+          )
+          and (
+            ${input.academicSessionId ?? null}::uuid
+              is null
+            or enrollment.academic_session_id =
+               ${input.academicSessionId ?? null}::uuid
+          )
+        order by
+          coalesce(
+            branch.name,
+            ''
+          ) asc,
+          level.name asc,
+          arm.name asc,
+          student.last_name asc,
+          student.first_name asc
+      `),
+      db.execute(sql`
+        select
+          terminal.id,
+          terminal.name,
+          terminal.status,
+          terminal.last_seen_at,
+          branch_map.branch_id,
+          branch.name
+            as branch_name
+        from attendance_terminals
+          terminal
+        left join school_branch_terminals
+          branch_map
+          on branch_map.school_id =
+             terminal.school_id
+         and branch_map.terminal_id =
+             terminal.id
+        left join school_branches
+          branch
+          on branch.school_id =
+             branch_map.school_id
+         and branch.id =
+             branch_map.branch_id
+        where
+          terminal.school_id =
+            ${input.access.school.id}::uuid
+          and (
+            ${input.branchId ?? null}::uuid
+              is null
+            or branch_map.branch_id =
+               ${input.branchId ?? null}::uuid
+          )
+        order by
+          terminal.name asc
+      `),
+      session
+        ? db.execute(sql`
+            select
+              attempt.id
+                as attempt_id,
+              attempt.student_id,
+              student.casa_student_id,
+              student.first_name,
+              student.middle_name,
+              student.last_name,
+              attempt.created_at,
+              attempt.reason_code,
+              attempt.departure_result,
+              terminal_branch.branch_id
+            from attendance_verification_attempts
+              attempt
+            join students
+              student
+              on student.school_id =
+                 attempt.school_id
+             and student.id =
+                 attempt.student_id
+            left join school_branch_terminals
+              terminal_branch
+              on terminal_branch.school_id =
+                 attempt.school_id
+             and terminal_branch.terminal_id =
+                 attempt.terminal_id
+            where
+              attempt.school_id =
+                ${input.access.school.id}::uuid
+              and attempt.session_id =
+                ${session.id}::uuid
+              and attempt.operation =
+                'CHECK_OUT'::attendance_operation
+              and attempt.outcome =
+                'PENDING'::attendance_attempt_outcome
+              and (
+                attempt.reason_code =
+                  'EARLY_DEPARTURE_AUTH_REQUIRED'
+                or attempt.departure_result =
+                   'EARLY'::attendance_departure_result
+              )
+              and (
+                ${input.branchId ?? null}::uuid
+                  is null
+                or terminal_branch.branch_id =
+                   ${input.branchId ?? null}::uuid
+              )
+            order by
+              attempt.created_at desc
+          `)
+        : Promise.resolve(
+            [],
+          ),
+      session
+        ? db.execute(sql`
+            select
+              early_auth.attempt_id,
+              early_auth.reason
+            from attendance_early_departure_authorizations
+              early_auth
+            join attendance_verification_attempts
+              attempt
+              on attempt.school_id =
+                 early_auth.school_id
+             and attempt.id =
+                 early_auth.attempt_id
+            left join school_branch_terminals
+              terminal_branch
+              on terminal_branch.school_id =
+                 attempt.school_id
+             and terminal_branch.terminal_id =
+                 attempt.terminal_id
+            where
+              early_auth.school_id =
+                ${input.access.school.id}::uuid
+              and early_auth.session_id =
+                ${session.id}::uuid
+              and (
+                ${input.branchId ?? null}::uuid
+                  is null
+                or terminal_branch.branch_id =
+                   ${input.branchId ?? null}::uuid
+              )
+          `)
+        : Promise.resolve(
+            [],
+          ),
+      session
+        ? db.execute(sql`
+            select
+              count(*)::int
+                as missing_count
+            from student_presence_events
+              event
+            left join school_branch_terminals
+              terminal_branch
+              on terminal_branch.school_id =
+                 event.school_id
+             and terminal_branch.terminal_id =
+                 event.terminal_id
+            where
+              event.school_id =
+                ${input.access.school.id}::uuid
+              and event.session_id =
+                ${session.id}::uuid
+              and event.event_type =
+                'CHECKED_OUT'::attendance_presence_event_type
+              and (
+                ${input.branchId ?? null}::uuid
+                  is null
+                or terminal_branch.branch_id =
+                   ${input.branchId ?? null}::uuid
+              )
+              and not exists (
+                select 1
+                from school_notification_outbox
+                  outbox
+                where
+                  outbox.school_id =
+                    event.school_id
+                  and outbox.presence_event_id =
+                    event.id
+              )
+          `)
+        : Promise.resolve(
+            [],
+          ),
+    ]);
 
-  const recordByStudent =
-    new Map(
-      records.map(
-        (record) => [
-          record.studentId,
-          record,
-        ],
-      ),
+  const stateRows =
+    rowsOf<{
+      student_id:
+        string;
+      casa_student_id:
+        string;
+      admission_number:
+        string | null;
+      first_name:
+        string;
+      middle_name:
+        string | null;
+      last_name:
+        string;
+      class_arm_id:
+        string;
+      class_arm_name:
+        string;
+      class_level_name:
+        string;
+      branch_id:
+        string | null;
+      branch_name:
+        string | null;
+      attendance_record_id:
+        string | null;
+      arrival_status:
+        | "ON_TIME"
+        | "LATE"
+        | "MANUAL"
+        | null;
+      punctuality_outcome:
+        | "ON_TIME"
+        | "ON_TIME_WITH_GRACE"
+        | "LATE"
+        | null;
+      arrival_method:
+        | "SCHOOL_BUS"
+        | "INDEPENDENT"
+        | null;
+      official_start_time:
+        string | null;
+      actual_arrival_at:
+        Date | string | null;
+      grace_minutes_used:
+        number | null;
+      minutes_after_official_start:
+        number | null;
+      presence_state:
+        | "ON_CAMPUS"
+        | "SIGNED_OUT"
+        | null;
+      recorded_at:
+        Date | string | null;
+      departure_result:
+        string | null;
+      checked_out_at:
+        Date | string | null;
+      calendar_event_id:
+        string | null;
+      calendar_event_kind:
+        | "PUBLIC_HOLIDAY"
+        | "SCHOOL_BREAK"
+        | "BRANCH_CLOSURE"
+        | "SPECIAL_NON_INSTRUCTIONAL_DAY"
+        | null;
+      calendar_event_title:
+        string | null;
+      excuse_id:
+        string | null;
+      excuse_reason:
+        string | null;
+    }>(
+      stateResult,
     );
 
   const studentsWithState =
-    expectedRows.map(
+    stateRows.map(
       (student) => {
-        const record =
-          recordByStudent.get(
-            student.studentId,
-          ) ??
-          null;
+        const hasRecord =
+          Boolean(
+            student.attendance_record_id,
+          );
+
+        const attendanceExclusion =
+          !student.branch_id
+            ? "BRANCH_UNASSIGNED" as const
+            : student.calendar_event_id
+              ? "NON_INSTRUCTIONAL" as const
+              : !hasRecord &&
+                  student.excuse_id
+                ? "EXCUSED" as const
+                : null;
 
         const presenceStatus =
+          attendanceExclusion ??
           classifyTodayPresence({
             hasAttendanceRecord:
-              Boolean(record),
+              hasRecord,
             presenceState:
-              record?.presenceState ??
-              null,
+              student.presence_state,
             schoolClock:
               clock.clock,
             checkInClosesAt:
@@ -320,27 +662,90 @@ export async function getTodayAttendanceOperations(
           });
 
         return {
-          ...student,
+          studentId:
+            student.student_id,
+          casaStudentId:
+            student.casa_student_id,
+          admissionNumber:
+            student.admission_number,
+          firstName:
+            student.first_name,
+          middleName:
+            student.middle_name,
+          lastName:
+            student.last_name,
+          classArmId:
+            student.class_arm_id,
+          classArmName:
+            student.class_arm_name,
+          classLevelName:
+            student.class_level_name,
+          branchId:
+            student.branch_id,
+          branchName:
+            student.branch_name,
           presenceStatus,
           arrivalStatus:
-            record?.status ??
-            null,
+            student.punctuality_outcome ??
+            student.arrival_status,
+          arrivalMethod:
+            student.arrival_method,
+          officialStartTime:
+            student.official_start_time,
+          actualArrivalAt:
+            student.actual_arrival_at,
+          graceMinutesUsed:
+            student.grace_minutes_used,
+          minutesAfterOfficialStart:
+            student.minutes_after_official_start,
           recordedAt:
-            record?.recordedAt ??
-            null,
+            student.recorded_at,
           checkedOutAt:
-            record?.checkedOutAt ??
-            null,
+            student.checked_out_at,
           departureResult:
-            record?.departureResult ??
-            null,
+            student.departure_result,
+          attendanceExclusion,
+          calendarEvent:
+            student.calendar_event_id
+              ? {
+                  id:
+                    student.calendar_event_id,
+                  kind:
+                    student.calendar_event_kind,
+                  title:
+                    student.calendar_event_title,
+                }
+              : null,
+          excuse:
+            !hasRecord &&
+            student.excuse_id
+              ? {
+                  id:
+                    student.excuse_id,
+                  reason:
+                    student.excuse_reason,
+                }
+              : null,
         };
       },
     );
 
+  const eligible =
+    studentsWithState.filter(
+      (student) =>
+        student.attendanceExclusion ===
+        null,
+    );
+
   const summary = {
     expected:
-      studentsWithState.length,
+      eligible.length,
+    present:
+      eligible.filter(
+        (student) =>
+          student.arrivalStatus !==
+            null,
+      ).length,
     onCampus:
       studentsWithState.filter(
         (student) =>
@@ -354,34 +759,58 @@ export async function getTodayAttendanceOperations(
           "SIGNED_OUT",
       ).length,
     onTime:
-      studentsWithState.filter(
+      eligible.filter(
         (student) =>
           student.arrivalStatus ===
           "ON_TIME",
       ).length,
+    onTimeWithGrace:
+      eligible.filter(
+        (student) =>
+          student.arrivalStatus ===
+          "ON_TIME_WITH_GRACE",
+      ).length,
     late:
-      studentsWithState.filter(
+      eligible.filter(
         (student) =>
           student.arrivalStatus ===
           "LATE",
       ).length,
     manual:
-      studentsWithState.filter(
+      eligible.filter(
         (student) =>
           student.arrivalStatus ===
           "MANUAL",
       ).length,
     notArrived:
-      studentsWithState.filter(
+      eligible.filter(
         (student) =>
           student.presenceStatus ===
           "NOT_ARRIVED",
       ).length,
     absent:
-      studentsWithState.filter(
+      eligible.filter(
         (student) =>
           student.presenceStatus ===
           "ABSENT",
+      ).length,
+    excused:
+      studentsWithState.filter(
+        (student) =>
+          student.attendanceExclusion ===
+          "EXCUSED",
+      ).length,
+    nonInstructional:
+      studentsWithState.filter(
+        (student) =>
+          student.attendanceExclusion ===
+          "NON_INSTRUCTIONAL",
+      ).length,
+    branchUnassigned:
+      studentsWithState.filter(
+        (student) =>
+          student.attendanceExclusion ===
+          "BRANCH_UNASSIGNED",
       ).length,
   };
 
@@ -392,7 +821,7 @@ export async function getTodayAttendanceOperations(
 
   const requestedView:
     TodayAttendanceView =
-      isTodayView(
+      isTodayAttendanceView(
         input.view,
       )
         ? input.view
@@ -415,6 +844,8 @@ export async function getTodayAttendanceOperations(
               student.lastName,
               student.classLevelName,
               student.classArmName,
+              student.branchName ??
+                "",
             ]
               .join(" ")
               .toLowerCase();
@@ -430,11 +861,37 @@ export async function getTodayAttendanceOperations(
 
         if (
           requestedView ===
+          "PRESENT"
+        ) {
+          return (
+            student.arrivalStatus !==
+            null &&
+            student.attendanceExclusion ===
+              null
+          );
+        }
+
+        if (
+          requestedView ===
           "LATE"
         ) {
           return (
             student.arrivalStatus ===
             "LATE"
+          );
+        }
+
+        if (
+          requestedView ===
+            "EXCUSED" ||
+          requestedView ===
+            "NON_INSTRUCTIONAL" ||
+          requestedView ===
+            "BRANCH_UNASSIGNED"
+        ) {
+          return (
+            student.attendanceExclusion ===
+            requestedView
           );
         }
 
@@ -466,31 +923,24 @@ export async function getTodayAttendanceOperations(
     );
 
   const terminalRows =
-    await db
-      .select({
-        id:
-          attendanceTerminals.id,
-        name:
-          attendanceTerminals.name,
-        status:
-          attendanceTerminals.status,
-        lastSeenAt:
-          attendanceTerminals.lastSeenAt,
-      })
-      .from(
-        attendanceTerminals,
-      )
-      .where(
-        eq(
-          attendanceTerminals.schoolId,
-          input.access.school.id,
-        ),
-      )
-      .orderBy(
-        asc(
-          attendanceTerminals.name,
-        ),
-      );
+    rowsOf<{
+      id:
+        string;
+      name:
+        string;
+      status:
+        | "ACTIVE"
+        | "SUSPENDED"
+        | "REVOKED";
+      last_seen_at:
+        Date | string | null;
+      branch_id:
+        string | null;
+      branch_name:
+        string | null;
+    }>(
+      terminalResult,
+    );
 
   const fiveMinutesAgo =
     Date.now() -
@@ -507,259 +957,148 @@ export async function getTodayAttendanceOperations(
       ).length,
     seenRecently:
       terminalRows.filter(
+        (terminal) => {
+          if (
+            terminal.status !==
+              "ACTIVE" ||
+            !terminal.last_seen_at
+          ) {
+            return false;
+          }
+
+          return (
+            new Date(
+              terminal.last_seen_at,
+            ).getTime() >=
+            fiveMinutesAgo
+          );
+        },
+      ).length,
+    unassigned:
+      terminalRows.filter(
         (terminal) =>
-          terminal.status ===
-            "ACTIVE" &&
-          terminal.lastSeenAt &&
-          terminal.lastSeenAt.getTime() >=
-            fiveMinutesAgo,
+          !terminal.branch_id,
       ).length,
     terminals:
-      terminalRows,
+      terminalRows.map(
+        (terminal) => ({
+          id:
+            terminal.id,
+          name:
+            terminal.name,
+          status:
+            terminal.status,
+          lastSeenAt:
+            terminal.last_seen_at,
+          branchId:
+            terminal.branch_id,
+          branchName:
+            terminal.branch_name,
+        }),
+      ),
   };
 
-  let earlyDepartures:
-    Array<{
-      attemptId: string;
-      studentId: string;
-      casaStudentId: string;
-      studentName: string;
-      createdAt: Date;
-      authorized: boolean;
-      reason: string | null;
-    }> =
-      [];
+  const pendingRows =
+    rowsOf<{
+      attempt_id:
+        string;
+      student_id:
+        string;
+      casa_student_id:
+        string;
+      first_name:
+        string;
+      middle_name:
+        string | null;
+      last_name:
+        string;
+      created_at:
+        Date | string;
+      reason_code:
+        string | null;
+      departure_result:
+        string;
+      branch_id:
+        string | null;
+    }>(
+      pending,
+    );
 
-  if (session) {
-    const pending =
-      await db
-        .select({
+  const authorizationByAttempt =
+    new Map(
+      rowsOf<{
+        attempt_id:
+          string;
+        reason:
+          string | null;
+      }>(
+        authorizationRows,
+      ).map(
+        (authorization) => [
+          authorization.attempt_id,
+          authorization,
+        ],
+      ),
+    );
+
+  const earlyDepartures =
+    pendingRows.map(
+      (attempt) => {
+        const authorization =
+          authorizationByAttempt.get(
+            attempt.attempt_id,
+          ) ??
+          null;
+
+        return {
           attemptId:
-            attendanceVerificationAttempts.id,
+            attempt.attempt_id,
           studentId:
-            students.id,
+            attempt.student_id,
           casaStudentId:
-            students.casaStudentId,
-          firstName:
-            students.firstName,
-          middleName:
-            students.middleName,
-          lastName:
-            students.lastName,
+            attempt.casa_student_id,
+          studentName:
+            [
+              attempt.first_name,
+              attempt.middle_name,
+              attempt.last_name,
+            ]
+              .filter(Boolean)
+              .join(" "),
           createdAt:
-            attendanceVerificationAttempts.createdAt,
-          reasonCode:
-            attendanceVerificationAttempts.reasonCode,
-          departureResult:
-            attendanceVerificationAttempts.departureResult,
-        })
-        .from(
-          attendanceVerificationAttempts,
-        )
-        .innerJoin(
-          students,
-          and(
-            eq(
-              students.schoolId,
-              attendanceVerificationAttempts.schoolId,
+            attempt.created_at,
+          authorized:
+            Boolean(
+              authorization,
             ),
-            eq(
-              students.id,
-              attendanceVerificationAttempts.studentId,
-            ),
-          ),
-        )
-        .where(
-          and(
-            eq(
-              attendanceVerificationAttempts.schoolId,
-              input.access.school.id,
-            ),
-            eq(
-              attendanceVerificationAttempts.sessionId,
-              session.id,
-            ),
-            eq(
-              attendanceVerificationAttempts.operation,
-              "CHECK_OUT",
-            ),
-            eq(
-              attendanceVerificationAttempts.outcome,
-              "PENDING",
-            ),
-          ),
-        )
-        .orderBy(
-          desc(
-            attendanceVerificationAttempts.createdAt,
-          ),
-        );
-
-    const authorizationRows =
-      await db
-        .select({
-          attemptId:
-            attendanceEarlyDepartureAuthorizations.attemptId,
           reason:
-            attendanceEarlyDepartureAuthorizations.reason,
-        })
-        .from(
-          attendanceEarlyDepartureAuthorizations,
-        )
-        .where(
-          and(
-            eq(
-              attendanceEarlyDepartureAuthorizations.schoolId,
-              input.access.school.id,
-            ),
-            eq(
-              attendanceEarlyDepartureAuthorizations.sessionId,
-              session.id,
-            ),
-          ),
-        );
+            authorization?.reason ??
+            null,
+          branchId:
+            attempt.branch_id,
+        };
+      },
+    );
 
-    const authorizationByAttempt =
-      new Map(
-        authorizationRows.map(
-          (authorization) => [
-            authorization.attemptId,
-            authorization,
-          ],
-        ),
-      );
-
-    earlyDepartures =
-      pending
-        .filter(
-          (attempt) =>
-            attempt.reasonCode ===
-              "EARLY_DEPARTURE_AUTH_REQUIRED" ||
-            attempt.departureResult ===
-              "EARLY",
-        )
-        .map(
-          (attempt) => {
-            const authorization =
-              authorizationByAttempt.get(
-                attempt.attemptId,
-              ) ??
-              null;
-
-            return {
-              attemptId:
-                attempt.attemptId,
-              studentId:
-                attempt.studentId,
-              casaStudentId:
-                attempt.casaStudentId,
-              studentName:
-                [
-                  attempt.firstName,
-                  attempt.middleName,
-                  attempt.lastName,
-                ]
-                  .filter(
-                    Boolean,
-                  )
-                  .join(" "),
-              createdAt:
-                attempt.createdAt,
-              authorized:
-                Boolean(
-                  authorization,
-                ),
-              reason:
-                authorization?.reason ??
-                null,
-            };
-          },
-        );
-  }
-
-  let missingSignOutNotifications =
-    0;
-
-  if (session) {
-    const checkedOutEvents =
-      await db
-        .select({
-          id:
-            studentPresenceEvents.id,
-        })
-        .from(
-          studentPresenceEvents,
-        )
-        .where(
-          and(
-            eq(
-              studentPresenceEvents.schoolId,
-              input.access.school.id,
-            ),
-            eq(
-              studentPresenceEvents.sessionId,
-              session.id,
-            ),
-            eq(
-              studentPresenceEvents.eventType,
-              "CHECKED_OUT",
-            ),
-          ),
-        );
-
-    if (
-      checkedOutEvents.length >
-      0
-    ) {
-      const eventIds =
-        checkedOutEvents.map(
-          (event) => event.id,
-        );
-
-      const outboxRows =
-        await db
-          .select({
-            presenceEventId:
-              schoolNotificationOutbox.presenceEventId,
-          })
-          .from(
-            schoolNotificationOutbox,
-          )
-          .where(
-            and(
-              eq(
-                schoolNotificationOutbox.schoolId,
-                input.access.school.id,
-              ),
-              inArray(
-                schoolNotificationOutbox.presenceEventId,
-                eventIds,
-              ),
-            ),
-          );
-
-      const notified =
-        new Set(
-          outboxRows.map(
-            (row) =>
-              row.presenceEventId,
-          ),
-        );
-
-      missingSignOutNotifications =
-        eventIds.filter(
-          (id) =>
-            !notified.has(
-              id,
-            ),
-        ).length;
-    }
-  }
+  const missingSignOutNotifications =
+    Number(
+      rowsOf<{
+        missing_count:
+          number;
+      }>(
+        exceptionResult,
+      )[0]
+        ?.missing_count ??
+        0,
+    );
 
   return {
     clock,
     session,
     policyDay,
+    branchId:
+      input.branchId ??
+      null,
     summary,
     page: {
       number:
@@ -772,7 +1111,7 @@ export async function getTodayAttendanceOperations(
           1,
           Math.ceil(
             total /
-              input.pageSize,
+            input.pageSize,
           ),
         ),
       view:

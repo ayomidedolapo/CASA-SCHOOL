@@ -45,7 +45,11 @@ export const studentBiometricProfileEvents =
       ),
       actorMembershipId: uuid(
         "actor_membership_id",
-      ).notNull(),
+      ),
+      actorInternalMembershipId:
+        uuid(
+          "actor_internal_membership_id",
+        ),
       eventType:
         studentBiometricProfileEventTypeEnum(
           "event_type",
@@ -91,6 +95,17 @@ export const studentBiometricProfileEvents =
         table.studentId,
         table.createdAt,
       ),
+      index(
+        "student_biometric_profile_events_internal_actor_idx",
+      )
+        .on(
+          table.schoolId,
+          table.actorInternalMembershipId,
+          table.createdAt,
+        )
+        .where(
+          sql`${table.actorInternalMembershipId} is not null`,
+        ),
       foreignKey({
         columns: [
           table.schoolId,
@@ -135,6 +150,20 @@ export const studentBiometricProfileEvents =
         ],
         name: "student_biometric_profile_events_school_actor_fk",
       }),
+      check(
+        "student_biometric_profile_events_actor_scope_check",
+        sql`(
+          (
+            ${table.actorMembershipId} is not null
+            and ${table.actorInternalMembershipId} is null
+          )
+          or
+          (
+            ${table.actorMembershipId} is null
+            and ${table.actorInternalMembershipId} is not null
+          )
+        )`,
+      ),
       check(
         "student_biometric_profile_events_provider_not_blank_check",
         sql`length(trim(${table.provider})) > 0`,

@@ -105,90 +105,95 @@ export async function GET(
             access.school.id,
           );
 
-    const rows = await db
-      .select({
-        id: students.id,
-        casaStudentId:
-          students.casaStudentId,
-        admissionNumber:
-          students.admissionNumber,
-        firstName:
-          students.firstName,
-        middleName:
-          students.middleName,
-        lastName:
-          students.lastName,
-        preferredName:
-          students.preferredName,
-        dateOfBirth:
-          students.dateOfBirth,
-        sex: students.sex,
-        status: students.status,
-        admissionDate:
-          students.admissionDate,
-        classArmName:
-          classArms.name,
-        classLevelName:
-          classLevels.name,
-      })
-      .from(students)
-      .leftJoin(
-        studentEnrollments,
-        and(
-          eq(
-            studentEnrollments.schoolId,
-            students.schoolId,
-          ),
-          eq(
-            studentEnrollments.studentId,
-            students.id,
-          ),
-          eq(
-            studentEnrollments.status,
-            "ACTIVE",
-          ),
-        ),
-      )
-      .leftJoin(
-        classArms,
-        and(
-          eq(
-            classArms.schoolId,
-            students.schoolId,
-          ),
-          eq(
-            classArms.id,
-            studentEnrollments.classArmId,
-          ),
-        ),
-      )
-      .leftJoin(
-        classLevels,
-        and(
-          eq(
-            classLevels.schoolId,
-            students.schoolId,
-          ),
-          eq(
-            classLevels.id,
-            classArms.classLevelId,
-          ),
-        ),
-      )
-      .where(whereCondition)
-      .orderBy(
-        asc(students.lastName),
-        asc(students.firstName),
-      )
-      .limit(pageSize)
-      .offset(offset);
-
-    const totals = await db
-      .select({
-        count: count(),
-      })
-      .from(students)
-      .where(whereCondition);
+        const [
+      rows,
+      totals,
+    ] =
+      await Promise.all([
+      db
+              .select({
+                id: students.id,
+                casaStudentId:
+                  students.casaStudentId,
+                admissionNumber:
+                  students.admissionNumber,
+                firstName:
+                  students.firstName,
+                middleName:
+                  students.middleName,
+                lastName:
+                  students.lastName,
+                preferredName:
+                  students.preferredName,
+                dateOfBirth:
+                  students.dateOfBirth,
+                sex: students.sex,
+                status: students.status,
+                admissionDate:
+                  students.admissionDate,
+                classArmName:
+                  classArms.name,
+                classLevelName:
+                  classLevels.name,
+              })
+              .from(students)
+              .leftJoin(
+                studentEnrollments,
+                and(
+                  eq(
+                    studentEnrollments.schoolId,
+                    students.schoolId,
+                  ),
+                  eq(
+                    studentEnrollments.studentId,
+                    students.id,
+                  ),
+                  eq(
+                    studentEnrollments.status,
+                    "ACTIVE",
+                  ),
+                ),
+              )
+              .leftJoin(
+                classArms,
+                and(
+                  eq(
+                    classArms.schoolId,
+                    students.schoolId,
+                  ),
+                  eq(
+                    classArms.id,
+                    studentEnrollments.classArmId,
+                  ),
+                ),
+              )
+              .leftJoin(
+                classLevels,
+                and(
+                  eq(
+                    classLevels.schoolId,
+                    students.schoolId,
+                  ),
+                  eq(
+                    classLevels.id,
+                    classArms.classLevelId,
+                  ),
+                ),
+              )
+              .where(whereCondition)
+              .orderBy(
+                asc(students.lastName),
+                asc(students.firstName),
+              )
+              .limit(pageSize)
+              .offset(offset),
+      db
+              .select({
+                count: count(),
+              })
+              .from(students)
+              .where(whereCondition),
+    ]);
 
     const total =
       Number(totals[0]?.count ?? 0);

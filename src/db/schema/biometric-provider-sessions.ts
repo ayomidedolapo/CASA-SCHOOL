@@ -52,6 +52,10 @@ export const biometricLivenessSessions =
         uuid(
           "initiated_by_membership_id",
         ),
+      initiatedByInternalMembershipId:
+        uuid(
+          "initiated_by_internal_membership_id",
+        ),
       purpose:
         biometricLivenessPurposeEnum(
           "purpose",
@@ -170,6 +174,17 @@ export const biometricLivenessSessions =
         table.status,
         table.expiresAt,
       ),
+      index(
+        "biometric_liveness_sessions_internal_actor_idx",
+      )
+        .on(
+          table.schoolId,
+          table.initiatedByInternalMembershipId,
+          table.createdAt,
+        )
+        .where(
+          sql`${table.initiatedByInternalMembershipId} is not null`,
+        ),
       foreignKey({
         columns: [
           table.schoolId,
@@ -233,7 +248,17 @@ export const biometricLivenessSessions =
             ${table.purpose} = 'ENROLLMENT'
             and ${table.attemptId} is null
             and ${table.terminalId} is null
-            and ${table.initiatedByMembershipId} is not null
+            and (
+              (
+                ${table.initiatedByMembershipId} is not null
+                and ${table.initiatedByInternalMembershipId} is null
+              )
+              or
+              (
+                ${table.initiatedByMembershipId} is null
+                and ${table.initiatedByInternalMembershipId} is not null
+              )
+            )
             and ${table.authorizationAction} in (
               'BIOMETRIC_ENROLL',
               'BIOMETRIC_REENROLL'
@@ -245,6 +270,7 @@ export const biometricLivenessSessions =
             and ${table.attemptId} is not null
             and ${table.terminalId} is not null
             and ${table.initiatedByMembershipId} is null
+            and ${table.initiatedByInternalMembershipId} is null
             and ${table.authorizationAction} is null
           )
         )`,

@@ -138,6 +138,8 @@ export async function GET(
             studentBiometricProfileEvents.provider,
           actorMembershipId:
             studentBiometricProfileEvents.actorMembershipId,
+          actorInternalMembershipId:
+            studentBiometricProfileEvents.actorInternalMembershipId,
           createdAt:
             studentBiometricProfileEvents.createdAt,
         })

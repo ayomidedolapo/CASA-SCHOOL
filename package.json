@@ -22,12 +22,16 @@
     "aws-biometric:selftest": "tsx scripts/aws-rekognition-selftest.ts",
     "scanner:selftest": "tsx scripts/scanner-pwa-selftest.ts",
     "attendance-operations:selftest": "tsx scripts/attendance-operations-selftest.ts",
-    "technician-operations:selftest": "tsx scripts/technician-operations-selftest.ts"
+    "technician-operations:selftest": "tsx scripts/technician-operations-selftest.ts",
+    "card-production:selftest": "tsx scripts/card-production-selftest.ts",
+    "attendance-readiness:selftest": "tsx scripts/attendance-readiness-selftest.ts",
+    "attendance-policy-result-shape:selftest": "tsx scripts/attendance-policy-result-shape-selftest.ts"
   },
   "dependencies": {
     "@aws-amplify/ui-react": "^6.15.6",
     "@aws-amplify/ui-react-liveness": "^3.6.8",
     "@aws-sdk/client-rekognition": "^3.1120.0",
+    "@aws-sdk/client-s3": "^3.1121.0",
     "@aws-sdk/client-sts": "^3.1111.0",
     "@neondatabase/serverless": "^1.1.0",
     "@node-rs/argon2": "^2.1.0",
@@ -35,11 +39,13 @@
     "@simplewebauthn/server": "^13.3.3",
     "aws-amplify": "^6.20.0",
     "drizzle-orm": "^1.0.0-rc.4",
+    "exceljs": "^4.4.0",
     "next": "16.3.3",
     "qr-scanner": "^1.4.2",
     "qrcode": "^1.5.4",
     "react": "19.2.8",
     "react-dom": "19.2.8",
+    "sharp": "^0.35.4",
     "zod": "^4.4.3"
   },
   "devDependencies": {

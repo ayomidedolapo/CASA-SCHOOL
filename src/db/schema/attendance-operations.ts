@@ -11,6 +11,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 import {
+  attendancePolicies,
   attendanceSessions,
   attendanceVerificationAttempts,
   studentAttendanceRecords,
@@ -81,12 +82,13 @@ export const attendanceSessionEvents =
         table.schoolId,
         table.id,
       ),
-      unique(
-        "attendance_session_events_session_type_unique",
+      index(
+        "attendance_session_events_session_type_idx",
       ).on(
         table.schoolId,
         table.sessionId,
         table.eventType,
+        table.occurredAt,
       ),
       index(
         "attendance_session_events_session_occurred_idx",
@@ -288,3 +290,144 @@ export const attendanceEarlyDepartureAuthorizations =
       ),
     ],
   );
+
+export const attendanceSessionPolicyRebinds =
+  pgTable(
+    "attendance_session_policy_rebinds",
+    {
+      id: uuid("id")
+        .defaultRandom()
+        .primaryKey(),
+      schoolId: uuid(
+        "school_id",
+      )
+        .notNull()
+        .references(
+          () => schools.id,
+        ),
+      sessionId: uuid(
+        "session_id",
+      ).notNull(),
+      fromPolicyId: uuid(
+        "from_policy_id",
+      ).notNull(),
+      toPolicyId: uuid(
+        "to_policy_id",
+      ).notNull(),
+      actorMembershipId: uuid(
+        "actor_membership_id",
+      ).notNull(),
+      passkeyGrantId: uuid(
+        "passkey_grant_id",
+      ).notNull(),
+      reason: varchar(
+        "reason",
+        {
+          length: 240,
+        },
+      ).notNull(),
+      reboundAt: timestamp(
+        "rebound_at",
+        {
+          withTimezone: true,
+        },
+      )
+        .defaultNow()
+        .notNull(),
+      createdAt: timestamp(
+        "created_at",
+        {
+          withTimezone: true,
+        },
+      )
+        .defaultNow()
+        .notNull(),
+    },
+    (table) => [
+      unique(
+        "attendance_session_policy_rebinds_school_id_id_unique",
+      ).on(
+        table.schoolId,
+        table.id,
+      ),
+      unique(
+        "attendance_session_policy_rebinds_passkey_grant_unique",
+      ).on(
+        table.passkeyGrantId,
+      ),
+      index(
+        "attendance_session_policy_rebinds_session_rebound_idx",
+      ).on(
+        table.schoolId,
+        table.sessionId,
+        table.reboundAt,
+      ),
+      foreignKey({
+        columns: [
+          table.schoolId,
+          table.sessionId,
+        ],
+        foreignColumns: [
+          attendanceSessions.schoolId,
+          attendanceSessions.id,
+        ],
+        name:
+          "attendance_session_policy_rebinds_school_session_fk",
+      }),
+      foreignKey({
+        columns: [
+          table.schoolId,
+          table.fromPolicyId,
+        ],
+        foreignColumns: [
+          attendancePolicies.schoolId,
+          attendancePolicies.id,
+        ],
+        name:
+          "attendance_session_policy_rebinds_school_from_policy_fk",
+      }),
+      foreignKey({
+        columns: [
+          table.schoolId,
+          table.toPolicyId,
+        ],
+        foreignColumns: [
+          attendancePolicies.schoolId,
+          attendancePolicies.id,
+        ],
+        name:
+          "attendance_session_policy_rebinds_school_to_policy_fk",
+      }),
+      foreignKey({
+        columns: [
+          table.schoolId,
+          table.actorMembershipId,
+        ],
+        foreignColumns: [
+          schoolMemberships.schoolId,
+          schoolMemberships.id,
+        ],
+        name:
+          "attendance_session_policy_rebinds_school_actor_fk",
+      }),
+      foreignKey({
+        columns: [
+          table.passkeyGrantId,
+        ],
+        foreignColumns: [
+          authPasskeyStepUpGrants.id,
+        ],
+        name:
+          "attendance_session_policy_rebinds_passkey_grant_fk",
+      }),
+      check(
+        "attendance_session_policy_rebinds_reason_not_blank_check",
+        sql`length(trim(${table.reason})) > 0`,
+      ),
+      check(
+        "attendance_session_policy_rebinds_policy_changed_check",
+        sql`${table.fromPolicyId} <> ${table.toPolicyId}`,
+      ),
+    ],
+  );
+

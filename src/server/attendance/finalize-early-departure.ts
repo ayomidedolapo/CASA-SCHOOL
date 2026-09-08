@@ -23,6 +23,10 @@ import type {
   TerminalAccess,
 } from "./terminal-auth";
 
+import {
+  getAttendanceScopeRejection,
+  resolveAttendanceOperationalScope,
+} from "./operational-scope";
 export async function finalizeAuthorizedEarlyDeparture(
   access:
     TerminalAccess,
@@ -232,7 +236,36 @@ export async function finalizeAuthorizedEarlyDeparture(
     };
   }
 
-  const now =
+    const operationalScope =
+    await resolveAttendanceOperationalScope({
+      schoolId:
+        access.school.id,
+      sessionId:
+        attempt.sessionId,
+      terminalId:
+        attempt.terminalId,
+      studentId:
+        attempt.studentId,
+    });
+
+  const scopeRejection =
+    getAttendanceScopeRejection(
+      operationalScope,
+      "CHECK_OUT",
+    );
+
+  if (scopeRejection) {
+    return {
+      ok: false,
+      status: 409,
+      code:
+        scopeRejection.code,
+      message:
+        scopeRejection.message,
+    };
+  }
+
+const now =
     new Date().toISOString();
 
   await db.execute(sql`

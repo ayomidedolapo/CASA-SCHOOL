@@ -35,6 +35,10 @@ import {
   getActiveTerminalSession,
 } from "@/server/attendance/terminal-session";
 import {
+  getAttendanceScopeRejection,
+  resolveAttendanceOperationalScope,
+} from "@/server/attendance/operational-scope";
+import {
   terminalScanSchema,
 } from "@/server/attendance/validation";
 
@@ -427,7 +431,39 @@ export async function POST(
       reasonCode =
         "STUDENT_NOT_ACTIVE";
     }
+  }  if (
+    card &&
+    outcome === "PENDING"
+  ) {
+    const operationalScope =
+      await resolveAttendanceOperationalScope({
+        schoolId:
+          access.school.id,
+        sessionId:
+          active.session.id,
+        terminalId:
+          access.terminal.id,
+        studentId:
+          card.studentId,
+      });
+
+    const scopeRejection =
+      getAttendanceScopeRejection(
+        operationalScope,
+        parsed.data.operation,
+      );
+
+    if (scopeRejection) {
+      outcome =
+        "REJECTED";
+      reasonCode =
+        scopeRejection.code;
+      classification =
+        scopeRejection.classification;
+    }
   }
+
+
 
   if (
     card &&

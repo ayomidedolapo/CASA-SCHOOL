@@ -44,7 +44,7 @@ const FaceLivenessDetectorCore =
             styles.notice
           }
         >
-          Preparing face cameraâ€¦
+          Preparing face camera...
         </div>
       ),
     },
@@ -1255,15 +1255,20 @@ export default function TechnicianClient(
           styles.top
         }
       >
-        <h1
-          className={
-            styles.title
-          }
-        >
-          IDENTITY
-          <br />
-          OPERATIONS
-        </h1>
+        <div>
+          <p className={styles.kicker}>
+            CASA / Technical
+          </p>
+          <h1
+            className={
+              styles.title
+            }
+          >
+            IDENTITY
+            <br />
+            OPERATIONS
+          </h1>
+        </div>
 
         <div
           className={
@@ -1300,7 +1305,7 @@ export default function TechnicianClient(
         <Link
           href="/scanner"
         >
-          Scanner PWA
+          Attendance terminal
         </Link>
       </nav>
 
@@ -1452,7 +1457,7 @@ export default function TechnicianClient(
                       student.casaStudentId
                     }
                     {student.admissionNumber
-                      ? ` Â· ${student.admissionNumber}`
+                      ? ` · ${student.admissionNumber}`
                       : ""}
                     <br />
                     {student.classLevelName ??
@@ -1553,7 +1558,7 @@ export default function TechnicianClient(
                   styles.caption
                 }
               >
-                Card identifies Â· face verifies
+                Card identifies · face verifies
               </span>
             </div>
 
@@ -1590,9 +1595,9 @@ export default function TechnicianClient(
                       selected.casaStudentId
                     }
                     {selected.admissionNumber
-                      ? ` Â· ${selected.admissionNumber}`
+                      ? ` · ${selected.admissionNumber}`
                       : ""}
-                    {" Â· "}
+                    {" · "}
                     {selected.classLevelName ??
                       "No class"}
                     {selected.classArmName
@@ -1700,7 +1705,7 @@ export default function TechnicianClient(
                     styles.small
                   }
                 >
-                  Card issuance remains available through the existing Registry workflow. This workbench does not expose the raw one-time student-card credential; the central personalized card-production pipeline is a separate next backend phase.
+                  Card issue and reissue remain available through Registry and the central personalized card-production pipeline. This workbench never exposes the raw one-time student-card credential.
                 </p>
 
                 {liveness &&
@@ -1937,11 +1942,11 @@ export default function TechnicianClient(
                           {
                             terminal.terminalCode
                           }
-                          {" Â· "}
+                          {" · "}
                           {
                             terminal.status
                           }
-                          {" Â· credential v"}
+                          {" · credential v"}
                           {
                             terminal.credentialVersion
                           }

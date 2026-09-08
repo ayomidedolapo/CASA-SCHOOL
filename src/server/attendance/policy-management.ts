@@ -24,6 +24,66 @@ export interface AttendancePolicyDayInput {
   checkOutClosesAt: string;
 }
 
+export function firstAttendanceDbRow<T>(
+  result: unknown,
+): T | null {
+  if (Array.isArray(result)) {
+    return (
+      (result[0] as T | undefined) ??
+      null
+    );
+  }
+
+  if (
+    result &&
+    typeof result === "object" &&
+    "rows" in result
+  ) {
+    const rows =
+      (
+        result as {
+          rows?: unknown;
+        }
+      ).rows;
+
+    if (Array.isArray(rows)) {
+      return (
+        (rows[0] as T | undefined) ??
+        null
+      );
+    }
+  }
+
+  return null;
+}
+
+export function attendanceDbRows<T>(
+  result: unknown,
+): T[] {
+  if (Array.isArray(result)) {
+    return result as T[];
+  }
+
+  if (
+    result &&
+    typeof result === "object" &&
+    "rows" in result
+  ) {
+    const rows =
+      (
+        result as {
+          rows?: unknown;
+        }
+      ).rows;
+
+    if (Array.isArray(rows)) {
+      return rows as T[];
+    }
+  }
+
+  return [];
+}
+
 export async function listAttendancePolicies(
   schoolId: string,
 ) {
@@ -98,9 +158,48 @@ export async function listAttendancePolicies(
         ),
     ]);
 
+  const graceRows =
+    attendanceDbRows<{
+      id: string;
+      school_bus_grace_minutes:
+        number;
+      independent_grace_minutes:
+        number;
+    }>(
+      await db.execute(sql`
+        select
+          id,
+          school_bus_grace_minutes,
+          independent_grace_minutes
+        from attendance_policies
+        where school_id =
+          ${schoolId}::uuid
+      `),
+    );
+
+  const graceByPolicy =
+    new Map(
+      graceRows.map(
+        (row) => [
+          row.id,
+          row,
+        ] as const,
+      ),
+    );
+
   return policies.map(
     (policy) => ({
       ...policy,
+      schoolBusGraceMinutes:
+        graceByPolicy.get(
+          policy.id,
+        )?.school_bus_grace_minutes ??
+        0,
+      independentGraceMinutes:
+        graceByPolicy.get(
+          policy.id,
+        )?.independent_grace_minutes ??
+        0,
       days:
         days.filter(
           (day) =>
@@ -121,6 +220,10 @@ export async function createAttendancePolicyVersion(
       string | null;
     isDefault:
       boolean;
+    schoolBusGraceMinutes:
+      number;
+    independentGraceMinutes:
+      number;
     days:
       AttendancePolicyDayInput[];
   },
@@ -172,27 +275,47 @@ export async function createAttendancePolicyVersion(
           name,
           is_default,
           is_active,
+          school_bus_grace_minutes,
+          independent_grace_minutes,
           valid_from,
           valid_to,
           created_at,
           updated_at
         )
-        values (
-          ${input.access.school.id}::uuid,
+        select
+${input.access.school.id}::uuid,
           ${input.name},
           ${input.isDefault},
           true,
+          ${input.schoolBusGraceMinutes},
+          ${input.independentGraceMinutes},
           ${input.validFrom}::date,
           ${input.validTo}::date,
           ${now}::timestamptz,
           ${now}::timestamptz
-        )
+
+        from (
+
+          select
+
+            count(*)::int
+
+              as cleared_count
+
+          from
+
+            cleared_default
+
+        ) as default_clear_barrier
+
         returning
           id,
           school_id,
           name,
           is_default,
           is_active,
+          school_bus_grace_minutes,
+          independent_grace_minutes,
           valid_from,
           valid_to
       ),
@@ -238,6 +361,8 @@ export async function createAttendancePolicyVersion(
         inserted_policy.name,
         inserted_policy.is_default,
         inserted_policy.is_active,
+        inserted_policy.school_bus_grace_minutes,
+        inserted_policy.independent_grace_minutes,
         inserted_policy.valid_from,
         inserted_policy.valid_to,
         (
@@ -248,9 +373,22 @@ export async function createAttendancePolicyVersion(
     `);
 
   const row =
-    Array.isArray(result)
-      ? result[0]
-      : null;
+    firstAttendanceDbRow<{
+      id: string;
+      name: string;
+      is_default: boolean;
+      is_active: boolean;
+      school_bus_grace_minutes:
+        number;
+      independent_grace_minutes:
+        number;
+      valid_from: string | Date;
+      valid_to:
+        string | Date | null;
+      day_count: number;
+    }>(
+      result,
+    );
 
   if (!row) {
     throw new Error(

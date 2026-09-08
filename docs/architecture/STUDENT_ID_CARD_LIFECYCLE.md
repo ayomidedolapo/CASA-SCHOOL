@@ -1,4 +1,4 @@
-# CASA School Ã¢â‚¬â€ Student ID Card Lifecycle
+# CASA School ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â Student ID Card Lifecycle
 
 ## Core principle
 
@@ -92,3 +92,14 @@ Those features will consume the card identity foundation built here.
 The Technician workbench reads card status for identity-readiness decisions but does not expose the raw one-time student-card QR credential.
 
 Legacy card lifecycle remains in Registry until the central personalized card-production engine replaces client-visible raw issuance with server-memory QR rendering and final CASA-controlled artifacts.
+## Phase 3K production transition
+
+The Phase 2C raw credential response is retired for all new issuance/reissue.
+
+Existing issued cards remain valid.
+
+New cards require CARD_ISSUE or CARD_REISSUE Passkey step-up and are rendered server-side before the database accepts the new ACTIVE credential hash.
+
+The Registry receives production metadata and a public-by-link finished-card URL, never the raw QR token/payload.
+
+See `CENTRAL_CARD_PRODUCTION_ENGINE.md`.
