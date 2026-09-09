@@ -8,11 +8,11 @@ export default function manifest():
     id:
       "/scanner",
     name:
-      "CASA School Scanner",
+      "CASA Scanner",
     short_name:
       "CASA Scanner",
     description:
-      "CASA School identity-verified attendance scanner.",
+      "CASA identity-verified attendance scanner.",
     start_url:
       "/scanner",
     scope:

@@ -14,6 +14,8 @@ import {
   academicSessions,
   classArms,
   classLevels,
+  schoolBranchClassArms,
+  schoolBranches,
 } from "@/db/schema";
 import {
   requireCasaInternalSchoolAccess,
@@ -51,6 +53,7 @@ export async function GET(
 
     const [
       sessions,
+      branches,
       arms,
     ] =
       await db.batch([
@@ -93,6 +96,37 @@ export async function GET(
         db
           .select({
             id:
+              schoolBranches.id,
+            name:
+              schoolBranches.name,
+            code:
+              schoolBranches.code,
+            isHeadquarters:
+              schoolBranches.isHeadquarters,
+          })
+          .from(
+            schoolBranches,
+          )
+          .where(
+            and(
+              eq(
+                schoolBranches.schoolId,
+                access.school.id,
+              ),
+              eq(
+                schoolBranches.status,
+                "ACTIVE",
+              ),
+            ),
+          )
+          .orderBy(
+            asc(
+              schoolBranches.name,
+            ),
+          ),
+        db
+          .select({
+            id:
               classArms.id,
             name:
               classArms.name,
@@ -102,9 +136,39 @@ export async function GET(
               classLevels.name,
             sortOrder:
               classLevels.sortOrder,
+            branchId:
+              schoolBranches.id,
+            branchName:
+              schoolBranches.name,
           })
           .from(
             classArms,
+          )
+          .innerJoin(
+            schoolBranchClassArms,
+            and(
+              eq(
+                schoolBranchClassArms.schoolId,
+                classArms.schoolId,
+              ),
+              eq(
+                schoolBranchClassArms.classArmId,
+                classArms.id,
+              ),
+            ),
+          )
+          .innerJoin(
+            schoolBranches,
+            and(
+              eq(
+                schoolBranches.schoolId,
+                schoolBranchClassArms.schoolId,
+              ),
+              eq(
+                schoolBranches.id,
+                schoolBranchClassArms.branchId,
+              ),
+            ),
           )
           .innerJoin(
             classLevels,
@@ -133,6 +197,10 @@ export async function GET(
                 classLevels.isActive,
                 true,
               ),
+              eq(
+                schoolBranches.status,
+                "ACTIVE",
+              ),
             ),
           )
           .orderBy(
@@ -151,6 +219,7 @@ export async function GET(
     return NextResponse.json(
       {
         sessions,
+        branches,
         classArms:
           arms,
       },

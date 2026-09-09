@@ -139,6 +139,66 @@ async function terminalFetch(
   );
 }
 
+async function terminalFetchWithRetry(
+  token: string,
+  input:
+    string,
+  init:
+    RequestInit = {},
+  maxAttempts =
+    3,
+): Promise<Response> {
+  let lastError:
+    unknown =
+      null;
+
+  for (
+    let attempt = 1;
+    attempt <= maxAttempts;
+    attempt++
+  ) {
+    try {
+      const response =
+        await terminalFetch(
+          token,
+          input,
+          init,
+        );
+
+      if (
+        ![500,502,503,504].includes(
+          response.status,
+        ) ||
+        attempt ===
+          maxAttempts
+      ) {
+        return response;
+      }
+    } catch (error) {
+      lastError =
+        error;
+      if (attempt === maxAttempts) {
+        throw error;
+      }
+    }
+
+    await new Promise<void>((resolve) => {
+      window.setTimeout(
+        resolve,
+        attempt * 500,
+      );
+    });
+  }
+
+  throw (
+    lastError instanceof Error
+      ? lastError
+      : new Error(
+          "CASA scanner request retry exhausted.",
+        )
+  );
+}
+
 type ScannerWakeLockSentinel = {
   released:
     boolean;
@@ -161,255 +221,9 @@ type ScannerNavigatorWithWakeLock =
       boolean;
   };
 
-type ScannerBeforeInstallPromptEvent =
-  Event & {
-    prompt:
-      () =>
-        Promise<void>;
-    userChoice:
-      Promise<{
-        outcome:
-          "accepted" |
-          "dismissed";
-        platform:
-          string;
-      }>;
-  };
-
 type CameraFacing =
   | "environment"
   | "user";
-
-function ScannerInstallControl() {
-  const [
-    installPrompt,
-    setInstallPrompt,
-  ] =
-    useState<
-      ScannerBeforeInstallPromptEvent | null
-    >(null);
-
-  const [
-    installed,
-    setInstalled,
-  ] =
-    useState(false);
-
-  useEffect(
-    () => {
-      const standaloneMedia =
-        window.matchMedia(
-          "(display-mode: standalone)",
-        );
-
-      const syncInstalledState =
-        () => {
-          setInstalled(
-            standaloneMedia.matches ||
-              (
-                navigator as
-                  ScannerNavigatorWithWakeLock
-              ).standalone ===
-                true,
-          );
-        };
-
-      const initialInstalledStateFrame =
-        window.requestAnimationFrame(
-          syncInstalledState,
-        );
-
-      standaloneMedia.addEventListener(
-        "change",
-        syncInstalledState,
-      );
-
-      const capturePrompt =
-        (
-          event:
-            Event,
-        ) => {
-          event.preventDefault();
-
-          setInstallPrompt(
-            event as
-              ScannerBeforeInstallPromptEvent,
-          );
-        };
-
-      const markInstalled =
-        () => {
-          setInstalled(
-            true,
-          );
-          setInstallPrompt(
-            null,
-          );
-        };
-
-      window.addEventListener(
-        "beforeinstallprompt",
-        capturePrompt,
-      );
-
-      window.addEventListener(
-        "appinstalled",
-        markInstalled,
-      );
-
-      return () => {
-        window.cancelAnimationFrame(
-          initialInstalledStateFrame,
-        );
-
-        standaloneMedia.removeEventListener(
-          "change",
-          syncInstalledState,
-        );
-
-        window.removeEventListener(
-          "beforeinstallprompt",
-          capturePrompt,
-        );
-
-        window.removeEventListener(
-          "appinstalled",
-          markInstalled,
-        );
-      };
-    },
-    [],
-  );
-
-  const install =
-    useCallback(
-      async () => {
-        if (!installPrompt) {
-          return;
-        }
-
-        await installPrompt.prompt();
-        await installPrompt.userChoice;
-        setInstallPrompt(null);
-      },
-      [installPrompt],
-    );
-
-  if (installed) {
-    return (
-      <span className={styles.installState}>
-        Installed app
-      </span>
-    );
-  }
-
-  if (!installPrompt) {
-    return null;
-  }
-
-  return (
-    <button
-      type="button"
-      className={styles.installButton}
-      onClick={() => void install()}
-    >
-      Install CASA
-    </button>
-  );
-}
-
-function ScannerStageRail(
-  {
-    phase,
-  }: {
-    phase:
-      Phase;
-  },
-) {
-  const activeStep =
-    phase ===
-      "RESULT"
-      ? 4
-      : phase ===
-          "LIVENESS" ||
-        phase ===
-          "FACE_RETRY" ||
-        phase ===
-          "STAFF"
-        ? 2
-        : phase ===
-            "READY" ||
-          phase ===
-            "CARD"
-          ? 1
-          : 0;
-
-  const steps =
-    [
-      "Card",
-      "Face",
-      "Time",
-      "Done",
-    ];
-
-  return (
-    <ol
-      className={
-        styles.stageRail
-      }
-      aria-label="Attendance verification steps"
-    >
-      {steps.map(
-        (
-          label,
-          index,
-        ) => {
-          const number =
-            index + 1;
-
-          const state =
-            number <
-              activeStep
-              ? "done"
-              : number ===
-                  activeStep
-                ? "active"
-                : "pending";
-
-          return (
-            <li
-              key={
-                label
-              }
-              className={
-                styles.stageStep
-              }
-              data-state={
-                state
-              }
-            >
-              <span
-                className={
-                  styles.stageNumber
-                }
-              >
-                {String(
-                  number,
-                ).padStart(
-                  2,
-                  "0",
-                )}
-              </span>
-              <span>
-                {label}
-              </span>
-            </li>
-          );
-        },
-      )}
-    </ol>
-  );
-}
 
 function QrCamera(
   {
@@ -1275,6 +1089,60 @@ export default function ScannerClient() {
       [],
     );
 
+  const recoverPendingAttempt =
+    useCallback(
+      async (
+        credential:
+          string,
+      ) => {
+        try {
+          const response =
+            await terminalFetchWithRetry(
+              credential,
+              "/api/terminal/attempts/pending",
+            );
+
+          if (!response.ok) {
+            return false;
+          }
+
+          const data =
+            await parseJson<{
+              pending:
+                ScannerAttemptResponse | null;
+              duplicatePendingCount:
+                number;
+            }>(
+              response,
+            );
+
+          if (
+            !data?.pending ||
+            !data.pending
+              .requiresBiometric
+          ) {
+            return false;
+          }
+
+          setCurrentAttempt(
+            data.pending,
+          );
+          setPhase(
+            "FACE_RETRY",
+          );
+          setMessage(
+            data.duplicatePendingCount > 1
+              ? "Pending face verification recovered. Continue with the latest face check; do not scan the card again."
+              : "Pending face verification recovered. Continue face verification without rescanning the card.",
+          );
+          return true;
+        } catch {
+          return false;
+        }
+      },
+      [],
+    );
+
   useEffect(
     () => {
       if (
@@ -1338,9 +1206,19 @@ export default function ScannerClient() {
             saved,
           );
 
-          await refreshTerminal(
-            saved,
-          );
+          const refreshed =
+            await refreshTerminal(
+              saved,
+            );
+
+          if (
+            !cancelled &&
+            refreshed?.session
+          ) {
+            await recoverPendingAttempt(
+              saved,
+            );
+          }
         } catch {
           if (
             !cancelled
@@ -1364,6 +1242,7 @@ export default function ScannerClient() {
     },
     [
       refreshTerminal,
+      recoverPendingAttempt,
     ],
   );
 
@@ -1602,7 +1481,7 @@ export default function ScannerClient() {
 
         try {
           const response =
-            await terminalFetch(
+            await terminalFetchWithRetry(
               token,
               `/api/terminal/attempts/${attemptId}/biometric/liveness/start`,
               {
@@ -2246,7 +2125,7 @@ export default function ScannerClient() {
               )
             : "Attendance Scanner"}
         </div>
-        <ScannerInstallControl />
+
       </header>
 
       <main
@@ -2288,11 +2167,7 @@ export default function ScannerClient() {
           {message}
         </p>
 
-        <ScannerStageRail
-          phase={
-            phase
-          }
-        />
+
 
         {phase ===
           "UNPROVISIONED" && (

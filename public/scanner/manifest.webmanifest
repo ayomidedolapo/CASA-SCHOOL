@@ -1,8 +1,8 @@
 {
   "id": "/scanner",
-  "name": "CASA School Scanner",
+  "name": "CASA Scanner",
   "short_name": "CASA Scanner",
-  "description": "CASA School identity-verified attendance scanner.",
+  "description": "CASA identity-verified attendance scanner.",
   "start_url": "/scanner",
   "scope": "/scanner",
   "display": "standalone",

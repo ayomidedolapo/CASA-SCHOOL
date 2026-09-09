@@ -65,6 +65,10 @@ export interface AttendanceLifecycleState {
     string | Date | null;
   pausedAt:
     string | Date | null;
+  scheduledResumeAt:
+    string | Date | null;
+  scheduledResumeReason:
+    string | null;
 }
 
 function datePlusDays(
@@ -94,9 +98,98 @@ function weekdayForDate(
   ).getUTCDay();
 }
 
+async function applyDueScheduledResume(
+  schoolId: string,
+) {
+  const db = getDb();
+
+  await db.execute(sql`
+    with candidate as (
+      select
+        id,
+        school_id,
+        effective_start_date,
+        scheduled_resume_at
+          as scheduled_for,
+        scheduled_resume_by_membership_id
+          as scheduled_by,
+        scheduled_resume_reason
+          as scheduled_reason
+      from school_attendance_lifecycles
+      where
+        school_id =
+          ${schoolId}::uuid
+        and status =
+          'PAUSED'::school_attendance_lifecycle_status
+        and scheduled_resume_at is not null
+        and scheduled_resume_at <= now()
+      limit 1
+      for update
+    ),
+    due as (
+      update school_attendance_lifecycles lifecycle
+      set
+        status =
+          'ACTIVE'::school_attendance_lifecycle_status,
+        paused_at = null,
+        paused_by_membership_id = null,
+        scheduled_resume_at = null,
+        scheduled_resume_by_membership_id = null,
+        scheduled_resume_reason = null,
+        updated_at = now()
+      from candidate
+      where
+        lifecycle.id =
+          candidate.id
+        and lifecycle.school_id =
+          candidate.school_id
+      returning
+        lifecycle.id,
+        lifecycle.school_id,
+        lifecycle.effective_start_date,
+        candidate.scheduled_for,
+        candidate.scheduled_by,
+        candidate.scheduled_reason
+    ),
+    event as (
+      insert into school_attendance_lifecycle_events (
+        school_id,
+        lifecycle_id,
+        actor_membership_id,
+        event_type,
+        effective_start_date,
+        scheduled_for,
+        reason,
+        created_at
+      )
+      select
+        school_id,
+        id,
+        scheduled_by,
+        'RESUMED'::school_attendance_lifecycle_event_type,
+        effective_start_date,
+        scheduled_for,
+        coalesce(
+          scheduled_reason,
+          'Scheduled attendance resume'
+        ),
+        now()
+      from due
+      where scheduled_by is not null
+      returning id
+    )
+    select id
+    from event
+  `);
+}
+
 export async function getAttendanceLifecycle(
   schoolId: string,
 ): Promise<AttendanceLifecycleState> {
+  await applyDueScheduledResume(
+    schoolId,
+  );
+
   const db = getDb();
 
   const result =
@@ -108,7 +201,9 @@ export async function getAttendanceLifecycle(
           as effective_start_date,
         ready_at,
         activated_at,
-        paused_at
+        paused_at,
+        scheduled_resume_at,
+        scheduled_resume_reason
       from school_attendance_lifecycles
       where school_id =
         ${schoolId}::uuid
@@ -128,6 +223,10 @@ export async function getAttendanceLifecycle(
         Date | string | null;
       paused_at:
         Date | string | null;
+      scheduled_resume_at:
+        Date | string | null;
+      scheduled_resume_reason:
+        string | null;
     }>(result)[0];
 
   if (!row) {
@@ -138,6 +237,8 @@ export async function getAttendanceLifecycle(
       readyAt: null,
       activatedAt: null,
       pausedAt: null,
+      scheduledResumeAt: null,
+      scheduledResumeReason: null,
     };
   }
 
@@ -153,6 +254,10 @@ export async function getAttendanceLifecycle(
       row.activated_at,
     pausedAt:
       row.paused_at,
+    scheduledResumeAt:
+      row.scheduled_resume_at,
+    scheduledResumeReason:
+      row.scheduled_resume_reason,
   };
 }
 
@@ -645,6 +750,8 @@ export async function pauseAttendance(
   input: {
     access: SchoolAccess;
     reason?: string | null;
+    scheduledResumeAt?:
+      string | null;
   },
 ) {
   const current =
@@ -660,6 +767,30 @@ export async function pauseAttendance(
       "Only ACTIVE attendance can be paused.",
       409,
       "ATTENDANCE_LIFECYCLE_INVALID_TRANSITION",
+    );
+  }
+
+  const scheduledResumeAt =
+    input.scheduledResumeAt
+      ? new Date(
+          input.scheduledResumeAt,
+        )
+      : null;
+
+  if (
+    scheduledResumeAt &&
+    (
+      Number.isNaN(
+        scheduledResumeAt.getTime(),
+      ) ||
+      scheduledResumeAt.getTime() <=
+        Date.now()
+    )
+  ) {
+    throw new AttendanceReadinessError(
+      "Scheduled resume must be a valid future date and time.",
+      400,
+      "ATTENDANCE_SCHEDULED_RESUME_INVALID",
     );
   }
 
@@ -697,6 +828,20 @@ export async function pauseAttendance(
           paused_at = now(),
           paused_by_membership_id =
             ${input.access.membership.id}::uuid,
+          scheduled_resume_at =
+            ${scheduledResumeAt?.toISOString() ?? null}::timestamptz,
+          scheduled_resume_by_membership_id =
+            case
+              when ${scheduledResumeAt?.toISOString() ?? null}::timestamptz is null
+                then null
+              else ${input.access.membership.id}::uuid
+            end,
+          scheduled_resume_reason =
+            case
+              when ${scheduledResumeAt?.toISOString() ?? null}::timestamptz is null
+                then null
+              else ${input.reason ?? null}
+            end,
           updated_at = now()
         where
           school_id =
@@ -712,6 +857,7 @@ export async function pauseAttendance(
           actor_membership_id,
           event_type,
           effective_start_date,
+          scheduled_for,
           reason,
           created_at
         )
@@ -721,9 +867,34 @@ export async function pauseAttendance(
           ${input.access.membership.id}::uuid,
           'PAUSED'::school_attendance_lifecycle_event_type,
           effective_start_date,
+          null,
           ${input.reason ?? null},
           now()
         from lifecycle
+        returning id
+      ),
+      scheduled_event as (
+        insert into school_attendance_lifecycle_events (
+          school_id,
+          lifecycle_id,
+          actor_membership_id,
+          event_type,
+          effective_start_date,
+          scheduled_for,
+          reason,
+          created_at
+        )
+        select
+          school_id,
+          id,
+          ${input.access.membership.id}::uuid,
+          'RESUME_SCHEDULED'::school_attendance_lifecycle_event_type,
+          effective_start_date,
+          scheduled_resume_at,
+          scheduled_resume_reason,
+          now()
+        from lifecycle
+        where scheduled_resume_at is not null
         returning id
       )
       select id
@@ -780,6 +951,9 @@ export async function resumeAttendance(
             'ACTIVE'::school_attendance_lifecycle_status,
           paused_at = null,
           paused_by_membership_id = null,
+          scheduled_resume_at = null,
+          scheduled_resume_by_membership_id = null,
+          scheduled_resume_reason = null,
           updated_at = now()
         where
           school_id =
@@ -795,6 +969,7 @@ export async function resumeAttendance(
           actor_membership_id,
           event_type,
           effective_start_date,
+          scheduled_for,
           reason,
           created_at
         )
@@ -804,6 +979,7 @@ export async function resumeAttendance(
           ${input.access.membership.id}::uuid,
           'RESUMED'::school_attendance_lifecycle_event_type,
           effective_start_date,
+          null,
           ${input.reason ?? null},
           now()
         from lifecycle
@@ -821,6 +997,184 @@ export async function resumeAttendance(
       "Attendance lifecycle changed before resume completed.",
       409,
       "ATTENDANCE_LIFECYCLE_STATE_CHANGED",
+    );
+  }
+
+  return getAttendanceLifecycle(
+    input.access.school.id,
+  );
+}
+
+export async function scheduleAttendanceResume(
+  input: {
+    access: SchoolAccess;
+    scheduledResumeAt: string;
+    reason?: string | null;
+  },
+) {
+  const scheduled =
+    new Date(
+      input.scheduledResumeAt,
+    );
+
+  if (
+    Number.isNaN(
+      scheduled.getTime(),
+    ) ||
+    scheduled.getTime() <=
+      Date.now()
+  ) {
+    throw new AttendanceReadinessError(
+      "Scheduled resume must be a valid future date and time.",
+      400,
+      "ATTENDANCE_SCHEDULED_RESUME_INVALID",
+    );
+  }
+
+  const current =
+    await getAttendanceLifecycle(
+      input.access.school.id,
+    );
+
+  if (
+    current.status !==
+    "PAUSED"
+  ) {
+    throw new AttendanceReadinessError(
+      "Attendance must be PAUSED before a resume can be scheduled.",
+      409,
+      "ATTENDANCE_LIFECYCLE_INVALID_TRANSITION",
+    );
+  }
+
+  const db = getDb();
+  const result =
+    await db.execute(sql`
+      with lifecycle as (
+        update school_attendance_lifecycles
+        set
+          scheduled_resume_at =
+            ${scheduled.toISOString()}::timestamptz,
+          scheduled_resume_by_membership_id =
+            ${input.access.membership.id}::uuid,
+          scheduled_resume_reason =
+            ${input.reason ?? null},
+          updated_at = now()
+        where
+          school_id =
+            ${input.access.school.id}::uuid
+          and status =
+            'PAUSED'::school_attendance_lifecycle_status
+        returning *
+      ),
+      event as (
+        insert into school_attendance_lifecycle_events (
+          school_id,
+          lifecycle_id,
+          actor_membership_id,
+          event_type,
+          effective_start_date,
+          scheduled_for,
+          reason,
+          created_at
+        )
+        select
+          school_id,
+          id,
+          ${input.access.membership.id}::uuid,
+          'RESUME_SCHEDULED'::school_attendance_lifecycle_event_type,
+          effective_start_date,
+          scheduled_resume_at,
+          scheduled_resume_reason,
+          now()
+        from lifecycle
+        returning id
+      )
+      select id
+      from lifecycle
+      where exists (
+        select 1
+        from event
+      )
+    `);
+
+  if (
+    rowsOf(result).length !== 1
+  ) {
+    throw new AttendanceReadinessError(
+      "Attendance lifecycle changed before the scheduled resume was saved.",
+      409,
+      "ATTENDANCE_LIFECYCLE_STATE_CHANGED",
+    );
+  }
+
+  return getAttendanceLifecycle(
+    input.access.school.id,
+  );
+}
+
+export async function cancelScheduledAttendanceResume(
+  input: {
+    access: SchoolAccess;
+    reason?: string | null;
+  },
+) {
+  const db = getDb();
+  const result =
+    await db.execute(sql`
+      with lifecycle as (
+        update school_attendance_lifecycles
+        set
+          scheduled_resume_at = null,
+          scheduled_resume_by_membership_id = null,
+          scheduled_resume_reason = null,
+          updated_at = now()
+        where
+          school_id =
+            ${input.access.school.id}::uuid
+          and status =
+            'PAUSED'::school_attendance_lifecycle_status
+          and scheduled_resume_at is not null
+        returning *
+      ),
+      event as (
+        insert into school_attendance_lifecycle_events (
+          school_id,
+          lifecycle_id,
+          actor_membership_id,
+          event_type,
+          effective_start_date,
+          scheduled_for,
+          reason,
+          created_at
+        )
+        select
+          school_id,
+          id,
+          ${input.access.membership.id}::uuid,
+          'RESUME_SCHEDULE_CANCELLED'::school_attendance_lifecycle_event_type,
+          effective_start_date,
+          null,
+          ${input.reason ?? null},
+          now()
+        from lifecycle
+        returning id
+      )
+      select id
+      from lifecycle
+      where exists (
+        select 1
+        from event
+      )
+    `);
+
+  if (
+    rowsOf(result).length !== 1
+  ) {
+    throw new AttendanceReadinessError(
+      "No scheduled attendance resume is available to cancel.",
+      409,
+      "ATTENDANCE_SCHEDULED_RESUME_NOT_FOUND",
     );
   }
 

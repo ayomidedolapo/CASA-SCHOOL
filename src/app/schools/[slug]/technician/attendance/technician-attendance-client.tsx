@@ -15,6 +15,10 @@ type LifecycleStatus =
 type Lifecycle = {
   status: LifecycleStatus;
   effectiveStartDate: string | null;
+  scheduledResumeAt?:
+    string | null;
+  scheduledResumeReason?:
+    string | null;
 };
 
 type StudentRow = {
@@ -75,8 +79,10 @@ async function bodyOrThrow(
 
 export default function TechnicianAttendanceClient({
   slug,
+  canManageLifecycle,
 }: {
   slug: string;
+  canManageLifecycle: boolean;
 }) {
   const [lifecycle, setLifecycle] =
     useState<Lifecycle | null>(null);
@@ -87,6 +93,8 @@ export default function TechnicianAttendanceClient({
   const [busy, setBusy] =
     useState(false);
   const [message, setMessage] =
+    useState("");
+  const [scheduledResumeAt, setScheduledResumeAt] =
     useState("");
 
   const fetchAttendance =
@@ -220,36 +228,54 @@ export default function TechnicianAttendanceClient({
     }
   }
 
+  const scheduledResumeDate =
+    scheduledResumeAt
+      ? new Date(
+          scheduledResumeAt,
+        )
+      : null;
+  const scheduledIso =
+    scheduledResumeDate &&
+    !Number.isNaN(
+      scheduledResumeDate.getTime(),
+    )
+      ? scheduledResumeDate.toISOString()
+      : null;
+
   const nextLifecycle =
-    lifecycle?.status === "SETUP"
-      ? {
-          label: "Mark ready",
-          body: {
-            action: "MARK_READY",
-          },
-        }
-      : lifecycle?.status === "READY"
+    !canManageLifecycle
+      ? null
+      : lifecycle?.status === "SETUP"
         ? {
-            label: "Activate attendance",
+            label: "Mark ready",
             body: {
-              action: "ACTIVATE",
+              action: "MARK_READY",
             },
           }
-        : lifecycle?.status === "ACTIVE"
+        : lifecycle?.status === "READY"
           ? {
-              label: "Pause attendance",
+              label: "Activate attendance",
               body: {
-                action: "PAUSE",
+                action: "ACTIVATE",
               },
             }
-          : lifecycle?.status === "PAUSED"
+          : lifecycle?.status === "ACTIVE"
             ? {
-                label: "Resume attendance",
+                label: "Suspend attendance",
                 body: {
-                  action: "RESUME",
+                  action: "PAUSE",
+                  scheduledResumeAt:
+                    scheduledIso,
                 },
               }
-            : null;
+            : lifecycle?.status === "PAUSED"
+              ? {
+                  label: "Resume now",
+                  body: {
+                    action: "RESUME",
+                  },
+                }
+              : null;
 
   const rows =
     Array.isArray(today.students)
@@ -284,8 +310,85 @@ export default function TechnicianAttendanceClient({
               </button>
             ) : null}
           </div>
+
+          {canManageLifecycle &&
+          (lifecycle?.status === "ACTIVE" ||
+            lifecycle?.status === "PAUSED") ? (
+            <div className="mt-5 border-t border-black/20 pt-4">
+              <label className="block font-mono text-[9px] uppercase tracking-[0.12em] text-black/55">
+                Scheduled resume
+                <input
+                  className="mt-2 block w-full border border-black bg-white px-3 py-2 text-xs normal-case tracking-normal"
+                  type="datetime-local"
+                  value={scheduledResumeAt}
+                  onChange={(event) =>
+                    setScheduledResumeAt(
+                      event.target.value,
+                    )
+                  }
+                />
+              </label>
+
+              {lifecycle?.status === "PAUSED" ? (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    className="border border-black px-3 py-2 font-mono text-[9px] uppercase tracking-[0.12em] disabled:opacity-30"
+                    disabled={
+                      busy ||
+                      !scheduledResumeAt
+                    }
+                    onClick={() =>
+                      void mutate(
+                        "lifecycle",
+                        {
+                          action:
+                            "SCHEDULE_RESUME",
+                          scheduledResumeAt:
+                            scheduledIso,
+                        },
+                      )
+                    }
+                    type="button"
+                  >
+                    Save scheduled resume
+                  </button>
+
+                  {lifecycle.scheduledResumeAt ? (
+                    <button
+                      className="border border-black px-3 py-2 font-mono text-[9px] uppercase tracking-[0.12em] disabled:opacity-30"
+                      disabled={busy}
+                      onClick={() =>
+                        void mutate(
+                          "lifecycle",
+                          {
+                            action:
+                              "CANCEL_SCHEDULED_RESUME",
+                          },
+                        )
+                      }
+                      type="button"
+                    >
+                      Cancel schedule
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {lifecycle?.scheduledResumeAt ? (
+                <p className="mt-3 text-xs text-black/55">
+                  Resume scheduled for{" "}
+                  {new Date(
+                    lifecycle.scheduledResumeAt,
+                  ).toLocaleString()}.
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+
           <p className="mt-4 text-xs leading-5 text-black/55">
-            Technician authority follows the approved attendance policy. Policy/grace editing and privileged historical correction are not exposed here.
+            {canManageLifecycle
+              ? "Owner/Admin lifecycle authority is active here. Scheduled resume is explicit and audited."
+              : "Technicians can inspect attendance readiness and session health, but cannot suspend, resume, activate, or otherwise change the attendance lifecycle."}
           </p>
         </div>
 

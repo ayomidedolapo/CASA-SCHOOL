@@ -217,16 +217,7 @@ export default function ScannerInstallControl() {
   }
 
   if (installed) {
-    return (
-      <div
-        className={
-          styles.installed
-        }
-        role="status"
-      >
-        Scanner installed
-      </div>
-    );
+    return null;
   }
 
   return (

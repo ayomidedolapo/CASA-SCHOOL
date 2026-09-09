@@ -48,6 +48,7 @@ export interface StudentCardRenderSnapshot {
   sex: "M" | "F" | "";
   className:
     string | null;
+  /** @deprecated Pass A: never rendered on physical cards. */
   academicSession:
     string | null;
 

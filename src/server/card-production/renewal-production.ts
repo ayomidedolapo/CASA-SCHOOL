@@ -87,6 +87,10 @@ function getRenewalTransactionSql() {
   return renewalTransactionSql;
 }
 
+function routineCardRenewalDisabled(): boolean {
+  return true;
+}
+
 export async function produceStudentCardRenewalItem(
   input: {
     renewalBatchItemId:
@@ -95,6 +99,17 @@ export async function produceStudentCardRenewalItem(
       string;
   },
 ) {
+  if (routineCardRenewalDisabled()) {
+    return {
+      ok: false as const,
+      status: 409 as const,
+      code:
+        "ROUTINE_CARD_RENEWAL_DISABLED",
+      message:
+        "Student cards are long-lived identity credentials. Class and academic-session changes are digital only; use the exceptional replacement flow only for a lost, damaged, revoked, or compromised physical card.",
+    };
+  }
+
   const db = getDb();
 
   const itemResult =
@@ -184,6 +199,18 @@ export async function produceStudentCardRenewalItem(
       productionJobId:
         renewalItem
           .production_job_id,
+    };
+  }
+
+  if (
+    renewalItem.reason !==
+      "CLASS_CHANGE"
+  ) {
+    return {
+      ok: false as const,
+      status: 409 as const,
+      code:
+        "RENEWAL_CLASS_CHANGE_REQUIRED",
     };
   }
 
@@ -317,12 +344,6 @@ export async function produceStudentCardRenewalItem(
       ?.trim() ??
     "";
 
-  const academicSession =
-    student
-      .academic_session_name
-      ?.trim() ??
-    "";
-
   const sexMark =
     student.sex ===
     "MALE"
@@ -336,7 +357,6 @@ export async function produceStudentCardRenewalItem(
     !studentName ||
     !schoolName ||
     !className ||
-    !academicSession ||
     !sexMark
   ) {
     return {
@@ -384,7 +404,8 @@ export async function produceStudentCardRenewalItem(
         sex:
           sexMark,
         className,
-        academicSession,
+        academicSession:
+          null,
         cardSerial:
           credential.serialNumber,
         templateVersion:
@@ -475,6 +496,17 @@ export async function produceStudentCardRenewalItem(
               ${renewalItem.student_id}::uuid
             and item.production_job_id
               is null
+            and not exists (
+              select 1
+              from student_identity_cards pending
+              where
+                pending.school_id =
+                  item.school_id
+                and pending.student_id =
+                  item.student_id
+                and pending.status =
+                  'READY_FOR_ACTIVATION'::student_identity_card_status
+            )
             and batch.status in (
               'PLANNED'::student_card_renewal_batch_status,
               'READY'::student_card_renewal_batch_status
@@ -506,65 +538,9 @@ export async function produceStudentCardRenewalItem(
         `,
 
         transactionSql`
-          update student_identity_cards
-            card
-          set
-            status =
-              'REPLACED'::student_identity_card_status,
-            deactivated_at =
-              ${now}::timestamptz,
-            updated_at =
-              ${now}::timestamptz
-          where
-            card.school_id =
-              ${renewalItem.school_id}::uuid
-            and card.student_id =
-              ${renewalItem.student_id}::uuid
-            and card.status =
-              'ACTIVE'::student_identity_card_status
-            and exists (
-              select 1
-              from student_card_renewal_batch_items
-                item
-              join student_card_renewal_batches
-                batch
-                on batch.school_id =
-                   item.school_id
-               and batch.id =
-                   item.batch_id
-              join student_enrollments
-                enrollment
-                on enrollment.school_id =
-                   item.school_id
-               and enrollment.id =
-                   item.target_enrollment_id
-               and enrollment.student_id =
-                   item.student_id
-              join school_branch_class_arms
-                branch_arm
-                on branch_arm.school_id =
-                   item.school_id
-               and branch_arm.branch_id =
-                   item.branch_id
-               and branch_arm.class_arm_id =
-                   enrollment.class_arm_id
-              where
-                item.id =
-                  ${renewalItem.id}::uuid
-                and item.production_job_id
-                  is null
-                and batch.status in (
-                  'PLANNED'::student_card_renewal_batch_status,
-                  'READY'::student_card_renewal_batch_status
-                )
-                and batch.target_session_id =
-                  ${renewalItem.target_session_id}::uuid
-                and enrollment.status =
-                  'ACTIVE'::student_enrollment_status
-                and enrollment.academic_session_id =
-                  batch.target_session_id
-            )
-          returning card.id
+          select null::uuid as id
+          where false
+
         `,
 
         transactionSql`
@@ -586,7 +562,7 @@ export async function produceStudentCardRenewalItem(
             item.student_id,
             ${credential.serialNumber},
             ${credential.tokenHash},
-            'ACTIVE'::student_identity_card_status,
+            'READY_FOR_ACTIVATION'::student_identity_card_status,
             ${now}::timestamptz,
             null,
             ${now}::timestamptz,
@@ -638,53 +614,9 @@ export async function produceStudentCardRenewalItem(
         `,
 
         transactionSql`
-          insert into student_identity_card_events (
-            school_id,
-            student_id,
-            card_id,
-            event_type,
-            actor_kind,
-            actor_membership_id,
-            reason,
-            created_at
-          )
-          select
-            previous.school_id,
-            previous.student_id,
-            previous.id,
-            'REPLACED'::student_identity_card_event_type,
-            'CASA_INTERNAL',
-            null,
-            ${renewalReason},
-            ${now}::timestamptz
-          from student_identity_cards
-            previous
-          where
-            previous.school_id =
-              ${renewalItem.school_id}::uuid
-            and previous.student_id =
-              ${renewalItem.student_id}::uuid
-            and previous.status =
-              'REPLACED'::student_identity_card_status
-            and previous.deactivated_at =
-              ${now}::timestamptz
-            and previous.updated_at =
-              ${now}::timestamptz
-            and exists (
-              select 1
-              from student_identity_cards
-                current_card
-              where
-                current_card.id =
-                  ${cardId}::uuid
-                and current_card.school_id =
-                  previous.school_id
-                and current_card.student_id =
-                  previous.student_id
-                and current_card.status =
-                  'ACTIVE'::student_identity_card_status
-            )
-          returning id
+          select null::uuid as id
+          where false
+
         `,
 
         transactionSql`
@@ -717,7 +649,7 @@ export async function produceStudentCardRenewalItem(
             and card.student_id =
               ${renewalItem.student_id}::uuid
             and card.status =
-              'ACTIVE'::student_identity_card_status
+              'READY_FOR_ACTIVATION'::student_identity_card_status
           returning id
         `,
 
@@ -774,7 +706,7 @@ export async function produceStudentCardRenewalItem(
            and card.id =
                ${cardId}::uuid
            and card.status =
-               'ACTIVE'::student_identity_card_status
+               'READY_FOR_ACTIVATION'::student_identity_card_status
           where
             item.id =
               ${renewalItem.id}::uuid
@@ -1015,7 +947,7 @@ export async function produceStudentCardRenewalItem(
         serialNumber:
           credential.serialNumber,
         status:
-          "ACTIVE" as const,
+          "READY_FOR_ACTIVATION" as const,
       },
       production: {
         id:
@@ -1055,6 +987,17 @@ export async function produceStudentCardRenewalBatch(
       number;
   },
 ) {
+  if (routineCardRenewalDisabled()) {
+    return {
+      ok: false as const,
+      status: 409 as const,
+      code:
+        "ROUTINE_CARD_RENEWAL_DISABLED",
+      message:
+        "Student cards are long-lived identity credentials. Class and academic-session changes are digital only; use the exceptional replacement flow only for a lost, damaged, revoked, or compromised physical card.",
+    };
+  }
+
   const db = getDb();
 
   const batchResult =

@@ -25,6 +25,7 @@ import {
   studentCardReplacementCaseStatusEnum,
 } from "./attendance-readiness-enums";
 import { schools } from "./schools";
+import { schoolBranches } from "./school-operations";
 import {
   studentIdentityCards,
 } from "./student-identity";
@@ -87,6 +88,20 @@ export const schoolAttendanceLifecycles =
       pausedByMembershipId:
         uuid(
           "paused_by_membership_id",
+        ),
+      scheduledResumeAt:
+        timestamp(
+          "scheduled_resume_at",
+          { withTimezone: true },
+        ),
+      scheduledResumeByMembershipId:
+        uuid(
+          "scheduled_resume_by_membership_id",
+        ),
+      scheduledResumeReason:
+        varchar(
+          "scheduled_resume_reason",
+          { length: 240 },
         ),
       createdAt: timestamp(
         "created_at",
@@ -159,6 +174,18 @@ export const schoolAttendanceLifecycles =
         name:
           "school_attendance_lifecycles_paused_by_fk",
       }).onDelete("restrict"),
+      foreignKey({
+        columns: [
+          table.schoolId,
+          table.scheduledResumeByMembershipId,
+        ],
+        foreignColumns: [
+          schoolMemberships.schoolId,
+          schoolMemberships.id,
+        ],
+        name:
+          "school_attendance_lifecycles_scheduled_resume_by_fk",
+      }).onDelete("restrict"),
       check(
         "school_attendance_lifecycles_ready_actor_check",
         sql`(
@@ -182,6 +209,29 @@ export const schoolAttendanceLifecycles =
           or
           (${table.pausedAt} is not null and ${table.pausedByMembershipId} is not null)
         )`,
+      ),
+      check(
+        "school_attendance_lifecycles_scheduled_resume_actor_check",
+        sql`(
+          (
+            ${table.scheduledResumeAt} is null
+            and ${table.scheduledResumeByMembershipId} is null
+            and ${table.scheduledResumeReason} is null
+          )
+          or
+          (
+            ${table.scheduledResumeAt} is not null
+            and ${table.scheduledResumeByMembershipId} is not null
+          )
+        )`,
+      ),
+      check(
+        "school_attendance_lifecycles_scheduled_resume_status_check",
+        sql`${table.scheduledResumeAt} is null or ${table.status} = 'PAUSED'`,
+      ),
+      check(
+        "school_attendance_lifecycles_scheduled_resume_reason_check",
+        sql`${table.scheduledResumeReason} is null or length(trim(${table.scheduledResumeReason})) > 0`,
       ),
       check(
         "school_attendance_lifecycles_active_effective_date_check",
@@ -216,6 +266,11 @@ export const schoolAttendanceLifecycleEvents =
       effectiveStartDate:
         date(
           "effective_start_date",
+        ),
+      scheduledFor:
+        timestamp(
+          "scheduled_for",
+          { withTimezone: true },
         ),
       reason: varchar(
         "reason",
@@ -663,6 +718,196 @@ export const studentCardAttendanceExceptions =
             and ${table.graceDayNumber} between 1 and 3
           )
         )`,
+      ),
+    ],
+  );
+
+export const studentFirstCardAttendanceExceptions =
+  pgTable(
+    "student_first_card_attendance_exceptions",
+    {
+      id: uuid("id")
+        .defaultRandom()
+        .primaryKey(),
+      schoolId: uuid("school_id")
+        .notNull(),
+      studentId: uuid("student_id")
+        .notNull(),
+      pendingCardId: uuid("pending_card_id")
+        .notNull(),
+      sessionId: uuid("session_id")
+        .notNull(),
+      attendanceRecordId: uuid("attendance_record_id")
+        .notNull(),
+      verifiedByMembershipId: uuid(
+        "verified_by_membership_id",
+      ).notNull(),
+      verificationMethod:
+        studentCardAttendanceExceptionVerificationEnum(
+          "verification_method",
+        ).notNull(),
+      createdAt: timestamp(
+        "created_at",
+        { withTimezone: true },
+      )
+        .defaultNow()
+        .notNull(),
+    },
+    (table) => [
+      unique(
+        "student_first_card_attendance_exceptions_school_id_id_unique",
+      ).on(table.schoolId, table.id),
+      unique(
+        "student_first_card_attendance_exceptions_student_session_unique",
+      ).on(
+        table.schoolId,
+        table.studentId,
+        table.sessionId,
+      ),
+      unique(
+        "student_first_card_attendance_exceptions_card_session_unique",
+      ).on(
+        table.schoolId,
+        table.pendingCardId,
+        table.sessionId,
+      ),
+      index(
+        "student_first_card_attendance_exceptions_student_created_idx",
+      ).on(
+        table.schoolId,
+        table.studentId,
+        table.createdAt,
+      ),
+      foreignKey({
+        columns: [table.schoolId, table.studentId],
+        foreignColumns: [students.schoolId, students.id],
+        name: "student_first_card_attendance_exceptions_student_fk",
+      }).onDelete("cascade"),
+      foreignKey({
+        columns: [table.schoolId, table.pendingCardId],
+        foreignColumns: [
+          studentIdentityCards.schoolId,
+          studentIdentityCards.id,
+        ],
+        name: "student_first_card_attendance_exceptions_card_fk",
+      }).onDelete("restrict"),
+      foreignKey({
+        columns: [table.schoolId, table.sessionId],
+        foreignColumns: [
+          attendanceSessions.schoolId,
+          attendanceSessions.id,
+        ],
+        name: "student_first_card_attendance_exceptions_session_fk",
+      }).onDelete("restrict"),
+      foreignKey({
+        columns: [table.schoolId, table.attendanceRecordId],
+        foreignColumns: [
+          studentAttendanceRecords.schoolId,
+          studentAttendanceRecords.id,
+        ],
+        name: "student_first_card_attendance_exceptions_record_fk",
+      }).onDelete("restrict"),
+      foreignKey({
+        columns: [table.schoolId, table.verifiedByMembershipId],
+        foreignColumns: [
+          schoolMemberships.schoolId,
+          schoolMemberships.id,
+        ],
+        name: "student_first_card_attendance_exceptions_verifier_fk",
+      }).onDelete("restrict"),
+    ],
+  );
+
+export const studentSupervisedLateArrivals =
+  pgTable(
+    "student_supervised_late_arrivals",
+    {
+      id: uuid("id")
+        .defaultRandom()
+        .primaryKey(),
+      schoolId: uuid("school_id")
+        .notNull(),
+      branchId: uuid("branch_id")
+        .notNull(),
+      studentId: uuid("student_id")
+        .notNull(),
+      sessionId: uuid("session_id")
+        .notNull(),
+      attendanceRecordId: uuid("attendance_record_id")
+        .notNull(),
+      verifiedByMembershipId: uuid(
+        "verified_by_membership_id",
+      ).notNull(),
+      reason: varchar("reason", { length: 240 })
+        .notNull(),
+      occurredAt: timestamp(
+        "occurred_at",
+        { withTimezone: true },
+      )
+        .defaultNow()
+        .notNull(),
+      createdAt: timestamp(
+        "created_at",
+        { withTimezone: true },
+      )
+        .defaultNow()
+        .notNull(),
+    },
+    (table) => [
+      unique(
+        "student_supervised_late_arrivals_school_id_id_unique",
+      ).on(table.schoolId, table.id),
+      unique(
+        "student_supervised_late_arrivals_student_session_unique",
+      ).on(
+        table.schoolId,
+        table.studentId,
+        table.sessionId,
+      ),
+      index(
+        "student_supervised_late_arrivals_branch_occurred_idx",
+      ).on(
+        table.schoolId,
+        table.branchId,
+        table.occurredAt,
+      ),
+      foreignKey({
+        columns: [table.schoolId, table.branchId],
+        foreignColumns: [schoolBranches.schoolId, schoolBranches.id],
+        name: "student_supervised_late_arrivals_branch_fk",
+      }).onDelete("restrict"),
+      foreignKey({
+        columns: [table.schoolId, table.studentId],
+        foreignColumns: [students.schoolId, students.id],
+        name: "student_supervised_late_arrivals_student_fk",
+      }).onDelete("cascade"),
+      foreignKey({
+        columns: [table.schoolId, table.sessionId],
+        foreignColumns: [
+          attendanceSessions.schoolId,
+          attendanceSessions.id,
+        ],
+        name: "student_supervised_late_arrivals_session_fk",
+      }).onDelete("restrict"),
+      foreignKey({
+        columns: [table.schoolId, table.attendanceRecordId],
+        foreignColumns: [
+          studentAttendanceRecords.schoolId,
+          studentAttendanceRecords.id,
+        ],
+        name: "student_supervised_late_arrivals_record_fk",
+      }).onDelete("restrict"),
+      foreignKey({
+        columns: [table.schoolId, table.verifiedByMembershipId],
+        foreignColumns: [
+          schoolMemberships.schoolId,
+          schoolMemberships.id,
+        ],
+        name: "student_supervised_late_arrivals_verifier_fk",
+      }).onDelete("restrict"),
+      check(
+        "student_supervised_late_arrivals_reason_not_blank_check",
+        sql`length(trim(${table.reason})) > 0`,
       ),
     ],
   );

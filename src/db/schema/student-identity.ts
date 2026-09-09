@@ -49,7 +49,7 @@ export const studentIdentityCards =
         studentIdentityCardStatusEnum(
           "status",
         )
-          .default("ACTIVE")
+          .default("READY_FOR_ACTIVATION")
           .notNull(),
       issuedAt: timestamp(
         "issued_at",
@@ -115,6 +115,16 @@ export const studentIdentityCards =
         )
         .where(
           sql`${table.status} = 'ACTIVE'`,
+        ),
+      uniqueIndex(
+        "student_identity_cards_one_pending_activation_per_student_idx",
+      )
+        .on(
+          table.schoolId,
+          table.studentId,
+        )
+        .where(
+          sql`${table.status} = 'READY_FOR_ACTIVATION'`,
         ),
       index(
         "student_identity_cards_student_status_idx",

@@ -102,12 +102,20 @@ type AcademicOptions = {
     endsOn: string;
     status: string;
   }>;
+  branches: Array<{
+    id: string;
+    name: string;
+    code: string;
+    isHeadquarters: boolean;
+  }>;
   classArms: Array<{
     id: string;
     name: string;
     classLevelId: string;
     classLevelName: string;
     sortOrder: number;
+    branchId: string;
+    branchName: string;
   }>;
 };
 
@@ -275,6 +283,7 @@ export default function InternalOnboardingClient({
   ] =
     useState<AcademicOptions>({
       sessions: [],
+      branches: [],
       classArms: [],
     });
   const [
@@ -628,6 +637,12 @@ export default function InternalOnboardingClient({
               body.sessions,
             )
               ? body.sessions
+              : [],
+          branches:
+            Array.isArray(
+              body.branches,
+            )
+              ? body.branches
               : [],
           classArms:
             Array.isArray(
@@ -1322,9 +1337,17 @@ export default function InternalOnboardingClient({
                   form.get(
                     "academicSessionId",
                   ),
+                branchId:
+                  form.get(
+                    "branchId",
+                  ),
                 classArmId:
                   form.get(
                     "classArmId",
+                  ),
+                arrivalMethod:
+                  form.get(
+                    "arrivalMethod",
                   ),
                 startsOn:
                   form.get(
@@ -1824,7 +1847,7 @@ export default function InternalOnboardingClient({
                 void chooseNextIncomplete()
               }
             >
-              Next incomplete â†’
+              Next incomplete’
             </button>
           </div>
 
@@ -1989,7 +2012,7 @@ export default function InternalOnboardingClient({
                 )
               }
             >
-              â† Previous
+              Previous
             </button>
 
             <span className="font-mono text-[9px] uppercase tracking-[0.09em] text-black/45">
@@ -2014,7 +2037,7 @@ export default function InternalOnboardingClient({
                 )
               }
             >
-              Next â†’
+              Next’
             </button>
           </div>
 
@@ -2698,6 +2721,20 @@ export default function InternalOnboardingClient({
                                 enrollment,
                                 "status",
                               ),
+                            )}{" "}
+                            · {textValue(
+                              recordValue(
+                                enrollment,
+                                "branch_name",
+                                "branchName",
+                              ),
+                            )}{" "}
+                            · {textValue(
+                              recordValue(
+                                enrollment,
+                                "arrival_method",
+                                "arrivalMethod",
+                              ),
                             )}
                           </p>
                         </div>
@@ -2713,6 +2750,8 @@ export default function InternalOnboardingClient({
                 {academicOptions.sessions.length >
                   0 &&
                 academicOptions.classArms.length >
+                  0 &&
+                academicOptions.branches.length >
                   0 ? (
                   <form
                     className="mt-5 grid gap-3"
@@ -2757,6 +2796,35 @@ export default function InternalOnboardingClient({
 
                     <label className="casa-label">
                       <span>
+                        Branch
+                      </span>
+                      <select
+                        className="casa-field"
+                        defaultValue=""
+                        name="branchId"
+                        required
+                      >
+                        <option value="" disabled>
+                          Select branch
+                        </option>
+                        {academicOptions.branches.map(
+                          (branch) => (
+                            <option
+                              key={branch.id}
+                              value={branch.id}
+                            >
+                              {branch.name}
+                              {branch.isHeadquarters
+                                ? " · HQ"
+                                : ""}
+                            </option>
+                          ),
+                        )}
+                      </select>
+                    </label>
+
+                    <label className="casa-label">
+                      <span>
                         Class
                       </span>
                       <select
@@ -2781,10 +2849,32 @@ export default function InternalOnboardingClient({
                                 arm.id
                               }
                             >
-                              {arm.classLevelName} · {arm.name}
+                              {arm.branchName} · {arm.classLevelName} · {arm.name}
                             </option>
                           ),
                         )}
+                      </select>
+                    </label>
+
+                    <label className="casa-label">
+                      <span>
+                        Arrival method
+                      </span>
+                      <select
+                        className="casa-field"
+                        defaultValue=""
+                        name="arrivalMethod"
+                        required
+                      >
+                        <option value="" disabled>
+                          Select arrival method
+                        </option>
+                        <option value="SCHOOL_BUS">
+                          School bus
+                        </option>
+                        <option value="INDEPENDENT">
+                          Independent
+                        </option>
                       </select>
                     </label>
 
@@ -2909,7 +2999,7 @@ export default function InternalOnboardingClient({
                   void chooseNextIncomplete()
                 }
               >
-                Release & next incomplete â†’
+                Release & next incomplete ’
               </button>
             </div>
           )}

@@ -2,6 +2,7 @@ import {
   and,
   eq,
   gt,
+  lte,
   isNull,
   sql,
 } from "drizzle-orm";
@@ -1196,11 +1197,55 @@ export async function startAwsVerificationLiveness(
     };
   }
 
+  const now =
+    new Date();
+
+  await db
+    .update(
+      biometricLivenessSessions,
+    )
+    .set({
+      status:
+        "EXPIRED",
+      failureCode:
+        "LIVENESS_SESSION_EXPIRED",
+      updatedAt:
+        now,
+    })
+    .where(
+      and(
+        eq(
+          biometricLivenessSessions.schoolId,
+          input.access.school.id,
+        ),
+        eq(
+          biometricLivenessSessions.attemptId,
+          input.attemptId,
+        ),
+        eq(
+          biometricLivenessSessions.purpose,
+          "VERIFICATION",
+        ),
+        eq(
+          biometricLivenessSessions.status,
+          "CREATED",
+        ),
+        lte(
+          biometricLivenessSessions.expiresAt,
+          now,
+        ),
+      ),
+    );
+
   const activeSessions =
     await db
       .select({
         id:
           biometricLivenessSessions.id,
+        providerSessionId:
+          biometricLivenessSessions.providerSessionId,
+        expiresAt:
+          biometricLivenessSessions.expiresAt,
       })
       .from(
         biometricLivenessSessions,
@@ -1225,18 +1270,45 @@ export async function startAwsVerificationLiveness(
           ),
           gt(
             biometricLivenessSessions.expiresAt,
-            new Date(),
+            now,
           ),
         ),
       )
       .limit(1);
 
-  if (activeSessions[0]) {
+  const activeSession =
+    activeSessions[0];
+
+  if (activeSession) {
+    const credentials =
+      await issueAwsLivenessStreamingCredentials(
+        activeSession.providerSessionId,
+      );
+
     return {
-      ok: false as const,
-      status: 409 as const,
-      code:
-        "LIVENESS_SESSION_ALREADY_ACTIVE",
+      ok: true as const,
+      replayed:
+        true as const,
+      session: {
+        livenessSessionId:
+          activeSession.id,
+        providerSessionId:
+          activeSession.providerSessionId,
+        expiresAt:
+          activeSession.expiresAt,
+        streaming: {
+          region:
+            credentials.region,
+          accessKeyId:
+            credentials.accessKeyId,
+          secretAccessKey:
+            credentials.secretAccessKey,
+          sessionToken:
+            credentials.sessionToken,
+          expiration:
+            credentials.expiration,
+        },
+      },
     };
   }
 

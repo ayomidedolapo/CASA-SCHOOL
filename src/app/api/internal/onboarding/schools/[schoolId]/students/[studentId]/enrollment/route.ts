@@ -31,6 +31,13 @@ const bodySchema =
       z.string().uuid(),
     classArmId:
       z.string().uuid(),
+    branchId:
+      z.string().uuid(),
+    arrivalMethod:
+      z.enum([
+        "SCHOOL_BUS",
+        "INDEPENDENT",
+      ]),
     startsOn:
       z.string()
         .regex(
@@ -104,7 +111,7 @@ export async function POST(
       return NextResponse.json(
         {
           message:
-            "Student, academic session, or class assignment is invalid, or a conflicting future enrollment exists.",
+            "Student, academic session, branch, class assignment, or arrival method is invalid, or a conflicting future effective-dated record exists.",
         },
         {
           status: 409,

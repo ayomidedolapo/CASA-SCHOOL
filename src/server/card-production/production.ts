@@ -461,7 +461,6 @@ export async function produceStudentCard(
     !requiredStudentName ||
     !student.school_name?.trim() ||
     !student.class_name?.trim() ||
-    !student.academic_session_name?.trim() ||
     ![
       "MALE",
       "FEMALE",
@@ -480,6 +479,44 @@ export async function produceStudentCard(
   const activeCard =
     activeCards[0] ??
     null;
+
+  const pendingCards =
+    await db
+      .select({
+        id:
+          studentIdentityCards.id,
+      })
+      .from(
+        studentIdentityCards,
+      )
+      .where(
+        and(
+          eq(
+            studentIdentityCards.schoolId,
+            input.access.school.id,
+          ),
+          eq(
+            studentIdentityCards.studentId,
+            input.studentId,
+          ),
+          eq(
+            studentIdentityCards.status,
+            "READY_FOR_ACTIVATION",
+          ),
+        ),
+      )
+      .limit(1);
+
+  if (pendingCards[0]) {
+    return {
+      ok: false as const,
+      status: 409 as const,
+      code:
+        "CARD_AWAITING_HANDOVER",
+      cardId:
+        pendingCards[0].id,
+    };
+  }
 
   const action:
     CardProductionAction =
@@ -588,8 +625,7 @@ export async function produceStudentCard(
         className:
           student.class_name,
         academicSession:
-          student
-            .academic_session_name,
+          null,
         cardSerial:
           credential.serialNumber,
         templateVersion:
@@ -638,340 +674,204 @@ export async function produceStudentCard(
       action;
 
     const result =
-      activeCard
-        ? await db.execute(sql`
-            with verified_grant as (
-              select id
-              from auth_passkey_step_up_grants
-              where
-                id =
-                  ${passkeyGrantId}::uuid
-                and school_id =
-                  ${input.access.school.id}::uuid
-                and membership_id =
-                  ${input.access.membership.id}::uuid
-                and action =
-                  ${grantAction}
-                and consumed_at is not null
-            ),
-            replaced_card as (
-              update student_identity_cards
-              set
-                status =
-                  'REPLACED'::student_identity_card_status,
-                deactivated_at =
-                  ${now}::timestamptz,
-                updated_at =
-                  ${now}::timestamptz
-              where
-                school_id =
-                  ${input.access.school.id}::uuid
-                and student_id =
-                  ${input.studentId}::uuid
-                and id =
-                  ${activeCard.id}::uuid
-                and status =
-                  'ACTIVE'::student_identity_card_status
-                and exists (
-                  select 1
-                  from verified_grant
-                )
-              returning id
-            ),
-            inserted_card as (
-              insert into student_identity_cards (
-                id,
-                school_id,
-                student_id,
-                serial_number,
-                token_hash,
-                status,
-                issued_at,
-                created_at,
-                updated_at
-              )
-              select
-                ${cardId}::uuid,
-                ${input.access.school.id}::uuid,
-                ${input.studentId}::uuid,
-                ${credential.serialNumber},
-                ${credential.tokenHash},
-                'ACTIVE'::student_identity_card_status,
-                ${now}::timestamptz,
-                ${now}::timestamptz,
-                ${now}::timestamptz
-              from replaced_card
-              returning id
-            ),
-            lifecycle_events as (
-              insert into student_identity_card_events (
-                school_id,
-                student_id,
-                card_id,
-                actor_membership_id,
-                event_type,
-                reason,
-                created_at
-              )
-              select
-                ${input.access.school.id}::uuid,
-                ${input.studentId}::uuid,
-                replaced_card.id,
-                ${input.access.membership.id}::uuid,
-                'REPLACED'::student_identity_card_event_type,
-                ${reason},
-                ${now}::timestamptz
-              from replaced_card
-
-              union all
-
-              select
-                ${input.access.school.id}::uuid,
-                ${input.studentId}::uuid,
-                inserted_card.id,
-                ${input.access.membership.id}::uuid,
-                'ISSUED'::student_identity_card_event_type,
-                ${reason},
-                ${now}::timestamptz
-              from inserted_card
-              returning id
-            ),
-            inserted_job as (
-              insert into student_card_production_jobs (
-                id,
-                school_id,
-                student_id,
-                card_id,
-                template_id,
-                issued_by_membership_id,
-                passkey_grant_id,
-                public_access_key,
-                public_link_revision,
-                front_artifact_key,
-                back_artifact_key,
-                preview_artifact_key,
-                render_snapshot,
-                status,
-                queued_at,
-                created_at,
-                updated_at
-              )
-              select
-                ${jobId}::uuid,
-                ${input.access.school.id}::uuid,
-                ${input.studentId}::uuid,
-                inserted_card.id,
-                ${activeTemplate.id}::uuid,
-                ${input.access.membership.id}::uuid,
-                verified_grant.id,
-                ${publicAccessKey},
-                1,
-                ${artifacts.front},
-                ${artifacts.back},
-                ${artifacts.preview},
-                ${snapshotJson}::jsonb,
-                'READY'::student_card_production_status,
-                ${now}::timestamptz,
-                ${now}::timestamptz,
-                ${now}::timestamptz
-              from inserted_card
-              cross join verified_grant
-              returning
-                id,
-                card_id,
-                status,
-                public_access_key,
-                queued_at
-            ),
-            production_event as (
-              insert into student_card_production_events (
-                school_id,
-                job_id,
-                actor_kind,
-                actor_membership_id,
-                event_type,
-                reason,
-                occurred_at,
-                created_at
-              )
-              select
-                ${input.access.school.id}::uuid,
-                inserted_job.id,
-                'SCHOOL_MEMBER'::student_card_production_actor_kind,
-                ${input.access.membership.id}::uuid,
-                'CARD_PRODUCTION_READY'::student_card_production_event_type,
-                ${reason},
-                ${now}::timestamptz,
-                ${now}::timestamptz
-              from inserted_job
-              returning id
-            )
-            select
-              inserted_job.id,
-              inserted_job.card_id,
-              inserted_job.status,
-              inserted_job.public_access_key,
-              inserted_job.queued_at
-            from inserted_job
-            where exists (
+      await db.execute(sql`
+        with verified_grant as (
+          select id
+          from auth_passkey_step_up_grants
+          where
+            id =
+              ${passkeyGrantId}::uuid
+            and school_id =
+              ${input.access.school.id}::uuid
+            and membership_id =
+              ${input.access.membership.id}::uuid
+            and action =
+              ${grantAction}
+            and consumed_at is not null
+        ),
+        state_guard as (
+          select 1
+          where
+            exists (
               select 1
-              from production_event
-            )
-          `)
-        : await db.execute(sql`
-            with verified_grant as (
-              select id
-              from auth_passkey_step_up_grants
-              where
-                id =
-                  ${passkeyGrantId}::uuid
-                and school_id =
-                  ${input.access.school.id}::uuid
-                and membership_id =
-                  ${input.access.membership.id}::uuid
-                and action =
-                  ${grantAction}
-                and consumed_at is not null
-            ),
-            inserted_card as (
-              insert into student_identity_cards (
-                id,
-                school_id,
-                student_id,
-                serial_number,
-                token_hash,
-                status,
-                issued_at,
-                created_at,
-                updated_at
-              )
-              select
-                ${cardId}::uuid,
-                ${input.access.school.id}::uuid,
-                ${input.studentId}::uuid,
-                ${credential.serialNumber},
-                ${credential.tokenHash},
-                'ACTIVE'::student_identity_card_status,
-                ${now}::timestamptz,
-                ${now}::timestamptz,
-                ${now}::timestamptz
               from verified_grant
-              where not exists (
+            )
+            and not exists (
+              select 1
+              from student_identity_cards pending
+              where
+                pending.school_id =
+                  ${input.access.school.id}::uuid
+                and pending.student_id =
+                  ${input.studentId}::uuid
+                and pending.status =
+                  'READY_FOR_ACTIVATION'::student_identity_card_status
+            )
+            and (
+              (
+                ${activeCard?.id ?? null}::uuid is null
+                and not exists (
+                  select 1
+                  from student_identity_cards active
+                  where
+                    active.school_id =
+                      ${input.access.school.id}::uuid
+                    and active.student_id =
+                      ${input.studentId}::uuid
+                    and active.status =
+                      'ACTIVE'::student_identity_card_status
+                )
+              )
+              or exists (
                 select 1
-                from student_identity_cards existing
+                from student_identity_cards active
                 where
-                  existing.school_id =
+                  active.school_id =
                     ${input.access.school.id}::uuid
-                  and existing.student_id =
+                  and active.student_id =
                     ${input.studentId}::uuid
-                  and existing.status =
+                  and active.id =
+                    ${activeCard?.id ?? null}::uuid
+                  and active.status =
                     'ACTIVE'::student_identity_card_status
               )
-              returning id
-            ),
-            lifecycle_event as (
-              insert into student_identity_card_events (
-                school_id,
-                student_id,
-                card_id,
-                actor_membership_id,
-                event_type,
-                created_at
-              )
-              select
-                ${input.access.school.id}::uuid,
-                ${input.studentId}::uuid,
-                inserted_card.id,
-                ${input.access.membership.id}::uuid,
-                'ISSUED'::student_identity_card_event_type,
-                ${now}::timestamptz
-              from inserted_card
-              returning id
-            ),
-            inserted_job as (
-              insert into student_card_production_jobs (
-                id,
-                school_id,
-                student_id,
-                card_id,
-                template_id,
-                issued_by_membership_id,
-                passkey_grant_id,
-                public_access_key,
-                public_link_revision,
-                front_artifact_key,
-                back_artifact_key,
-                preview_artifact_key,
-                render_snapshot,
-                status,
-                queued_at,
-                created_at,
-                updated_at
-              )
-              select
-                ${jobId}::uuid,
-                ${input.access.school.id}::uuid,
-                ${input.studentId}::uuid,
-                inserted_card.id,
-                ${activeTemplate.id}::uuid,
-                ${input.access.membership.id}::uuid,
-                verified_grant.id,
-                ${publicAccessKey},
-                1,
-                ${artifacts.front},
-                ${artifacts.back},
-                ${artifacts.preview},
-                ${snapshotJson}::jsonb,
-                'READY'::student_card_production_status,
-                ${now}::timestamptz,
-                ${now}::timestamptz,
-                ${now}::timestamptz
-              from inserted_card
-              cross join verified_grant
-              where exists (
-                select 1
-                from lifecycle_event
-              )
-              returning
-                id,
-                card_id,
-                status,
-                public_access_key,
-                queued_at
-            ),
-            production_event as (
-              insert into student_card_production_events (
-                school_id,
-                job_id,
-                actor_kind,
-                actor_membership_id,
-                event_type,
-                occurred_at,
-                created_at
-              )
-              select
-                ${input.access.school.id}::uuid,
-                inserted_job.id,
-                'SCHOOL_MEMBER'::student_card_production_actor_kind,
-                ${input.access.membership.id}::uuid,
-                'CARD_PRODUCTION_READY'::student_card_production_event_type,
-                ${now}::timestamptz,
-                ${now}::timestamptz
-              from inserted_job
-              returning id
             )
-            select
-              inserted_job.id,
-              inserted_job.card_id,
-              inserted_job.status,
-              inserted_job.public_access_key,
-              inserted_job.queued_at
-            from inserted_job
-            where exists (
-              select 1
-              from production_event
-            )
-          `);
+        ),
+        inserted_card as (
+          insert into student_identity_cards (
+            id,
+            school_id,
+            student_id,
+            serial_number,
+            token_hash,
+            status,
+            issued_at,
+            created_at,
+            updated_at
+          )
+          select
+            ${cardId}::uuid,
+            ${input.access.school.id}::uuid,
+            ${input.studentId}::uuid,
+            ${credential.serialNumber},
+            ${credential.tokenHash},
+            'READY_FOR_ACTIVATION'::student_identity_card_status,
+            ${now}::timestamptz,
+            ${now}::timestamptz,
+            ${now}::timestamptz
+          from verified_grant
+          cross join state_guard
+          returning id
+        ),
+        lifecycle_event as (
+          insert into student_identity_card_events (
+            school_id,
+            student_id,
+            card_id,
+            actor_kind,
+            actor_membership_id,
+            event_type,
+            reason,
+            created_at
+          )
+          select
+            ${input.access.school.id}::uuid,
+            ${input.studentId}::uuid,
+            inserted_card.id,
+            'SCHOOL_MEMBER',
+            ${input.access.membership.id}::uuid,
+            'ISSUED'::student_identity_card_event_type,
+            ${reason},
+            ${now}::timestamptz
+          from inserted_card
+          returning id
+        ),
+        inserted_job as (
+          insert into student_card_production_jobs (
+            id,
+            school_id,
+            student_id,
+            card_id,
+            template_id,
+            issued_by_membership_id,
+            passkey_grant_id,
+            public_access_key,
+            public_link_revision,
+            front_artifact_key,
+            back_artifact_key,
+            preview_artifact_key,
+            render_snapshot,
+            status,
+            queued_at,
+            created_at,
+            updated_at
+          )
+          select
+            ${jobId}::uuid,
+            ${input.access.school.id}::uuid,
+            ${input.studentId}::uuid,
+            inserted_card.id,
+            ${activeTemplate.id}::uuid,
+            ${input.access.membership.id}::uuid,
+            verified_grant.id,
+            ${publicAccessKey},
+            1,
+            ${artifacts.front},
+            ${artifacts.back},
+            ${artifacts.preview},
+            ${snapshotJson}::jsonb,
+            'READY'::student_card_production_status,
+            ${now}::timestamptz,
+            ${now}::timestamptz,
+            ${now}::timestamptz
+          from inserted_card
+          cross join verified_grant
+          where exists (
+            select 1
+            from lifecycle_event
+          )
+          returning
+            id,
+            card_id,
+            status,
+            public_access_key,
+            queued_at
+        ),
+        production_event as (
+          insert into student_card_production_events (
+            school_id,
+            job_id,
+            actor_kind,
+            actor_membership_id,
+            event_type,
+            reason,
+            occurred_at,
+            created_at
+          )
+          select
+            ${input.access.school.id}::uuid,
+            inserted_job.id,
+            'SCHOOL_MEMBER'::student_card_production_actor_kind,
+            ${input.access.membership.id}::uuid,
+            'CARD_PRODUCTION_READY'::student_card_production_event_type,
+            ${reason},
+            ${now}::timestamptz,
+            ${now}::timestamptz
+          from inserted_job
+          returning id
+        )
+        select
+          inserted_job.id,
+          inserted_job.card_id,
+          inserted_job.status,
+          inserted_job.public_access_key,
+          inserted_job.queued_at
+        from inserted_job
+        where exists (
+          select 1
+          from production_event
+        )
+      `);
 
     const row =
       asArrayRow<{
@@ -1015,7 +915,7 @@ export async function produceStudentCard(
         serialNumber:
           credential.serialNumber,
         status:
-          "ACTIVE" as const,
+          "READY_FOR_ACTIVATION" as const,
       },
       production: {
         id:

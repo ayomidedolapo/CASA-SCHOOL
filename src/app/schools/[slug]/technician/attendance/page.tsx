@@ -78,7 +78,16 @@ export default async function TechnicianAttendancePage({
       </header>
 
       <div className="mx-auto w-full max-w-[1700px] bg-white">
-        <TechnicianAttendanceClient slug={slug} />
+        <TechnicianAttendanceClient
+        slug={slug}
+        canManageLifecycle={
+          access.roles.some(
+            (role) =>
+              role === "OWNER" ||
+              role === "ADMIN",
+          )
+        }
+      />
       </div>
     </main>
   );

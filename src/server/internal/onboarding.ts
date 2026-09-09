@@ -667,7 +667,13 @@ export async function getCasaOnboardingStudent(
           level.name
             as class_level_name,
           section.name
-            as section_name
+            as section_name,
+          branch.id
+            as branch_id,
+          branch.name
+            as branch_name,
+          arrival.arrival_method::text
+            as arrival_method
         from student_enrollments
           enrollment
         join academic_sessions
@@ -694,6 +700,36 @@ export async function getCasaOnboardingStudent(
              enrollment.school_id
          and section.id =
              level.section_id
+        join school_branch_class_arms branch_arm
+          on branch_arm.school_id =
+             enrollment.school_id
+         and branch_arm.class_arm_id =
+             enrollment.class_arm_id
+        join school_branches branch
+          on branch.school_id =
+             branch_arm.school_id
+         and branch.id =
+             branch_arm.branch_id
+        left join lateral (
+          select assignment.arrival_method
+          from student_arrival_method_assignments assignment
+          where assignment.school_id =
+            enrollment.school_id
+            and assignment.student_id =
+              enrollment.student_id
+            and assignment.effective_from <=
+              coalesce(
+                enrollment.ends_on,
+                current_date
+              )
+            and (
+              assignment.effective_to is null
+              or assignment.effective_to >=
+                 enrollment.starts_on
+            )
+          order by assignment.effective_from desc
+          limit 1
+        ) arrival on true
         where
           enrollment.school_id =
             ${input.access.school.id}::uuid
@@ -763,7 +799,11 @@ export async function getCasaOnboardingStudent(
       enrollments.some(
         (item) =>
           item.status ===
-          "ACTIVE",
+            "ACTIVE" &&
+          Boolean(
+            item.branch_id &&
+            item.arrival_method,
+          ),
       ) &&
       student.face_status ===
         "COMPLETE",
@@ -1215,7 +1255,11 @@ export async function assignCasaOnboardingEnrollment(
       CasaInternalSchoolAccess;
     studentId: string;
     academicSessionId: string;
+    branchId: string;
     classArmId: string;
+    arrivalMethod:
+      | "SCHOOL_BUS"
+      | "INDEPENDENT";
     startsOn: string;
   },
 ) {
@@ -1230,21 +1274,34 @@ export async function assignCasaOnboardingEnrollment(
           academic.id
             as academic_session_id,
           arm.id
-            as class_arm_id
-        from students
-          student
-        join academic_sessions
-          academic
+            as class_arm_id,
+          branch.id
+            as branch_id
+        from students student
+        join academic_sessions academic
           on academic.school_id =
              student.school_id
          and academic.id =
              ${input.academicSessionId}::uuid
-        join class_arms
-          arm
-          on arm.school_id =
+        join school_branches branch
+          on branch.school_id =
              student.school_id
-         and arm.id =
+         and branch.id =
+             ${input.branchId}::uuid
+         and branch.status =
+             'ACTIVE'::school_branch_status
+        join school_branch_class_arms branch_arm
+          on branch_arm.school_id =
+             student.school_id
+         and branch_arm.branch_id =
+             branch.id
+         and branch_arm.class_arm_id =
              ${input.classArmId}::uuid
+        join class_arms arm
+          on arm.school_id =
+             branch_arm.school_id
+         and arm.id =
+             branch_arm.class_arm_id
          and arm.is_active = true
         where
           student.school_id =
@@ -1256,12 +1313,10 @@ export async function assignCasaOnboardingEnrollment(
           and academic.ends_on >=
             ${input.startsOn}::date
       ),
-      blocker as (
+      enrollment_blocker as (
         select 1
-        from student_enrollments
-          existing
-        join valid_scope
-          scope
+        from student_enrollments existing
+        join valid_scope scope
           on scope.student_id =
              existing.student_id
         where
@@ -1273,16 +1328,27 @@ export async function assignCasaOnboardingEnrollment(
             ${input.startsOn}::date
         limit 1
       ),
-      closed as (
+      arrival_blocker as (
+        select 1
+        from student_arrival_method_assignments existing
+        join valid_scope scope
+          on scope.student_id =
+             existing.student_id
+        where
+          existing.school_id =
+            ${input.access.school.id}::uuid
+          and existing.effective_from >
+            ${input.startsOn}::date
+        limit 1
+      ),
+      closed_enrollment as (
         update student_enrollments
         set
           status =
             'COMPLETED'::student_enrollment_status,
           ends_on =
-            ${input.startsOn}::date -
-            1,
-          updated_at =
-            now()
+            ${input.startsOn}::date - 1,
+          updated_at = now()
         where
           school_id =
             ${input.access.school.id}::uuid
@@ -1292,57 +1358,157 @@ export async function assignCasaOnboardingEnrollment(
             'ACTIVE'::student_enrollment_status
           and starts_on <
             ${input.startsOn}::date
+          and exists (
+            select 1
+            from valid_scope
+          )
           and not exists (
             select 1
-            from blocker
+            from enrollment_blocker
+          )
+          and not exists (
+            select 1
+            from arrival_blocker
           )
         returning id
-      )
-      insert into student_enrollments (
-        school_id,
-        student_id,
-        academic_session_id,
-        class_arm_id,
-        status,
-        starts_on,
-        ends_on,
-        created_at,
-        updated_at
+      ),
+      closed_arrival as (
+        update student_arrival_method_assignments
+        set
+          effective_to =
+            ${input.startsOn}::date - 1,
+          updated_at = now()
+        where
+          school_id =
+            ${input.access.school.id}::uuid
+          and student_id =
+            ${input.studentId}::uuid
+          and effective_from <
+            ${input.startsOn}::date
+          and (
+            effective_to is null
+            or effective_to >=
+               ${input.startsOn}::date
+          )
+          and exists (
+            select 1
+            from valid_scope
+          )
+          and not exists (
+            select 1
+            from enrollment_blocker
+          )
+          and not exists (
+            select 1
+            from arrival_blocker
+          )
+        returning id
+      ),
+      inserted_enrollment as (
+        insert into student_enrollments (
+          school_id,
+          student_id,
+          academic_session_id,
+          class_arm_id,
+          status,
+          starts_on,
+          ends_on,
+          created_at,
+          updated_at
+        )
+        select
+          ${input.access.school.id}::uuid,
+          scope.student_id,
+          scope.academic_session_id,
+          scope.class_arm_id,
+          'ACTIVE'::student_enrollment_status,
+          ${input.startsOn}::date,
+          null,
+          now(),
+          now()
+        from valid_scope scope
+        where not exists (
+          select 1
+          from enrollment_blocker
+        )
+          and not exists (
+            select 1
+            from arrival_blocker
+          )
+        returning
+          id,
+          school_id,
+          student_id,
+          academic_session_id,
+          class_arm_id,
+          status::text as status,
+          starts_on::text as starts_on
+      ),
+      arrival_assignment as (
+        insert into student_arrival_method_assignments (
+          school_id,
+          student_id,
+          arrival_method,
+          effective_from,
+          effective_to,
+          assigned_by_membership_id,
+          assigned_by_internal_membership_id,
+          reason,
+          created_at,
+          updated_at
+        )
+        select
+          enrollment.school_id,
+          enrollment.student_id,
+          ${input.arrivalMethod},
+          ${input.startsOn}::date,
+          null,
+          null,
+          ${input.access.membership.id}::uuid,
+          'CASA onboarding assignment',
+          now(),
+          now()
+        from inserted_enrollment enrollment
+        on conflict (
+          school_id,
+          student_id,
+          effective_from
+        ) do update set
+          arrival_method =
+            excluded.arrival_method,
+          assigned_by_membership_id =
+            null,
+          assigned_by_internal_membership_id =
+            excluded.assigned_by_internal_membership_id,
+          reason =
+            excluded.reason,
+          updated_at = now()
+        returning
+          student_id,
+          arrival_method::text
+            as arrival_method
       )
       select
-        ${input.access.school.id}::uuid,
-        scope.student_id,
-        scope.academic_session_id,
-        scope.class_arm_id,
-        'ACTIVE'::student_enrollment_status,
-        ${input.startsOn}::date,
-        null,
-        now(),
-        now()
-      from valid_scope
-        scope
-      where not exists (
-        select 1
-        from blocker
-      )
-      returning
-        id,
-        student_id,
-        academic_session_id,
-        class_arm_id,
-        status::text
-          as status,
-        starts_on::text
-          as starts_on
+        enrollment.id,
+        enrollment.student_id,
+        enrollment.academic_session_id,
+        enrollment.class_arm_id,
+        ${input.branchId}::uuid
+          as branch_id,
+        enrollment.status,
+        enrollment.starts_on,
+        arrival.arrival_method
+      from inserted_enrollment enrollment
+      join arrival_assignment arrival
+        on arrival.student_id =
+           enrollment.student_id
     `);
 
   const enrollment =
     rowsOf<Record<
       string,
       unknown
-    >>(
-      result,
-    )[0];
+    >>(result)[0];
 
   if (!enrollment) {
     return null;
@@ -1362,10 +1528,14 @@ export async function assignCasaOnboardingEnrollment(
     metadata: {
       enrollmentId:
         enrollment.id,
+      branchId:
+        input.branchId,
       classArmId:
         input.classArmId,
       academicSessionId:
         input.academicSessionId,
+      arrivalMethod:
+        input.arrivalMethod,
     },
   });
 

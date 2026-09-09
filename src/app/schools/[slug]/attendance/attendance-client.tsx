@@ -175,10 +175,21 @@ export default function AttendanceClient(
     slug,
     schoolName,
     canManage,
+    canViewOrganization,
+    canSuperviseAttendance,
+    branches,
   }: {
     slug: string;
     schoolName: string;
     canManage: boolean;
+    canViewOrganization: boolean;
+    canSuperviseAttendance: boolean;
+    branches: Array<{
+      id: string;
+      name: string;
+      code: string;
+      isHeadquarters: boolean;
+    }>;
   },
 ) {
   const [
@@ -196,6 +207,16 @@ export default function AttendanceClient(
     useState<
       Policy[]
     >([]);
+
+  const [
+    selectedBranchId,
+    setSelectedBranchId,
+  ] =
+    useState(
+      canViewOrganization
+        ? ""
+        : branches[0]?.id ?? "",
+    );
 
   const [
     busy,
@@ -314,11 +335,20 @@ export default function AttendanceClient(
               "50",
           });
 
+        const attendancePath =
+          selectedBranchId
+            ? `/api/schools/${encodeURIComponent(
+                slug,
+              )}/branches/${encodeURIComponent(
+                selectedBranchId,
+              )}/attendance/today`
+            : `/api/schools/${encodeURIComponent(
+                slug,
+              )}/attendance/today`;
+
         const response =
           await fetch(
-            `/api/schools/${encodeURIComponent(
-              slug,
-            )}/attendance/today?${params.toString()}`,
+            `${attendancePath}?${params.toString()}`,
             {
               cache:
                 "no-store",
@@ -361,6 +391,7 @@ export default function AttendanceClient(
         query,
         view,
         page,
+        selectedBranchId,
       ],
     );
 
@@ -493,7 +524,9 @@ export default function AttendanceClient(
         window.setTimeout(
           () => {
             void refreshToday();
-            void refreshPolicies();
+            if (canManage) {
+              void refreshPolicies();
+            }
           },
           0,
         );
@@ -521,6 +554,7 @@ export default function AttendanceClient(
     [
       refreshToday,
       refreshPolicies,
+      canManage,
     ],
   );
 
@@ -537,6 +571,140 @@ export default function AttendanceClient(
         policies,
       ],
     );
+
+  async function recordFirstCardException(
+    student: TodayStudent,
+  ) {
+    if (
+      !window.confirm(
+        `Confirm that ${studentName(student)} is physically present and their face matches the existing enrolled biometric profile.`,
+      )
+    ) {
+      return;
+    }
+
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const response = await fetch(
+        `/api/schools/${encodeURIComponent(
+          slug,
+        )}/attendance/first-card-exceptions/${encodeURIComponent(
+          student.studentId,
+        )}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          credentials: "same-origin",
+          cache: "no-store",
+          body: JSON.stringify({
+            verificationMethod: "FACE_EXISTING_PROFILE",
+            confirmStudentFaceMatch: true,
+          }),
+        },
+      );
+
+      const body = await response.json() as {
+        message?: string;
+        code?: string;
+      };
+
+      if (!response.ok) {
+        throw new Error(
+          body.message ??
+          body.code ??
+          "First-card attendance exception failed.",
+        );
+      }
+
+      setNotice(
+        "Supervised first-card attendance recorded with face-confirmation audit.",
+      );
+      await refreshToday();
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "First-card attendance exception failed.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function recordSupervisedLate(
+    student: TodayStudent,
+  ) {
+    const entered = window.prompt(
+      `Reason for supervised late arrival for ${studentName(student)}:`,
+      "Arrived after the normal check-in window",
+    );
+
+    if (entered === null) {
+      return;
+    }
+
+    const reason = entered.trim();
+    if (reason.length < 3 || reason.length > 240) {
+      setError(
+        "Enter a supervised late-arrival reason between 3 and 240 characters.",
+      );
+      return;
+    }
+
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const response = await fetch(
+        `/api/schools/${encodeURIComponent(
+          slug,
+        )}/attendance/supervised-late-arrivals/${encodeURIComponent(
+          student.studentId,
+        )}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          credentials: "same-origin",
+          cache: "no-store",
+          body: JSON.stringify({ reason }),
+        },
+      );
+
+      const body = await response.json() as {
+        message?: string;
+        code?: string;
+      };
+
+      if (!response.ok) {
+        throw new Error(
+          body.message ??
+          body.code ??
+          "Supervised late arrival failed.",
+        );
+      }
+
+      setNotice(
+        "Supervised arrival recorded as LATE and preserved in attendance audit history.",
+      );
+      await refreshToday();
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Supervised late arrival failed.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function mutateSession(
     action:
@@ -1566,6 +1734,30 @@ const validFrom =
             styles.filters
           }
         >
+          {(canViewOrganization || branches.length > 1) && (
+            <select
+              className={styles.select}
+              value={selectedBranchId}
+              onChange={(event) => {
+                setSelectedBranchId(event.target.value);
+                setPage(1);
+              }}
+            >
+              {canViewOrganization && (
+                <option value="">Organization-wide</option>
+              )}
+              {branches.map((branch) => (
+                <option
+                  key={branch.id}
+                  value={branch.id}
+                >
+                  {branch.name}
+                  {branch.isHeadquarters ? " · HQ" : ""}
+                </option>
+              ))}
+            </select>
+          )}
+
           <input
             className={
               styles.input
@@ -1676,6 +1868,11 @@ const validFrom =
                 <th>
                   Signed out
                 </th>
+                {canSuperviseAttendance && (
+                  <th>
+                    Supervised action
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -1739,6 +1936,37 @@ const validFrom =
                           student.checkedOutAt,
                         )}
                       </td>
+                      {canSuperviseAttendance && (
+                        <td>
+                          {student.presenceStatus === "NOT_ARRIVED" ||
+                          student.presenceStatus === "ABSENT" ? (
+                            <div className={styles.actions}>
+                              <button
+                                type="button"
+                                className={styles.secondaryButton}
+                                disabled={busy}
+                                onClick={() =>
+                                  void recordFirstCardException(student)
+                                }
+                              >
+                                First-card face
+                              </button>
+                              <button
+                                type="button"
+                                className={styles.secondaryButton}
+                                disabled={busy}
+                                onClick={() =>
+                                  void recordSupervisedLate(student)
+                                }
+                              >
+                                Record late
+                              </button>
+                            </div>
+                          ) : (
+                            <span className={styles.muted}>—</span>
+                          )}
+                        </td>
+                      )}
                     </tr>
                   ),
                 )}
@@ -1750,7 +1978,7 @@ const validFrom =
                 <tr>
                   <td
                     colSpan={
-                      6
+                      canSuperviseAttendance ? 7 : 6
                     }
                   >
                     No students match this view.

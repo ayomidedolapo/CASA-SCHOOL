@@ -184,6 +184,62 @@ export async function POST(
     );
   }
 
+  const containsClass =
+    [
+      ...body.data.layout.frontText,
+      ...body.data.layout.backText,
+    ].some(
+      (item) =>
+        item.source ===
+          "CLASS",
+    );
+
+  if (containsClass) {
+    return NextResponse.json(
+      {
+        message:
+          "Class is digital-only for CASA long-lived student cards. Remove CLASS from the physical template layout.",
+        code:
+          "CARD_TEMPLATE_CLASS_FORBIDDEN",
+      },
+      {
+        status: 409,
+        headers: {
+          "Cache-Control":
+            "no-store",
+        },
+      },
+    );
+  }
+
+  const containsAcademicSession =
+    [
+      ...body.data.layout.frontText,
+      ...body.data.layout.backText,
+    ].some(
+      (item) =>
+        item.source ===
+          "ACADEMIC_SESSION",
+    );
+
+  if (containsAcademicSession) {
+    return NextResponse.json(
+      {
+        message:
+          "Academic Session is no longer a physical student-card field. Remove ACADEMIC_SESSION from the template layout.",
+        code:
+          "CARD_TEMPLATE_ACADEMIC_SESSION_FORBIDDEN",
+      },
+      {
+        status: 409,
+        headers: {
+          "Cache-Control":
+            "no-store",
+        },
+      },
+    );
+  }
+
   const [
     frontExists,
     backExists,

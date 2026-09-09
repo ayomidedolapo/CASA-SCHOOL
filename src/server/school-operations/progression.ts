@@ -1468,106 +1468,6 @@ export async function confirmProgressionBatch(
           returning
             s.id
         ),
-        renewal_batch as (
-          insert into student_card_renewal_batches (
-            id,
-            school_id,
-            target_session_id,
-            status,
-            created_at,
-            updated_at
-          )
-          select
-            gen_random_uuid(),
-            target_batch.school_id,
-            target_batch.target_session_id,
-            'PLANNED'::student_card_renewal_batch_status,
-            ${now}::timestamptz,
-            ${now}::timestamptz
-          from target_batch
-          where exists (
-            select 1
-            from inserted_enrollments
-          )
-          on conflict (
-            school_id,
-            target_session_id
-          )
-          do update set
-            updated_at =
-              excluded.updated_at
-          returning
-            id,
-            school_id,
-            target_session_id
-        ),
-        renewal_items as (
-          insert into student_card_renewal_batch_items (
-            id,
-            school_id,
-            batch_id,
-            student_id,
-            target_enrollment_id,
-            branch_id,
-            section_id,
-            production_job_id,
-            reason,
-            created_at,
-            updated_at
-          )
-          select
-            gen_random_uuid(),
-            next_enrollment.school_id,
-            renewal_batch.id,
-            next_enrollment.student_id,
-            next_enrollment.id,
-            target_branch.branch_id,
-            target_level.section_id,
-            null,
-            case
-              when
-                reviewed.source_class_arm_id =
-                next_enrollment.class_arm_id
-                then
-                  'SESSION_CHANGE'::student_card_renewal_reason
-              else
-                  'CLASS_AND_SESSION_CHANGE'::student_card_renewal_reason
-            end,
-            ${now}::timestamptz,
-            ${now}::timestamptz
-          from inserted_enrollments
-            next_enrollment
-          join reviewed
-            on reviewed.school_id =
-               next_enrollment.school_id
-           and reviewed.student_id =
-               next_enrollment.student_id
-          join renewal_batch
-            on renewal_batch.school_id =
-               next_enrollment.school_id
-          join school_branch_class_arms
-            target_branch
-            on target_branch.school_id =
-               next_enrollment.school_id
-           and target_branch.class_arm_id =
-               next_enrollment.class_arm_id
-          join class_arms target_arm
-            on target_arm.school_id =
-               next_enrollment.school_id
-           and target_arm.id =
-               next_enrollment.class_arm_id
-          join class_levels target_level
-            on target_level.school_id =
-               target_arm.school_id
-           and target_level.id =
-               target_arm.class_level_id
-          on conflict (
-            batch_id,
-            student_id
-          )
-          do nothing
-          returning id
-        ),
         integrity as (
           select
             expected.total_decisions,
@@ -1584,10 +1484,6 @@ export async function confirmProgressionBatch(
               select count(*)::int
               from terminal_students
             ) as terminal_student_count,
-            (
-              select count(*)::int
-              from renewal_items
-            ) as renewal_item_count,
             (
               select count(*)::int
               from reviewed
@@ -1634,8 +1530,6 @@ export async function confirmProgressionBatch(
               integrity.expected_continuing
             and integrity.terminal_student_count =
               integrity.expected_terminal
-            and integrity.renewal_item_count =
-              integrity.expected_continuing
           returning b.id
         )
         select
@@ -1658,7 +1552,6 @@ export async function confirmProgressionBatch(
         closed_count: number;
         next_enrollment_count: number;
         terminal_student_count: number;
-        renewal_item_count: number;
         expected_continuing: number;
         expected_terminal: number;
         confirmed_count: number;
@@ -1699,9 +1592,7 @@ export async function confirmProgressionBatch(
           row.terminal_student_count,
         ),
       renewalItems:
-        Number(
-          row.renewal_item_count,
-        ),
+        0,
     };
   } catch (error) {
     if (

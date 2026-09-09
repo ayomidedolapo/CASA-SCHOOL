@@ -20,6 +20,8 @@ export const schoolAttendanceLifecycleEventTypeEnum =
       "MARKED_READY",
       "ACTIVATED",
       "PAUSED",
+      "RESUME_SCHEDULED",
+      "RESUME_SCHEDULE_CANCELLED",
       "RESUMED",
     ],
   );

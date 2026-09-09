@@ -16,6 +16,12 @@ import {
   registryAuthErrorResponse,
   requireRegistryOperator,
 } from "@/server/registry/http";
+import {
+  requireStudentBranchAttendanceAuthority,
+} from "@/server/attendance/supervised-arrival";
+import {
+  schoolOperationsErrorResponse,
+} from "@/server/school-operations/http";
 
 export const dynamic =
   "force-dynamic";
@@ -74,10 +80,13 @@ export async function POST(
   } = await context.params;
 
   try {
-    const access =
-      await requireRegistryOperator(
+    const branchAccess =
+      await requireStudentBranchAttendanceAuthority(
         slug,
+        studentId,
       );
+    const access =
+      branchAccess.access;
 
     let body: unknown;
 
@@ -132,6 +141,15 @@ export async function POST(
       },
     );
   } catch (error) {
+    const branchAuth =
+      schoolOperationsErrorResponse(
+        error,
+      );
+
+    if (branchAuth) {
+      return branchAuth;
+    }
+
     const auth =
       registryAuthErrorResponse(
         error,

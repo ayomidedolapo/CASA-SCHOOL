@@ -7,7 +7,7 @@ import { z } from "zod";
 import {
   attendanceAuthErrorResponse,
   attendanceNoStoreHeaders,
-  requireAttendanceController,
+  requireAttendanceManager,
   requireAttendanceOperator,
 } from "@/server/attendance/http";
 import {
@@ -15,8 +15,10 @@ import {
   AttendanceReadinessError,
   getAttendanceLifecycle,
   markAttendanceReady,
+  cancelScheduledAttendanceResume,
   pauseAttendance,
   resumeAttendance,
+  scheduleAttendanceResume,
 } from "@/server/attendance/readiness";
 
 export const dynamic =
@@ -75,6 +77,11 @@ const mutationSchema =
       z.object({
         action:
           z.literal("PAUSE"),
+        scheduledResumeAt:
+          z.string()
+            .datetime()
+            .optional()
+            .nullable(),
         reason:
           z.string()
             .trim()
@@ -86,6 +93,35 @@ const mutationSchema =
       z.object({
         action:
           z.literal("RESUME"),
+        reason:
+          z.string()
+            .trim()
+            .min(1)
+            .max(240)
+            .optional()
+            .nullable(),
+      }),
+      z.object({
+        action:
+          z.literal(
+            "SCHEDULE_RESUME",
+          ),
+        scheduledResumeAt:
+          z.string()
+            .datetime(),
+        reason:
+          z.string()
+            .trim()
+            .min(1)
+            .max(240)
+            .optional()
+            .nullable(),
+      }),
+      z.object({
+        action:
+          z.literal(
+            "CANCEL_SCHEDULED_RESUME",
+          ),
         reason:
           z.string()
             .trim()
@@ -182,7 +218,7 @@ export async function POST(
 
   try {
     const access =
-      await requireAttendanceController(
+      await requireAttendanceManager(
         slug,
       );
 
@@ -255,13 +291,36 @@ export async function POST(
                 reason:
                   parsed.data.reason ??
                   null,
-              })
-            : await resumeAttendance({
-                access,
-                reason:
-                  parsed.data.reason ??
+                scheduledResumeAt:
+                  parsed.data
+                    .scheduledResumeAt ??
                   null,
-              });
+              })
+            : parsed.data.action ===
+                "RESUME"
+              ? await resumeAttendance({
+                  access,
+                  reason:
+                    parsed.data.reason ??
+                    null,
+                })
+              : parsed.data.action ===
+                  "SCHEDULE_RESUME"
+                ? await scheduleAttendanceResume({
+                    access,
+                    scheduledResumeAt:
+                      parsed.data
+                        .scheduledResumeAt,
+                    reason:
+                      parsed.data.reason ??
+                      null,
+                  })
+                : await cancelScheduledAttendanceResume({
+                    access,
+                    reason:
+                      parsed.data.reason ??
+                      null,
+                  });
 
     return NextResponse.json(
       {

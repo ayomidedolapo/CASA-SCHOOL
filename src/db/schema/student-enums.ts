@@ -33,6 +33,7 @@ export const enrollmentStatusEnum =
 
 export const studentIdentityCardStatusEnum =
   pgEnum("student_identity_card_status", [
+    "READY_FOR_ACTIVATION",
     "ACTIVE",
     "LOST",
     "REVOKED",
@@ -44,6 +45,7 @@ export const studentIdentityCardEventTypeEnum =
     "student_identity_card_event_type",
     [
       "ISSUED",
+      "ACTIVATED",
       "MARKED_LOST",
       "REVOKED",
       "REPLACED",

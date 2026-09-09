@@ -4,8 +4,11 @@ import {
 
 import {
   AuthRequiredError,
-  requireSchoolRole,
+  SchoolAccessDeniedError,
 } from "@/server/auth/authorization";
+import {
+  listVisibleBranches,
+} from "@/server/school-operations/operations";
 
 import AttendanceClient from "./attendance-client";
 
@@ -20,23 +23,14 @@ export default async function AttendancePage(
     params,
   }: AttendancePageProps,
 ) {
-  const {
-    slug,
-  } =
-    await params;
+  const { slug } = await params;
 
-  let access: Awaited<ReturnType<typeof requireSchoolRole>>;
+  let visibility:
+    Awaited<ReturnType<typeof listVisibleBranches>>;
 
   try {
-    access =
-      await requireSchoolRole(
-      slug,
-      [
-        "OWNER",
-        "ADMIN",
-        "SCHOOL_TECHNICIAN",
-      ],
-      );
+    visibility =
+      await listVisibleBranches(slug);
   } catch (error) {
     if (error instanceof AuthRequiredError) {
       const next =
@@ -48,25 +42,57 @@ export default async function AttendancePage(
     throw error;
   }
 
-  const canManage =
-    access.roles.some(
-      (role) =>
-        role ===
-          "OWNER" ||
-        role ===
-          "ADMIN",
+  const isTechnician =
+    visibility.access.roles.includes(
+      "SCHOOL_TECHNICIAN",
     );
+  const canManage =
+    visibility.organizationAdmin;
+  const canViewOrganization =
+    visibility.organizationAdmin ||
+    isTechnician;
+  const canSuperviseAttendance =
+    visibility.organizationAdmin ||
+    visibility.branches.length > 0;
+
+  if (
+    !canViewOrganization &&
+    visibility.branches.length === 0
+  ) {
+    throw new SchoolAccessDeniedError();
+  }
 
   return (
     <AttendanceClient
-      slug={
-        slug
-      }
+      slug={slug}
       schoolName={
-        access.school.name
+        visibility.access.school.name
       }
-      canManage={
-        canManage
+      canManage={canManage}
+      canViewOrganization={
+        canViewOrganization
+      }
+      canSuperviseAttendance={
+        canSuperviseAttendance
+      }
+      branches={
+        visibility.branches.map(
+          (branch) => ({
+            id: String(
+              (branch as { id: unknown }).id,
+            ),
+            name: String(
+              (branch as { name: unknown }).name,
+            ),
+            code: String(
+              (branch as { code: unknown }).code,
+            ),
+            isHeadquarters: Boolean(
+              (branch as { is_headquarters?: unknown })
+                .is_headquarters,
+            ),
+          }),
+        )
       }
     />
   );

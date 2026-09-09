@@ -63,6 +63,22 @@ const textItemSchema =
         .min(4)
         .max(120)
         .optional(),
+    maxWidth:
+      z.number()
+        .min(0.05)
+        .max(1)
+        .optional(),
+    maxLines:
+      z.number()
+        .int()
+        .min(1)
+        .max(3)
+        .optional(),
+    minFontSize:
+      z.number()
+        .min(0.006)
+        .max(0.25)
+        .optional(),
   });
 
 const qrSchema =

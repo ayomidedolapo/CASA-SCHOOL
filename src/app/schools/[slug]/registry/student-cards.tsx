@@ -20,6 +20,7 @@ interface CardRecord {
   id: string;
   serialNumber: string;
   status:
+    | "READY_FOR_ACTIVATION"
     | "ACTIVE"
     | "LOST"
     | "REVOKED"
@@ -189,6 +190,23 @@ export function StudentCards({
     ) ??
     null;
 
+  const pendingCard =
+    cards.find(
+      (card) =>
+        card.status ===
+        "READY_FOR_ACTIVATION",
+    ) ??
+    null;
+
+  const pendingProduction =
+    pendingCard
+      ? jobs.find(
+          (job) =>
+            job.cardId ===
+            pendingCard.id,
+        ) ?? null
+      : null;
+
   const activeProduction =
     activeCard
       ? jobs.find(
@@ -315,6 +333,13 @@ export function StudentCards({
   );
 
   async function produce() {
+    if (pendingCard) {
+      setError(
+        "A produced card is already awaiting physical handover. Activate it before producing another card.",
+      );
+      return;
+    }
+
     const action =
       activeCard
         ? "CARD_REISSUE"
@@ -329,7 +354,7 @@ export function StudentCards({
         3
     ) {
       setError(
-        "Enter a clear reason before card reissue.",
+        "Enter a clear lost, damaged, or security reason before card replacement.",
       );
       return;
     }
@@ -410,7 +435,7 @@ export function StudentCards({
 
       setNotice(
         activeCard
-          ? "Replacement card rendered and queued for CASA production."
+          ? "Exceptional replacement card rendered and queued for CASA production."
           : "Student card rendered and queued for CASA production.",
       );
       setReason("");
@@ -427,6 +452,75 @@ export function StudentCards({
       setBusy(
         false,
       );
+    }
+  }
+
+  async function activateHandover() {
+    if (!pendingCard) {
+      return;
+    }
+
+    if (
+      pendingProduction?.status !==
+      "PRINTED"
+    ) {
+      setError(
+        "CASA production must mark the physical card PRINTED before handover activation.",
+      );
+      return;
+    }
+
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const response =
+        await fetch(
+          `${endpoint}/${pendingCard.id}/activate`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+            credentials:
+              "same-origin",
+            body:
+              JSON.stringify({
+                confirmPhysicalHandover:
+                  true,
+                reason:
+                  reason.trim() ||
+                  null,
+              }),
+          },
+        );
+      const body: unknown =
+        await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          errorMessage(
+            body,
+            "Physical handover activation failed.",
+          ),
+        );
+      }
+
+      setNotice(
+        "Physical handover confirmed. The new card is now active for Scanner use.",
+      );
+      setReason("");
+      await reload();
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Physical handover activation failed.",
+      );
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -520,13 +614,16 @@ export function StudentCards({
           <p className="mt-2 max-w-2xl text-xs leading-5 text-black/50">
             CASA renders the personalized card server-side. The reusable QR
             credential is never returned to this browser or stored for later
-            printing.
+            printing. This physical card remains valid across class and
+            academic-session changes; those details stay authoritative in CASA
+            digitally. Replace the card only if it is lost, damaged, revoked,
+            or otherwise compromised.
           </p>
         </div>
 
         <button
           type="button"
-          disabled={busy}
+          disabled={busy || Boolean(pendingCard)}
           onClick={() =>
             void produce()
           }
@@ -534,9 +631,11 @@ export function StudentCards({
         >
           {busy
             ? "Working..."
-            : activeCard
-              ? "Reissue with Passkey"
-              : "Issue with Passkey"}
+            : pendingCard
+              ? "Awaiting handover"
+              : activeCard
+                ? "Replace card with Passkey"
+                : "Issue with Passkey"}
         </button>
       </div>
 
@@ -556,6 +655,40 @@ export function StudentCards({
         >
           {notice}
         </p>
+      ) : null}
+
+      {pendingCard ? (
+        <div className="mt-5 border border-black bg-[var(--casa-paper)]">
+          <div className="grid gap-4 p-4 sm:grid-cols-[1fr_auto] sm:items-end">
+            <div>
+              <p className="casa-kicker text-black/45">
+                Ready for activation
+              </p>
+              <p className="mt-2 font-mono text-sm font-semibold">
+                {pendingCard.serialNumber}
+              </p>
+              <p className="mt-2 text-xs leading-5 text-black/55">
+                Production status: {pendingProduction?.status ?? "Unknown"}.
+                This card is not Scanner-usable until an authorized operator
+                confirms the physical handover.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="casa-button"
+              disabled={
+                busy ||
+                pendingProduction?.status !==
+                  "PRINTED"
+              }
+              onClick={() =>
+                void activateHandover()
+              }
+            >
+              Confirm handover & activate
+            </button>
+          </div>
+        </div>
       ) : null}
 
       {activeCard ? (
@@ -643,7 +776,7 @@ export function StudentCards({
                     event.target.value,
                   )
                 }
-                placeholder="Required for reissue; optional for status changes"
+                placeholder="Required for lost/damaged/security replacement; optional for status changes"
                 value={reason}
               />
             </label>

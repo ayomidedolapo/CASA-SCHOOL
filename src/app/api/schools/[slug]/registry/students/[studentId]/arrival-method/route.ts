@@ -100,6 +100,7 @@ export async function GET(
             as effective_to,
           assignment.reason,
           assignment.assigned_by_membership_id,
+          assignment.assigned_by_internal_membership_id,
           assignment.created_at
         from student_arrival_method_assignments
           assignment
@@ -291,6 +292,7 @@ export async function PATCH(
           effective_from,
           effective_to,
           assigned_by_membership_id,
+          assigned_by_internal_membership_id,
           reason,
           created_at,
           updated_at
@@ -302,6 +304,7 @@ export async function PATCH(
           ${input.effectiveFrom}::date,
           null,
           ${access.membership.id}::uuid,
+          null,
           ${input.reason ?? null},
           now(),
           now()
@@ -320,6 +323,8 @@ export async function PATCH(
             excluded.arrival_method,
           assigned_by_membership_id =
             excluded.assigned_by_membership_id,
+          assigned_by_internal_membership_id =
+            null,
           reason =
             excluded.reason,
           updated_at =
