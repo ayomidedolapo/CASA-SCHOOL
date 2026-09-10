@@ -13,6 +13,10 @@ import {
   STSClient,
 } from "@aws-sdk/client-sts";
 
+import {
+  getVercelOidcAwsCredentials,
+} from "../aws/vercel-oidc-credentials";
+
 export const AWS_REKOGNITION_PROVIDER =
   "aws-rekognition";
 
@@ -66,6 +70,39 @@ export function percentToBasisPoints(
   );
 }
 
+function awsCollectionPrefix(): string {
+  const configured =
+    process.env
+      .CASA_AWS_REKOGNITION_COLLECTION_PREFIX
+      ?.trim();
+
+  const prefix =
+    configured ||
+    (
+      process.env.VERCEL === "1"
+        ? undefined
+        : "casa-school"
+    );
+
+  if (!prefix) {
+    throw new Error(
+      "CASA_AWS_REKOGNITION_COLLECTION_PREFIX is required on Vercel.",
+    );
+  }
+
+  if (
+    !/^[a-zA-Z0-9_.-]+$/.test(
+      prefix,
+    )
+  ) {
+    throw new Error(
+      "AWS_BIOMETRIC_INVALID_COLLECTION_PREFIX",
+    );
+  }
+
+  return prefix;
+}
+
 export function awsCollectionIdForSchool(
   schoolId: string,
 ): string {
@@ -85,7 +122,18 @@ export function awsCollectionIdForSchool(
     );
   }
 
-  return `casa-school-${compact}`;
+  const collectionId =
+    `${awsCollectionPrefix()}-${compact}`;
+
+  if (
+    collectionId.length > 255
+  ) {
+    throw new Error(
+      "AWS_BIOMETRIC_COLLECTION_ID_TOO_LONG",
+    );
+  }
+
+  return collectionId;
 }
 
 function getAwsBiometricConfig():
@@ -146,11 +194,19 @@ function getClients() {
       new RekognitionClient({
         region:
           config.region,
+        credentials:
+          getVercelOidcAwsCredentials(
+            config.region,
+          ),
       }),
     sts:
       new STSClient({
         region:
           config.region,
+        credentials:
+          getVercelOidcAwsCredentials(
+            config.region,
+          ),
       }),
   };
 }

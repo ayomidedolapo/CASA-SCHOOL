@@ -6,6 +6,10 @@ import {
   S3Client,
 } from "@aws-sdk/client-s3";
 
+import {
+  getVercelOidcAwsCredentials,
+} from "../aws/vercel-oidc-credentials";
+
 export class CardStorageUnavailableError extends Error {
   constructor(
     message:
@@ -102,6 +106,10 @@ function getStorage() {
         config.endpoint,
       forcePathStyle:
         config.forcePathStyle,
+      credentials:
+        getVercelOidcAwsCredentials(
+          config.region,
+        ),
     });
 
   cached = {
