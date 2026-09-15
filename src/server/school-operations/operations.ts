@@ -170,6 +170,41 @@ export async function listVisibleBranches(
     };
   }
 
+  if (
+    access.roles.includes(
+      "SCHOOL_TECHNICIAN",
+    )
+  ) {
+    const result =
+      await db.execute(sql`
+        select
+          id,
+          name,
+          code,
+          address,
+          is_headquarters,
+          status,
+          created_at,
+          updated_at
+        from school_branches
+        where
+          school_id =
+            ${access.school.id}::uuid
+          and status =
+            'ACTIVE'::school_branch_status
+        order by
+          is_headquarters desc,
+          name asc
+      `);
+
+    return {
+      access,
+      organizationAdmin: false,
+      branches:
+        rowsOf(result),
+    };
+  }
+
   const result =
     await db.execute(sql`
       select

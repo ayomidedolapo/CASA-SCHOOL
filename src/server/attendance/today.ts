@@ -243,6 +243,22 @@ export async function getTodayAttendanceOperations(
           record.recorded_at,
           record.departure_result,
           record.checked_out_at,
+          exists (
+            select 1
+            from attendance_early_departure_preauthorizations
+              preauth
+            where
+              preauth.school_id =
+                enrollment.school_id
+              and preauth.session_id =
+                ${session?.id ?? null}::uuid
+              and preauth.student_id =
+                enrollment.student_id
+              and preauth.consumed_attempt_id
+                is null
+              and preauth.revoked_at
+                is null
+          ) as early_departure_preauthorized,
           calendar.id
             as calendar_event_id,
           calendar.kind
@@ -609,6 +625,8 @@ export async function getTodayAttendanceOperations(
         string | null;
       checked_out_at:
         Date | string | null;
+      early_departure_preauthorized:
+        boolean;
       calendar_event_id:
         string | null;
       calendar_event_kind:
@@ -702,6 +720,8 @@ export async function getTodayAttendanceOperations(
             student.recorded_at,
           checkedOutAt:
             student.checked_out_at,
+          earlyDeparturePreauthorized:
+            student.early_departure_preauthorized,
           departureResult:
             student.departure_result,
           attendanceExclusion,

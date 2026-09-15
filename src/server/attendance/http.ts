@@ -102,7 +102,7 @@ export async function requireAttendanceManager(
 export async function requireEarlyDepartureAuthorizer(
   schoolSlug: string,
 ): Promise<SchoolAccess> {
-  return requireAttendanceManager(
+  return requireAttendanceOperator(
     schoolSlug,
   );
 }

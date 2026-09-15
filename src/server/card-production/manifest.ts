@@ -63,6 +63,8 @@ export async function buildCardProductionManifest(
           string;
         renderSnapshot:
           StudentCardRenderSnapshot;
+        branchName?:
+          string | null;
         queuedAt:
           Date;
         templateVersion:
@@ -103,6 +105,13 @@ export async function buildCardProductionManifest(
       key:
         "school",
       width: 28,
+    },
+    {
+      header:
+        "Branch",
+      key:
+        "branchName",
+      width: 24,
     },
     {
       header:
@@ -214,6 +223,10 @@ export async function buildCardProductionManifest(
       sheet.addRow({
         school:
           snapshot.schoolName,
+        branchName:
+          job.branchName ??
+          snapshot.branchName ??
+          "",
         studentName:
           snapshot.studentName,
         casaStudentId:
@@ -265,7 +278,7 @@ export async function buildCardProductionManifest(
 
   sheet.autoFilter = {
     from: "A1",
-    to: "M1",
+    to: "N1",
   };
 
   const value =

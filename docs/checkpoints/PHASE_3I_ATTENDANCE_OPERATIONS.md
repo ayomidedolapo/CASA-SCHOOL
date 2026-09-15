@@ -30,7 +30,7 @@ OWNER and ADMIN:
 SCHOOL_TECHNICIAN:
 - may view Today attendance and terminal health;
 - may not change attendance policy or daily-session state;
-- may not authorize early release.
+- may authorize audited early release with mandatory reason + Passkey, while policy/session management remains restricted.
 
 Student Scanner:
 - uses the provisioned terminal credential;

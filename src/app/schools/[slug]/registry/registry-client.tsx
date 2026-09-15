@@ -10,7 +10,11 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
+import {
+  CasaConfirmDialog,
+} from "@/components/casa-confirm-dialog";
 import { StudentCards } from "./student-cards";
+import { BulkCardActivation } from "./bulk-card-activation";
 
 interface RegistryClientProps {
   school: {
@@ -38,6 +42,8 @@ interface StudentRow {
     | "UNSPECIFIED";
   status: string;
   admissionDate: string;
+  homeBranchId: string | null;
+  homeBranchName: string | null;
   classArmName: string | null;
   classLevelName: string | null;
 }
@@ -79,6 +85,12 @@ interface StudentDetail {
 }
 
 interface AcademicOptions {
+  branches: Array<{
+    id: string;
+    name: string;
+    code: string;
+    isHeadquarters: boolean;
+  }>;
   sessions: Array<{
     id: string;
     name: string;
@@ -123,6 +135,7 @@ export function RegistryClient({
     useState<StudentDetail | null>(null);
   const [academicOptions, setAcademicOptions] =
     useState<AcademicOptions>({
+      branches: [],
       sessions: [],
       classArms: [],
     });
@@ -132,6 +145,36 @@ export function RegistryClient({
     useState<string | null>(null);
   const [error, setError] =
     useState<string | null>(null);
+  const [
+    removeStudentOpen,
+    setRemoveStudentOpen,
+  ] =
+    useState(false);
+  const [
+    cardActivationBatchVersion,
+    setCardActivationBatchVersion,
+  ] =
+    useState(0);
+
+  useEffect(() => {
+    const handleBatchComplete = () => {
+      setCardActivationBatchVersion(
+        (value) => value + 1,
+      );
+    };
+
+    window.addEventListener(
+      "casa:card-activation-batch-complete",
+      handleBatchComplete,
+    );
+
+    return () => {
+      window.removeEventListener(
+        "casa:card-activation-batch-complete",
+        handleBatchComplete,
+      );
+    };
+  }, []);
 
   const apiBase = useMemo(
     () =>
@@ -400,9 +443,11 @@ export function RegistryClient({
     setNotice(null);
     setBusy(true);
 
+    const formElement =
+      event.currentTarget;
     const form =
       new FormData(
-        event.currentTarget,
+        formElement,
       );
 
     try {
@@ -414,6 +459,10 @@ export function RegistryClient({
             admissionNumber:
               form.get(
                 "admissionNumber",
+              ) || null,
+            branchId:
+              form.get(
+                "branchId",
               ) || null,
             firstName:
               form.get("firstName"),
@@ -441,7 +490,7 @@ export function RegistryClient({
         },
       );
 
-      event.currentTarget.reset();
+      formElement.reset();
       setNotice(
         "Student added to the school registry.",
       );
@@ -465,9 +514,11 @@ export function RegistryClient({
     setNotice(null);
     setBusy(true);
 
+    const formElement =
+      event.currentTarget;
     const form =
       new FormData(
-        event.currentTarget,
+        formElement,
       );
 
     try {
@@ -488,7 +539,7 @@ export function RegistryClient({
         },
       );
 
-      event.currentTarget.reset();
+      formElement.reset();
       setNotice(
         "Guardian added to the registry.",
       );
@@ -517,9 +568,11 @@ export function RegistryClient({
     setNotice(null);
     setBusy(true);
 
+    const formElement =
+      event.currentTarget;
     const form =
       new FormData(
-        event.currentTarget,
+        formElement,
       );
 
     try {
@@ -556,7 +609,7 @@ export function RegistryClient({
         },
       );
 
-      event.currentTarget.reset();
+      formElement.reset();
       setNotice(
         "Guardian linked to the student.",
       );
@@ -572,6 +625,49 @@ export function RegistryClient({
     }
   }
 
+
+  async function setAttendanceSmsRecipient(
+    linkId: string,
+  ) {
+    if (!selectedStudentId) {
+      return;
+    }
+
+    setError(null);
+    setNotice(null);
+    setBusy(true);
+
+    try {
+      await request(
+        `/students/${selectedStudentId}/guardians`,
+        {
+          method: "PATCH",
+          body:
+            JSON.stringify({
+              linkId,
+            }),
+        },
+      );
+
+      setNotice(
+        "Attendance SMS will now go to this guardian only.",
+      );
+
+      await loadStudentDetail(
+        selectedStudentId,
+      );
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Unable to change the attendance SMS recipient.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+
   async function createEnrollment(
     event: FormEvent<HTMLFormElement>,
   ) {
@@ -585,9 +681,11 @@ export function RegistryClient({
     setNotice(null);
     setBusy(true);
 
+    const formElement =
+      event.currentTarget;
     const form =
       new FormData(
-        event.currentTarget,
+        formElement,
       );
 
     try {
@@ -610,7 +708,7 @@ export function RegistryClient({
         },
       );
 
-      event.currentTarget.reset();
+      formElement.reset();
       setNotice(
         "Student enrollment created.",
       );
@@ -689,6 +787,56 @@ export function RegistryClient({
     }
   }
 
+  async function removeStudent() {
+    if (
+      !selectedStudentId ||
+      !selectedStudent
+    ) {
+      return;
+    }
+
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+
+    try {
+      await request(
+        `/students/${selectedStudentId}`,
+        {
+          method:
+            "DELETE",
+        },
+      );
+
+      setRemoveStudentOpen(
+        false,
+      );
+      setSelectedStudentId(
+        null,
+      );
+      setStudentDetail(
+        null,
+      );
+      setNotice(
+        "Student removed from the active registry. Historical attendance, identity and audit records were preserved.",
+      );
+      await refresh();
+    } catch (
+      cause
+    ) {
+      setError(
+        cause instanceof
+          Error
+          ? cause.message
+          : "Unable to remove student.",
+      );
+    } finally {
+      setBusy(
+        false,
+      );
+    }
+  }
+
   async function logout() {
     await fetch(
       "/api/auth/logout",
@@ -733,7 +881,11 @@ export function RegistryClient({
                 <Link className="border-b border-black" href={`/schools/${encodeURIComponent(school.slug)}/attendance`}>Attendance</Link>
                 <Link className="border-b border-black" href={`/schools/${encodeURIComponent(school.slug)}/technician`}>Identity operations</Link>
                 {(roles.includes("OWNER") || roles.includes("ADMIN")) ? (
-                  <Link className="border-b border-black" href={`/schools/${encodeURIComponent(school.slug)}/staff-access`}>Staff & access</Link>
+                  <>
+                    <Link className="border-b border-black" href={`/schools/${encodeURIComponent(school.slug)}/academic`}>Academic setup</Link>
+                    <Link className="border-b border-black" href={`/schools/${encodeURIComponent(school.slug)}/calendar`}>Calendar & holidays</Link>
+                    <Link className="border-b border-black" href={`/schools/${encodeURIComponent(school.slug)}/staff-access`}>Staff & access</Link>
+                  </>
                 ) : null}
                 <Link className="border-b border-black" href="/security/passkeys">Security</Link>
               </nav>
@@ -786,6 +938,12 @@ export function RegistryClient({
           >
             {error}
           </div>
+        ) : null}
+
+        {tab === "students" ? (
+          <BulkCardActivation
+            schoolSlug={school.slug}
+          />
         ) : null}
 
         <div className="grid border-t border-black xl:grid-cols-[minmax(0,1.15fr)_minmax(390px,0.85fr)]">
@@ -921,6 +1079,8 @@ export function RegistryClient({
                               Current class
                             </p>
                             <p className="mt-2 text-xs font-semibold">
+                              {student.homeBranchName ?? "Campus not assigned"}
+                              {" · "}
                               {student.classLevelName
                                 ? `${student.classLevelName} · ${student.classArmName ?? ""}`
                                 : "Not enrolled"}
@@ -1179,10 +1339,26 @@ export function RegistryClient({
                     >
                       Save student changes
                     </button>
+                    {(roles.includes("OWNER") ||
+                      roles.includes("ADMIN")) ? (
+                      <button
+                        className="border border-[#8b221d] px-4 py-3 text-sm font-semibold text-[#7e1d18] transition hover:bg-[#7e1d18] hover:text-white disabled:opacity-50 sm:col-span-2"
+                        disabled={busy}
+                        onClick={() =>
+                          setRemoveStudentOpen(
+                            true,
+                          )
+                        }
+                        type="button"
+                      >
+                        Remove student from active registry
+                      </button>
+                    ) : null}
                   </form>
                 </details>
 
                 <StudentCards
+                  key={`${selectedStudent.id}:${cardActivationBatchVersion}`}
                   apiBase={apiBase}
                   studentId={
                     selectedStudent.id
@@ -1198,7 +1374,7 @@ export function RegistryClient({
                       <p className="mt-2 text-sm text-black/55">
                         {studentDetail?.guardians.length ??
                           0}{" "}
-                        linked record(s)
+                        linked record(s). One guardian at a time receives the paid arrival and departure SMS.
                       </p>
                     </div>
                   </div>
@@ -1230,6 +1406,28 @@ export function RegistryClient({
                             </div>
 
                             <div className="flex flex-wrap gap-1 sm:justify-end">
+                              {guardian.receivesNotifications ? (
+                                <span className="casa-status">
+                                  Attendance SMS
+                                </span>
+                              ) : guardian.phone ? (
+                                <button
+                                  type="button"
+                                  className="casa-button-secondary"
+                                  disabled={busy}
+                                  onClick={() =>
+                                    void setAttendanceSmsRecipient(
+                                      guardian.linkId,
+                                    )
+                                  }
+                                >
+                                  Send attendance SMS here
+                                </button>
+                              ) : (
+                                <span className="text-xs text-black/45">
+                                  Add phone for SMS
+                                </span>
+                              )}
                               {guardian.pickupAuthorized ? (
                                 <span className="casa-status">
                                   Pickup
@@ -1321,8 +1519,8 @@ export function RegistryClient({
                         ],
                         [
                           "receivesNotifications",
-                          "Notifications",
-                          true,
+                          "Attendance SMS recipient",
+                          false,
                         ],
                       ].map(
                         ([
@@ -1506,8 +1704,17 @@ export function RegistryClient({
                     </form>
                   ) : (
                     <div className="casa-notice mt-4 text-[var(--casa-warning)]">
-                      Academic sessions and class arms must be configured before
-                      enrollment can be created.
+                      <p>
+                        Academic sessions and class arms must be configured before enrollment can be created.
+                      </p>
+                      {(roles.includes("OWNER") || roles.includes("ADMIN")) ? (
+                        <Link
+                          className="mt-3 inline-block border-b border-current font-semibold"
+                          href={`/schools/${encodeURIComponent(school.slug)}/academic`}
+                        >
+                          Open Academic Setup
+                        </Link>
+                      ) : null}
                     </div>
                   )}
                 </div>
@@ -1629,6 +1836,68 @@ export function RegistryClient({
                 </label>
                 <label className="casa-label sm:col-span-2">
                   <span>
+                    Campus
+                  </span>
+                  <select
+                    className="casa-field"
+                    key={academicOptions.branches
+                      .map(
+                        (branch) =>
+                          branch.id,
+                      )
+                      .join("|")}
+                    name="branchId"
+                    defaultValue={
+                      academicOptions.branches.length ===
+                      1
+                        ? academicOptions.branches[0]
+                            ?.id
+                        : ""
+                    }
+                    required={
+                      academicOptions.branches.length >
+                      1
+                    }
+                  >
+                    <option
+                      value=""
+                      disabled={
+                        academicOptions.branches.length >
+                        1
+                      }
+                    >
+                      {academicOptions.branches.length ===
+                      1
+                        ? "Main campus selected automatically"
+                        : "Select campus"}
+                    </option>
+                    {academicOptions.branches.map(
+                      (
+                        branch,
+                      ) => (
+                        <option
+                          key={
+                            branch.id
+                          }
+                          value={
+                            branch.id
+                          }
+                        >
+                          {branch.name}
+                          {branch.isHeadquarters
+                            ? " · HQ"
+                            : ""}
+                        </option>
+                      ),
+                    )}
+                  </select>
+                  <span className="mt-1 text-[10px] leading-4 text-black/45">
+                    One-campus schools use their only campus automatically. Multi-campus schools require a campus before registration.
+                  </span>
+                </label>
+
+                <label className="casa-label sm:col-span-2">
+                  <span>
                     Admission date
                   </span>
                   <input
@@ -1706,6 +1975,32 @@ export function RegistryClient({
           </aside>
         </div>
       </div>
-    </main>
+
+      <CasaConfirmDialog
+        open={
+          removeStudentOpen &&
+          Boolean(
+            selectedStudent,
+          )
+        }
+        title="Remove student?"
+        message={
+          selectedStudent
+            ? `Remove ${selectedStudent.firstName} ${selectedStudent.lastName} from the active registry? CASA will archive the student, close any active enrollment and revoke active/pending cards while preserving historical attendance and identity records.`
+            : ""
+        }
+        confirmLabel="Remove student"
+        danger
+        busy={busy}
+        onCancel={() =>
+          setRemoveStudentOpen(
+            false,
+          )
+        }
+        onConfirm={() =>
+          void removeStudent()
+        }
+      />
+</main>
   );
 }

@@ -175,9 +175,11 @@ const reasonMessages:
     ALREADY_SIGNED_OUT:
       "This student has already signed out.",
     CHECK_OUT_WINDOW_CLOSED:
-      "The sign-out window has closed.",
+      "Attendance is closed for today. Normal student scanning has ended.",
     EARLY_DEPARTURE_AUTH_REQUIRED:
       "Early departure requires staff authorization.",
+    EARLY_DEPARTURE_PREAUTHORIZATION_ALREADY_USED:
+      "This early-departure approval has already been used. Ask staff to review the student.",
     ACTIVE_BIOMETRIC_PROFILE_REQUIRED:
       "Face enrollment is required before attendance can be verified.",
     AWS_ACTIVE_BIOMETRIC_PROFILE_REQUIRED:

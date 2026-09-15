@@ -1,0 +1,21 @@
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { neon } from "@neondatabase/serverless";
+
+const databaseUrl=process.env.DATABASE_URL;
+const configured=process.env.CASA_INITIAL_SETUP_TOKEN?.trim() ?? "";
+const supplied=process.env.CASA_RECOVERY_AUTHORIZATION?.trim() ?? "";
+if(!databaseUrl) throw new Error("DATABASE_URL is required.");
+if(configured.length<32) throw new Error("CASA_INITIAL_SETUP_TOKEN must be configured with at least 32 characters.");
+if(!supplied) throw new Error("Set CASA_RECOVERY_AUTHORIZATION to the same deployment-only setup token for this one recovery run.");
+const a=Buffer.from(configured); const b=Buffer.from(supplied);
+if(a.length!==b.length || !timingSafeEqual(a,b)) throw new Error("Recovery authorization is invalid.");
+const sql=neon(databaseUrl);
+const admins=await sql`select m.id membership_id,m.user_id,u.full_name,u.email from casa_internal_memberships m join users u on u.id=m.user_id where m.role='CASA_SUPER_ADMIN' and m.status='ACTIVE' and u.status='ACTIVE' order by m.created_at`;
+if(admins.length!==1) throw new Error(`Safe operator recovery requires exactly one active CASA Super Admin; found ${admins.length}.`);
+const target=admins[0]; const raw=randomBytes(32).toString("base64url"); const hash=createHash("sha256").update(raw).digest("hex"); const expiresAt=new Date(Date.now()+60*60*1000).toISOString();
+await sql`update casa_account_setup_tokens set used_at=now() where user_id=${target.user_id}::uuid and used_at is null`;
+await sql`insert into casa_account_setup_tokens(user_id,token_hash,purpose,created_by_internal_membership_id,expires_at) values(${target.user_id}::uuid,${hash},'CASA_INTERNAL',null,${expiresAt}::timestamptz)`;
+const base=(process.env.CASA_APP_BASE_URL?.trim()||"http://localhost:3000").replace(/\/$/,"");
+console.log("CASA sole-Super-Admin recovery link (one use, 1 hour):");
+console.log(`${base}/account/setup?token=${encodeURIComponent(raw)}`);
+console.log(`Account: ${target.full_name}${target.email?` <${target.email}>`:""}`);

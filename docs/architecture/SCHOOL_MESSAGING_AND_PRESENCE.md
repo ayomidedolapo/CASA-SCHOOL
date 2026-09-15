@@ -95,7 +95,7 @@ The school-facing setup will later use a provider-supported onboarding flow such
 
 After a successful normal departure:
 
-`Dolapo Ayomide has signed out of school and is on the way home.`
+`Dolapo Ayomide has checked out of school for the day.`
 
 The final template wording may be school-configurable within CASA and must comply with provider template requirements.
 

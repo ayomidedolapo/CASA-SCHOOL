@@ -6,6 +6,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import {
@@ -111,6 +112,21 @@ interface CardStatus {
     StudentCard[];
 }
 
+type FaceCapturePhase =
+  | "IDLE"
+  | "CAMERA"
+  | "VERIFYING"
+  | "ERROR";
+
+const FACE_RESULT_RETRY_COUNT = 6;
+const FACE_RESULT_RETRY_DELAY_MS = 750;
+
+async function waitForFaceResultRetry() {
+  await new Promise<void>((resolve) => {
+    window.setTimeout(resolve, FACE_RESULT_RETRY_DELAY_MS);
+  });
+}
+
 interface EnrollmentLiveness {
   livenessSessionId: string;
   providerSessionId: string;
@@ -122,6 +138,11 @@ interface EnrollmentLiveness {
     sessionToken: string;
     expiration: string;
   };
+}
+
+interface FaceCompletionResponse {
+  message?: string;
+  code?: string;
 }
 
 interface Terminal {
@@ -272,6 +293,15 @@ export default function TechnicianClient(
     useState<
       EnrollmentLiveness | null
     >(null);
+  const [
+    faceCapturePhase,
+    setFaceCapturePhase,
+  ] =
+    useState<FaceCapturePhase>(
+      "IDLE",
+    );
+  const completingFaceRef =
+    useRef(false);
 
   const [
     terminals,
@@ -774,6 +804,9 @@ export default function TechnicianClient(
       setLiveness(
         data.liveness,
       );
+      setFaceCapturePhase(
+        "CAMERA",
+      );
       setNotice(
         action ===
           "BIOMETRIC_ENROLL"
@@ -797,7 +830,8 @@ export default function TechnicianClient(
   async function completeEnrollment() {
     if (
       !selected ||
-      !liveness
+      !liveness ||
+      completingFaceRef.current
     ) {
       return;
     }
@@ -805,75 +839,141 @@ export default function TechnicianClient(
     const current =
       liveness;
 
-    setBusy(
-      true,
+    completingFaceRef.current =
+      true;
+    setFaceCapturePhase(
+      "VERIFYING",
     );
-    setError(
-      null,
+    setBusy(true);
+    setError(null);
+    setNotice(
+      "Camera check complete. CASA is verifying liveness and enrolling the face with AWS.",
     );
 
     try {
-      const response =
-        await fetch(
-          `/api/schools/${encodeURIComponent(
-            slug,
-          )}/registry/students/${encodeURIComponent(
-            selected.id,
-          )}/biometrics/liveness/complete`,
-          {
-            method:
-              "POST",
-            headers: {
-              "Content-Type":
-                "application/json",
-            },
-            credentials:
-              "same-origin",
-            cache:
-              "no-store",
-            body:
-              JSON.stringify({
+      let completed = false;
+
+      for (
+        let attempt = 1;
+        attempt <=
+        FACE_RESULT_RETRY_COUNT;
+        attempt += 1
+      ) {
+        const response =
+          await fetch(
+            `/api/schools/${encodeURIComponent(
+              slug,
+            )}/registry/students/${encodeURIComponent(
+              selected.id,
+            )}/biometrics/liveness/complete`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type":
+                  "application/json",
+              },
+              credentials:
+                "same-origin",
+              cache: "no-store",
+              body: JSON.stringify({
                 livenessSessionId:
                   current
                     .livenessSessionId,
               }),
-          },
-        );
+            },
+          );
 
-      const body:
-        unknown =
-          await response.json();
+        const body =
+          (await response
+            .json()
+            .catch(() => ({}))) as
+            FaceCompletionResponse;
 
-      if (!response.ok) {
+        if (response.ok) {
+          completed = true;
+          break;
+        }
+
+        const code =
+          typeof body?.code ===
+          "string"
+            ? body.code
+            : "";
+
+        if (
+          code ===
+            "LIVENESS_NOT_COMPLETE" &&
+          attempt <
+            FACE_RESULT_RETRY_COUNT
+        ) {
+          setNotice(
+            `AWS is finishing the liveness result. Verification check ${attempt + 1} of ${FACE_RESULT_RETRY_COUNT}...`,
+          );
+          await waitForFaceResultRetry();
+          continue;
+        }
+
+        if (
+          response.status === 503 &&
+          (code ===
+            "BIOMETRIC_POLICY_NOT_CONFIGURED" ||
+            code ===
+              "BIOMETRIC_POLICY_INVALID" ||
+            code ===
+              "BIOMETRIC_PROVIDER_MODE_NOT_CONFIGURED" ||
+            code ===
+              "BIOMETRIC_PROVIDER_MODE_MISMATCH" ||
+            code ===
+              "AWS_BIOMETRIC_NOT_CONFIGURED" ||
+            code ===
+              "AWS_BIOMETRIC_INVALID_QUALITY_FILTER")
+        ) {
+          await cancelEnrollment(false);
+          throw new Error(
+            "AWS biometric runtime is not configured for this CASA staging deployment. The capture was not accepted. Configure the biometric runtime, then start one fresh capture.",
+          );
+        }
+
         throw new Error(
           messageFromUnknown(
             body,
-            "Face enrollment could not be completed.",
+            code ||
+              "Face enrollment could not be completed.",
           ),
         );
       }
 
-      setLiveness(
-        null,
+      if (!completed) {
+        throw new Error(
+          "AWS is taking longer than expected to finalize the liveness result. Cancel this capture and start one fresh session only if face status still shows incomplete.",
+        );
+      }
+
+      setLiveness(null);
+      setFaceCapturePhase(
+        "IDLE",
       );
       setNotice(
         "The student's active face identity has been updated.",
       );
-
       await loadSelectedOperations(
         selected,
       );
     } catch (caught) {
+      setFaceCapturePhase(
+        liveness
+          ? "ERROR"
+          : "IDLE",
+      );
       setError(
-        caught instanceof
-          Error
+        caught instanceof Error
           ? caught.message
           : "Face enrollment could not be completed.",
       );
     } finally {
-      setBusy(
-        false,
-      );
+      completingFaceRef.current =
+        false;
+      setBusy(false);
     }
   }
 
@@ -893,6 +993,9 @@ export default function TechnicianClient(
 
     setLiveness(
       null,
+    );
+    setFaceCapturePhase(
+      "IDLE",
     );
 
     try {
@@ -1300,12 +1403,17 @@ export default function TechnicianClient(
             `/schools/${slug}/attendance`
           }
         >
-          Attendance
+          Attendance operations
         </Link>
         <Link
           href="/scanner"
         >
           Attendance terminal
+        </Link>
+        <Link
+          href="/security/passkeys"
+        >
+          Account security
         </Link>
       </nav>
 
@@ -1711,6 +1819,23 @@ export default function TechnicianClient(
                 {liveness &&
                   credentialProvider && (
                   <>
+                    {faceCapturePhase ===
+                    "VERIFYING" ? (
+                      <div
+                        className={
+                          styles.notice
+                        }
+                        role="status"
+                      >
+                        <strong>Verifying face</strong>
+                        <p className={styles.small}>
+                          Camera capture is complete. CASA is waiting for AWS
+                          liveness results and securely enrolling the student&apos;s
+                          face. Keep this page open; a new Passkey is only needed
+                          for a genuinely new capture session.
+                        </p>
+                      </div>
+                    ) : (
                     <div
                       className={
                         styles.livenessFrame
@@ -1748,6 +1873,7 @@ export default function TechnicianClient(
                         />
                       </ThemeProvider>
                     </div>
+                    )}
 
                     <div
                       className={
@@ -1790,7 +1916,7 @@ export default function TechnicianClient(
                   styles.sectionTitle
                 }
               >
-                Scanner terminals
+                Terminal & device support
               </h2>
               <span
                 className={

@@ -2275,12 +2275,9 @@ export default function ScannerClient() {
                 styles.studentId
               }
             >
-              {
-                currentAttempt
-                  .student
-                  .casaStudentId
-              }
+              {currentAttempt.student.casaStudentId}
             </p>
+            {(() => { const detail=currentAttempt.student as ScannerStudent & {schoolName?:string;branchName?:string|null;className?:string|null;sex?:string|null}; return <p className={styles.message}>{[detail.schoolName,detail.branchName,detail.className,detail.sex].filter(Boolean).join(" · ")}</p>; })()}
           </div>
         )}
 
@@ -2428,6 +2425,7 @@ export default function ScannerClient() {
               >
                 {resultName}
               </p>
+              {finalResult.student && (() => { const detail=finalResult.student as ScannerStudent & {schoolName?:string;branchName?:string|null;className?:string|null;sex?:string|null}; return <><p className={styles.studentId}>{finalResult.student.casaStudentId}</p><p className={styles.message}>{[detail.schoolName,detail.branchName,detail.className,detail.sex].filter(Boolean).join(" · ")}</p></>; })()}
 
               {finalResult
                 .result

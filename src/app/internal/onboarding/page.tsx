@@ -1,30 +1,4 @@
-import {
-  redirect,
-} from "next/navigation";
-
-import {
-  isAuthRequiredError,
-  requireCasaInternalAccess,
-} from "@/server/internal/authorization";
-
+import { redirect } from "next/navigation";
+import { CasaInternalAccessDeniedError, CasaInternalSchoolScopeError, isAuthRequiredError, requireCasaInternalSchoolAccess } from "@/server/internal/authorization";
 import InternalOnboardingClient from "./onboarding-client";
-
-export default async function InternalOnboardingPage() {
-  let access: Awaited<ReturnType<typeof requireCasaInternalAccess>>;
-
-  try {
-    access = await requireCasaInternalAccess();
-  } catch (error) {
-    if (isAuthRequiredError(error)) {
-      redirect("/login?next=%2Finternal%2Fonboarding");
-    }
-    throw error;
-  }
-
-  return (
-    <InternalOnboardingClient
-      actorName={access.session.fullName}
-      role={access.membership.role}
-    />
-  );
-}
+export default async function InternalOnboardingPage({searchParams}:{searchParams:Promise<{school?:string}>}){const params=await searchParams;const schoolId=params.school?.trim()??"";if(!schoolId)redirect("/internal/schools");let access:Awaited<ReturnType<typeof requireCasaInternalSchoolAccess>>;try{access=await requireCasaInternalSchoolAccess(schoolId)}catch(error){if(isAuthRequiredError(error))redirect("/internal/login");if(error instanceof CasaInternalAccessDeniedError||error instanceof CasaInternalSchoolScopeError)redirect("/internal/schools");throw error}return <InternalOnboardingClient actorName={access.session.fullName} role={access.membership.role} initialSchoolId={access.school.id} returnHref={`/internal/schools/${access.school.id}`}/>;}

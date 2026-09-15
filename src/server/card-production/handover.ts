@@ -163,6 +163,17 @@ export async function activateStudentCardHandover(
           'READY_FOR_ACTIVATION'::student_identity_card_status
         and job.status =
           'PRINTED'::student_card_production_status
+        and exists (
+          select 1
+          from student_biometric_profiles profile
+          where
+            profile.school_id =
+              card.school_id
+            and profile.student_id =
+              card.student_id
+            and profile.status =
+              'ACTIVE'::student_biometric_profile_status
+        )
       order by job.created_at desc
       limit 1
     ),
@@ -336,7 +347,18 @@ export async function activateStudentCardHandover(
       await db.execute(sql`
         select
           card.status::text as status,
-          job.status::text as production_status
+          job.status::text as production_status,
+          exists (
+            select 1
+            from student_biometric_profiles profile
+            where
+              profile.school_id =
+                card.school_id
+              and profile.student_id =
+                card.student_id
+              and profile.status =
+                'ACTIVE'::student_biometric_profile_status
+          ) as face_ready
         from student_identity_cards card
         left join student_card_production_jobs job
           on job.school_id =
@@ -358,6 +380,7 @@ export async function activateStudentCardHandover(
       status: string;
       production_status:
         string | null;
+      face_ready: boolean;
     }>(stateResult)[0];
 
     if (!state) {
@@ -379,6 +402,18 @@ export async function activateStudentCardHandover(
         },
         alreadyActive: true,
       };
+    }
+
+    if (
+      state.status ===
+        "READY_FOR_ACTIVATION" &&
+      !state.face_ready
+    ) {
+      throw new CardHandoverError(
+        "Complete face enrollment before physical handover activation.",
+        409,
+        "CARD_ACTIVE_FACE_REQUIRED",
+      );
     }
 
     if (

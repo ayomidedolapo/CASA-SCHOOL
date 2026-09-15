@@ -22,11 +22,15 @@ import {
   registryAuthErrorResponse,
   registryDatabaseErrorResponse,
   registryNoStoreHeaders,
+  requireRegistryAdmin,
   requireRegistryOperator,
 } from "@/server/registry/http";
 import {
   studentUpdateSchema,
 } from "@/server/registry/validation";
+import {
+  archiveStudent,
+} from "@/server/students/lifecycle";
 
 export const dynamic = "force-dynamic";
 
@@ -372,6 +376,93 @@ export async function PATCH(
       );
 
     if (databaseResponse) {
+      return databaseResponse;
+    }
+
+    throw error;
+  }
+}
+
+export async function DELETE(
+  _request: NextRequest,
+  context: RouteContext,
+) {
+  const {
+    slug,
+    studentId,
+  } =
+    await context.params;
+
+  try {
+    const access =
+      await requireRegistryAdmin(
+        slug,
+      );
+
+    const result =
+      await archiveStudent({
+        schoolId:
+          access.school.id,
+        studentId,
+        actorKind:
+          "SCHOOL_MEMBER",
+        actorMembershipId:
+          access.membership.id,
+      });
+
+    if (!result) {
+      return NextResponse.json(
+        {
+          message:
+            "Student not found.",
+        },
+        {
+          status: 404,
+          headers:
+            registryNoStoreHeaders,
+        },
+      );
+    }
+
+    return NextResponse.json(
+      {
+        removed: true,
+        archived:
+          result.archived,
+        replayed:
+          result.replayed,
+        endedEnrollments:
+          result.endedEnrollments,
+        revokedCards:
+          result.revokedCards,
+      },
+      {
+        headers:
+          registryNoStoreHeaders,
+      },
+    );
+  } catch (
+    error
+  ) {
+    const authResponse =
+      registryAuthErrorResponse(
+        error,
+      );
+
+    if (
+      authResponse
+    ) {
+      return authResponse;
+    }
+
+    const databaseResponse =
+      registryDatabaseErrorResponse(
+        error,
+      );
+
+    if (
+      databaseResponse
+    ) {
       return databaseResponse;
     }
 

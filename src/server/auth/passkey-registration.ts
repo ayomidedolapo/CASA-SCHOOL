@@ -284,10 +284,35 @@ export async function finishPasskeyRegistration(
         credential_id
     `);
 
+  // Drizzle/Neon may return either Row[] or QueryResult { rows }.
+  // The INSERT itself is authoritative; do not report a false
+  // 409 merely because the adapter wrapped RETURNING rows.
+  const resultRows =
+    Array.isArray(
+      result,
+    )
+      ? result
+      : result &&
+          typeof result ===
+            "object" &&
+          "rows" in result &&
+          Array.isArray(
+            (
+              result as {
+                rows?: unknown;
+              }
+            ).rows,
+          )
+        ? (
+            result as {
+              rows: unknown[];
+            }
+          ).rows
+        : [];
+
   const inserted =
-    Array.isArray(result)
-      ? result[0]
-      : null;
+    resultRows[0] ??
+    null;
 
   if (!inserted) {
     return {

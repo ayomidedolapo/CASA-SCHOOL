@@ -18,11 +18,11 @@ OWNER and ADMIN may:
 - authorize an early departure with Passkey;
 - view all Today attendance state.
 
-SCHOOL_TECHNICIAN may view Today attendance and terminal health for scanner support.
+SCHOOL_TECHNICIAN may view Today attendance and terminal health, work branch-by-branch, and authorize early departure with a mandatory reason + Passkey.
 
-SCHOOL_TECHNICIAN may not change policy/session state or authorize early release.
+A Branch Admin may authorize early departure only inside a branch they are actively assigned to.
 
-General STAFF is not granted broad early-release authority in this phase. Future staff capability delegation should be explicit.
+SCHOOL_TECHNICIAN still may not change attendance policy or daily-session state. General STAFF is not granted broad early-release authority.
 
 ## Policy versioning
 
@@ -112,3 +112,15 @@ An initial recovery added a microtask boundary inside `refreshToday()`, but the 
 The final recovery changed the effect itself: the first refresh is scheduled through `window.setTimeout`, while recurring refresh stays inside `window.setInterval`. The effect body now only manages external timer synchronization.
 
 The lint rule remains enabled and no suppression or React configuration relaxation was introduced.
+
+## Selected-student early departure
+
+For known early releases, the operator may choose multiple students who are currently ON_CAMPUS in one branch, even when they belong to different classes.
+
+The operator enters one reason and completes one EARLY_DEPARTURE Passkey step-up. CASA stores an individual durable preauthorization for every selected student. Each student must still scan their own ACTIVE card and pass face+liveness. The first valid early scan consumes that student-specific preauthorization and binds it to the exact Scanner attempt.
+
+This avoids repeated Passkey prompts for a known group without creating a class-wide or branch-wide blanket dismissal.
+
+## Departure close
+
+After the configured check-out close time, the Scanner remains installed/running but ordinary attendance scans are rejected with `CHECK_OUT_WINDOW_CLOSED`. The daily attendance session remains an explicit administrative OPEN/CLOSED lifecycle.

@@ -85,6 +85,8 @@ export function LoginForm({
   ] =
     useState("");
 
+  const [showPassword, setShowPassword] = useState(false);
+
   const [
     error,
     setError,
@@ -569,7 +571,7 @@ export function LoginForm({
             </span>
             <input
               required
-              type="password"
+              type={showPassword ? "text" : "password"}
               value={
                 password
               }
@@ -586,6 +588,11 @@ export function LoginForm({
               className="casa-field"
             />
           </label>
+
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <button type="button" className="inline-flex items-center gap-2 border-b border-black text-xs font-semibold" onClick={() => setShowPassword((value) => !value)} aria-pressed={showPassword} aria-label={showPassword ? "Hide password" : "Show password"}><svg aria-hidden="true" viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.75"/></svg><span>{showPassword ? "Hide password" : "Show password"}</span></button>
+            <a href="/account/recovery" className="text-xs font-semibold underline underline-offset-4">Forgot password?</a>
+          </div>
 
           <button
             disabled={

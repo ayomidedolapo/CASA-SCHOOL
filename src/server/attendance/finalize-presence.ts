@@ -570,40 +570,146 @@ export async function finalizeVerifiedPresence(
             where e.attempt_id = a.id
           )
         returning id
+      ),
+      inserted_event as (
+        insert into student_presence_events (
+          school_id,
+          session_id,
+          student_id,
+          attendance_record_id,
+          attempt_id,
+          terminal_id,
+          card_id,
+          event_type,
+          departure_result,
+          occurred_at,
+          created_at
+        )
+        select
+          r.school_id,
+          r.session_id,
+          r.student_id,
+          r.id,
+          r.source_attempt_id,
+          r.terminal_id,
+          r.card_id,
+          'CHECKED_IN'::attendance_presence_event_type,
+          'NOT_RUN'::attendance_departure_result,
+          ${now}::timestamptz,
+          ${now}::timestamptz
+        from inserted_record r
+        where exists (
+          select 1
+          from updated_attempt u
+          where
+            u.id =
+              r.source_attempt_id
+        )
+        on conflict do nothing
+        returning
+          id,
+          school_id,
+          student_id,
+          attendance_record_id,
+          occurred_at
+      ),
+      active_sender as (
+        select
+          s.id,
+          s.school_id
+        from school_whatsapp_senders s
+        where
+          s.school_id =
+            ${access.school.id}::uuid
+          and s.status =
+            'ACTIVE'::school_messaging_sender_status
+        limit 1
+      ),
+      recipients as (
+        select
+          e.id as presence_event_id,
+          e.school_id,
+          e.student_id,
+          e.attendance_record_id,
+          e.occurred_at,
+          sender.id as sender_id,
+          g.id as guardian_id,
+          g.phone as recipient_phone,
+          st.casa_student_id,
+          concat_ws(
+            ' ',
+            st.first_name,
+            nullif(
+              st.middle_name,
+              ''
+            ),
+            st.last_name
+          ) as student_name
+        from inserted_event e
+        join active_sender sender
+          on sender.school_id =
+            e.school_id
+        join student_guardians sg
+          on sg.school_id =
+            e.school_id
+          and sg.student_id =
+            e.student_id
+          and sg.receives_notifications =
+            true
+        join guardians g
+          on g.school_id =
+            sg.school_id
+          and g.id =
+            sg.guardian_id
+          and g.status =
+            'ACTIVE'::guardian_status
+          and g.phone is not null
+          and length(trim(g.phone)) > 0
+        join students st
+          on st.school_id =
+            e.school_id
+          and st.id =
+            e.student_id
       )
-      insert into student_presence_events (
+      insert into school_notification_outbox (
         school_id,
-        session_id,
-        student_id,
         attendance_record_id,
-        attempt_id,
-        terminal_id,
-        card_id,
+        presence_event_id,
+        guardian_id,
+        sender_id,
         event_type,
-        departure_result,
-        occurred_at,
-        created_at
+        recipient_phone,
+        template_key,
+        payload,
+        status,
+        attempt_count,
+        available_at,
+        created_at,
+        updated_at
       )
       select
-        r.school_id,
-        r.session_id,
-        r.student_id,
-        r.id,
-        r.source_attempt_id,
-        r.terminal_id,
-        r.card_id,
-        'CHECKED_IN'::attendance_presence_event_type,
-        'NOT_RUN'::attendance_departure_result,
+        recipients.school_id,
+        recipients.attendance_record_id,
+        recipients.presence_event_id,
+        recipients.guardian_id,
+        recipients.sender_id,
+        'STUDENT_CHECKED_IN'::school_notification_event_type,
+        recipients.recipient_phone,
+        'student_checked_in',
+        jsonb_build_object(
+          'studentName',
+            recipients.student_name,
+          'casaStudentId',
+            recipients.casa_student_id,
+          'checkedInAt',
+            recipients.occurred_at
+        ),
+        'PENDING'::school_notification_delivery_status,
+        0,
+        ${now}::timestamptz,
         ${now}::timestamptz,
         ${now}::timestamptz
-      from inserted_record r
-      where exists (
-        select 1
-        from updated_attempt u
-        where
-          u.id =
-            r.source_attempt_id
-      )
+      from recipients
       on conflict do nothing
     `);
   } else {
@@ -869,7 +975,7 @@ export async function finalizeVerifiedPresence(
             recipients.occurred_at,
           'message',
             recipients.student_name ||
-            ' has signed out of school and is on the way home.'
+            ' has checked out of school for the day.'
         ),
         'PENDING'::school_notification_delivery_status,
         0,
@@ -1028,42 +1134,41 @@ export async function finalizeVerifiedPresence(
     );
   }
 
-  let notificationQueued = 0;
-
-  if (
+  const notificationEventType =
     attempt.operation ===
-    "CHECK_OUT"
-  ) {
-    const outboxRows =
-      await db.execute(sql`
-        select
-          count(*)::int as count
-        from school_notification_outbox
-        where
-          school_id =
-            ${access.school.id}::uuid
-          and presence_event_id =
-            ${event.id}::uuid
-          and event_type =
-            'STUDENT_SIGNED_OUT'::school_notification_event_type
-      `);
+      "CHECK_IN"
+      ? "STUDENT_CHECKED_IN"
+      : "STUDENT_SIGNED_OUT";
 
-    const row =
-      Array.isArray(outboxRows)
-        ? outboxRows[0]
-        : null;
+  const outboxRows =
+    await db.execute(sql`
+      select
+        count(*)::int as count
+      from school_notification_outbox
+      where
+        school_id =
+          ${access.school.id}::uuid
+        and presence_event_id =
+          ${event.id}::uuid
+        and event_type =
+          ${notificationEventType}::school_notification_event_type
+    `);
 
-    notificationQueued =
-      Number(
-        (
-          row as
-            | {
-                count?: unknown;
-              }
-            | undefined
-        )?.count ?? 0,
-      );
-  }
+  const outboxRow =
+    Array.isArray(outboxRows)
+      ? outboxRows[0]
+      : null;
+
+  const notificationQueued =
+    Number(
+      (
+        outboxRow as
+          | {
+              count?: unknown;
+            }
+          | undefined
+      )?.count ?? 0,
+    );
 
   return {
     ok: true,

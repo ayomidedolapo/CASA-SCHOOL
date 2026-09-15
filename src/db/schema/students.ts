@@ -27,6 +27,9 @@ export const students = pgTable(
       .references(
         () => schools.id,
       ),
+    homeBranchId: uuid(
+      "home_branch_id",
+    ),
     casaStudentId: varchar(
       "casa_student_id",
       {
@@ -104,6 +107,13 @@ export const students = pgTable(
       "students_school_status_idx",
     ).on(
       table.schoolId,
+      table.status,
+    ),
+    index(
+      "students_school_home_branch_status_idx",
+    ).on(
+      table.schoolId,
+      table.homeBranchId,
       table.status,
     ),
     index(

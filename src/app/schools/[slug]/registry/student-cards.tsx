@@ -74,6 +74,15 @@ interface ProductionResponse {
     ProductionJob[];
 }
 
+interface BiometricResponse {
+  activeProfile:
+    | {
+        id: string;
+        status: string;
+      }
+    | null;
+}
+
 function errorMessage(
   value:
     unknown,
@@ -136,6 +145,12 @@ export function StudentCards({
     >([]);
 
   const [
+    faceReady,
+    setFaceReady,
+  ] =
+    useState(false);
+
+  const [
     busy,
     setBusy,
   ] =
@@ -182,6 +197,16 @@ export function StudentCards({
       ],
     );
 
+  const biometricEndpoint =
+    useMemo(
+      () =>
+        `${apiBase}/students/${studentId}/biometrics`,
+      [
+        apiBase,
+        studentId,
+      ],
+    );
+
   const activeCard =
     cards.find(
       (card) =>
@@ -223,6 +248,7 @@ export function StudentCards({
         const [
           cardsResponse,
           productionResponse,
+          biometricResponse,
         ] =
           await Promise.all([
             fetch(
@@ -243,6 +269,15 @@ export function StudentCards({
                   "no-store",
               },
             ),
+            fetch(
+              biometricEndpoint,
+              {
+                credentials:
+                  "same-origin",
+                cache:
+                  "no-store",
+              },
+            ),
           ]);
 
         const cardsBody:
@@ -252,6 +287,10 @@ export function StudentCards({
         const productionBody:
           unknown =
             await productionResponse.json();
+
+        const biometricBody:
+          unknown =
+            await biometricResponse.json();
 
         if (
           !cardsResponse.ok
@@ -275,6 +314,17 @@ export function StudentCards({
           );
         }
 
+        if (
+          !biometricResponse.ok
+        ) {
+          throw new Error(
+            errorMessage(
+              biometricBody,
+              "Unable to load face-enrollment readiness.",
+            ),
+          );
+        }
+
         const cardData =
           cardsBody as
             CardsResponse;
@@ -282,6 +332,10 @@ export function StudentCards({
         const productionData =
           productionBody as
             ProductionResponse;
+
+        const biometricData =
+          biometricBody as
+            BiometricResponse;
 
         setCards(
           cardData.cards,
@@ -292,10 +346,18 @@ export function StudentCards({
         setJobs(
           productionData.jobs,
         );
+        setFaceReady(
+          Boolean(
+            biometricData.activeProfile &&
+              biometricData.activeProfile.status ===
+                "ACTIVE",
+          ),
+        );
       },
       [
         endpoint,
         productionEndpoint,
+        biometricEndpoint,
       ],
     );
 
@@ -457,6 +519,13 @@ export function StudentCards({
 
   async function activateHandover() {
     if (!pendingCard) {
+      return;
+    }
+
+    if (!faceReady) {
+      setError(
+        "Complete face enrollment before activating this card.",
+      );
       return;
     }
 
@@ -669,15 +738,31 @@ export function StudentCards({
               </p>
               <p className="mt-2 text-xs leading-5 text-black/55">
                 Production status: {pendingProduction?.status ?? "Unknown"}.
-                This card is not Scanner-usable until an authorized operator
-                confirms the physical handover.
+                Face enrollment: {faceReady ? "READY" : "REQUIRED"}.
+                This card becomes Scanner-usable only after the physical card
+                is PRINTED, the student&apos;s face is enrolled, and an authorized
+                operator confirms handover.
               </p>
+              {!faceReady ? (
+                <p className="mt-2 text-xs font-semibold text-[var(--casa-warning)]">
+                  Activation locked: complete face enrollment first.
+                </p>
+              ) : pendingProduction?.status !== "PRINTED" ? (
+                <p className="mt-2 text-xs font-semibold text-[var(--casa-warning)]">
+                  Activation locked: CASA production must mark this physical card PRINTED.
+                </p>
+              ) : (
+                <p className="mt-2 text-xs font-semibold text-[var(--casa-positive)]">
+                  Ready for physical handover confirmation.
+                </p>
+              )}
             </div>
             <button
               type="button"
               className="casa-button"
               disabled={
                 busy ||
+                !faceReady ||
                 pendingProduction?.status !==
                   "PRINTED"
               }

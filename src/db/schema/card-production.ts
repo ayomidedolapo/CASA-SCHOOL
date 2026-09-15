@@ -48,6 +48,10 @@ export interface StudentCardRenderSnapshot {
   sex: "M" | "F" | "";
   className:
     string | null;
+  // Branch is production/audit metadata captured at issuance.
+  // It is intentionally not a printable dynamic card field.
+  branchId?: string | null;
+  branchName?: string | null;
   /** @deprecated Pass A: never rendered on physical cards. */
   academicSession:
     string | null;

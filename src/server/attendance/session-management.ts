@@ -14,6 +14,7 @@ import type {
 
 import {
   getAttendanceReadinessRejection,
+  isInstructionalDate,
 } from "./readiness";
 import {
   getSchoolClock,
@@ -66,6 +67,24 @@ export async function openTodayAttendanceSession(
       status: 409 as const,
       code:
         "ATTENDANCE_POLICY_REQUIRED",
+    };
+  }
+
+  if (
+    !await isInstructionalDate({
+      schoolId:
+        access.school.id,
+      date:
+        clock.date,
+      branchId:
+        null,
+    })
+  ) {
+    return {
+      ok: false as const,
+      status: 409 as const,
+      code:
+        "NON_INSTRUCTIONAL_DAY" as const,
     };
   }
 

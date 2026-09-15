@@ -12,6 +12,11 @@ export const studentCreateSchema =
       .max(64)
       .optional()
       .nullable(),
+    branchId: z
+      .string()
+      .uuid()
+      .optional()
+      .nullable(),
     firstName: z
       .string()
       .trim()
@@ -79,6 +84,11 @@ export const studentUpdateSchema =
         "FEMALE",
         "UNSPECIFIED",
       ])
+      .optional(),
+    homeBranchId: z
+      .string()
+      .uuid()
+      .nullable()
       .optional(),
     status: z
       .enum([
@@ -156,7 +166,7 @@ export const guardianLinkSchema =
       .default(false),
     receivesNotifications: z
       .boolean()
-      .default(true),
+      .default(false),
   });
 
 export const enrollmentCreateSchema =

@@ -272,7 +272,9 @@ export async function getStudentSnapshotSource(
         s.sex::text as sex,
         school.name as school_name,
         class_data.class_name,
-        class_data.academic_session_name
+        class_data.academic_session_name,
+        class_data.branch_id,
+        class_data.branch_name
       from students s
       join schools school
         on school.id =
@@ -285,7 +287,9 @@ export async function getStudentSnapshotSource(
             ca.name
           ) as class_name,
           academic_session.name
-            as academic_session_name
+            as academic_session_name,
+          branch.id as branch_id,
+          branch.name as branch_name
         from student_enrollments e
         join academic_sessions
           academic_session
@@ -303,6 +307,16 @@ export async function getStudentSnapshotSource(
             ca.school_id
           and cl.id =
             ca.class_level_id
+        left join school_branch_class_arms branch_arm
+          on branch_arm.school_id =
+            e.school_id
+          and branch_arm.class_arm_id =
+            e.class_arm_id
+        left join school_branches branch
+          on branch.school_id =
+            e.school_id
+          and branch.id =
+            branch_arm.branch_id
         where
           e.school_id =
             s.school_id
@@ -345,6 +359,10 @@ export async function getStudentSnapshotSource(
     class_name:
       string | null;
     academic_session_name:
+      string | null;
+    branch_id:
+      string | null;
+    branch_name:
       string | null;
   }>(
     result,
@@ -624,6 +642,10 @@ export async function produceStudentCard(
               : "",
         className:
           student.class_name,
+        branchId:
+          student.branch_id,
+        branchName:
+          student.branch_name,
         academicSession:
           null,
         cardSerial:

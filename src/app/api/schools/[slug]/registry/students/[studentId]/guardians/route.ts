@@ -107,6 +107,8 @@ export async function POST(
         db
           .select({
             id: guardians.id,
+            phone:
+              guardians.phone,
           })
           .from(guardians)
           .where(
@@ -145,6 +147,23 @@ export async function POST(
       );
     }
 
+    if (
+      parsed.data.receivesNotifications &&
+      !guardianRows[0].phone?.trim()
+    ) {
+      return NextResponse.json(
+        {
+          message:
+            "Guardian must have a phone number before receiving attendance SMS.",
+        },
+        {
+          status: 409,
+          headers:
+            registryNoStoreHeaders,
+        },
+      );
+    }
+
     const inserted = await db
       .insert(studentGuardians)
       .values({
@@ -162,11 +181,70 @@ export async function POST(
         pickupAuthorized:
           parsed.data.pickupAuthorized,
         receivesNotifications:
-          parsed.data.receivesNotifications,
+          false,
       })
       .returning({
         id: studentGuardians.id,
       });
+
+    if (
+      parsed.data.receivesNotifications &&
+      inserted[0]
+    ) {
+      await db
+        .update(
+          studentGuardians,
+        )
+        .set({
+          receivesNotifications:
+            false,
+          updatedAt:
+            new Date(),
+        })
+        .where(
+          and(
+            eq(
+              studentGuardians.schoolId,
+              access.school.id,
+            ),
+            eq(
+              studentGuardians.studentId,
+              studentId,
+            ),
+            eq(
+              studentGuardians.receivesNotifications,
+              true,
+            ),
+          ),
+        );
+
+      await db
+        .update(
+          studentGuardians,
+        )
+        .set({
+          receivesNotifications:
+            true,
+          updatedAt:
+            new Date(),
+        })
+        .where(
+          and(
+            eq(
+              studentGuardians.schoolId,
+              access.school.id,
+            ),
+            eq(
+              studentGuardians.studentId,
+              studentId,
+            ),
+            eq(
+              studentGuardians.id,
+              inserted[0].id,
+            ),
+          ),
+        );
+    }
 
     return NextResponse.json(
       {
@@ -175,6 +253,236 @@ export async function POST(
       },
       {
         status: 201,
+        headers:
+          registryNoStoreHeaders,
+      },
+    );
+  } catch (error) {
+    const authResponse =
+      registryAuthErrorResponse(
+        error,
+      );
+
+    if (authResponse) {
+      return authResponse;
+    }
+
+    const databaseResponse =
+      registryDatabaseErrorResponse(
+        error,
+      );
+
+    if (databaseResponse) {
+      return databaseResponse;
+    }
+
+    throw error;
+  }
+}
+
+export async function PATCH(
+  request: NextRequest,
+  context: RouteContext,
+) {
+  const {
+    slug,
+    studentId,
+  } = await context.params;
+
+  try {
+    const access =
+      await requireRegistryOperator(slug);
+
+    let body: unknown;
+
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json(
+        {
+          message:
+            "Invalid guardian notification update.",
+        },
+        {
+          status: 400,
+          headers:
+            registryNoStoreHeaders,
+        },
+      );
+    }
+
+    const parsed =
+      body &&
+      typeof body ===
+        "object" &&
+      !Array.isArray(body)
+        ? body as {
+            linkId?: unknown;
+          }
+        : {};
+
+    const linkId =
+      typeof parsed.linkId ===
+        "string"
+        ? parsed.linkId
+        : "";
+
+    if (
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        linkId,
+      )
+    ) {
+      return NextResponse.json(
+        {
+          message:
+            "Select a valid guardian relationship.",
+        },
+        {
+          status: 400,
+          headers:
+            registryNoStoreHeaders,
+        },
+      );
+    }
+
+    const db = getDb();
+
+    const targetRows =
+      await db
+        .select({
+          id:
+            studentGuardians.id,
+          phone:
+            guardians.phone,
+        })
+        .from(
+          studentGuardians,
+        )
+        .innerJoin(
+          guardians,
+          and(
+            eq(
+              guardians.schoolId,
+              studentGuardians.schoolId,
+            ),
+            eq(
+              guardians.id,
+              studentGuardians.guardianId,
+            ),
+          ),
+        )
+        .where(
+          and(
+            eq(
+              studentGuardians.schoolId,
+              access.school.id,
+            ),
+            eq(
+              studentGuardians.studentId,
+              studentId,
+            ),
+            eq(
+              studentGuardians.id,
+              linkId,
+            ),
+            eq(
+              guardians.status,
+              "ACTIVE",
+            ),
+          ),
+        )
+        .limit(1);
+
+    const target =
+      targetRows[0];
+
+    if (
+      !target ||
+      !target.phone?.trim()
+    ) {
+      return NextResponse.json(
+        {
+          message:
+            "Guardian must be active and have a phone number before receiving attendance SMS.",
+        },
+        {
+          status: 409,
+          headers:
+            registryNoStoreHeaders,
+        },
+      );
+    }
+
+    await db
+      .update(
+        studentGuardians,
+      )
+      .set({
+        receivesNotifications:
+          false,
+        updatedAt:
+          new Date(),
+      })
+      .where(
+        and(
+          eq(
+            studentGuardians.schoolId,
+            access.school.id,
+          ),
+          eq(
+            studentGuardians.studentId,
+            studentId,
+          ),
+          eq(
+            studentGuardians.receivesNotifications,
+            true,
+          ),
+        ),
+      );
+
+    const selectedRows =
+      await db
+        .update(
+          studentGuardians,
+        )
+        .set({
+          receivesNotifications:
+            true,
+          updatedAt:
+            new Date(),
+        })
+        .where(
+          and(
+            eq(
+              studentGuardians.schoolId,
+              access.school.id,
+            ),
+            eq(
+              studentGuardians.studentId,
+              studentId,
+            ),
+            eq(
+              studentGuardians.id,
+              linkId,
+            ),
+          ),
+        )
+        .returning({
+          id:
+            studentGuardians.id,
+          receivesNotifications:
+            studentGuardians.receivesNotifications,
+        });
+
+    const selected =
+      selectedRows[0];
+
+    return NextResponse.json(
+      {
+        attendanceSmsRecipient:
+          selected,
+      },
+      {
         headers:
           registryNoStoreHeaders,
       },

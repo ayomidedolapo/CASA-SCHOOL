@@ -12,6 +12,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -119,6 +120,21 @@ type AcademicOptions = {
   }>;
 };
 
+type FaceCapturePhase =
+  | "IDLE"
+  | "CAMERA"
+  | "VERIFYING"
+  | "ERROR";
+
+const FACE_RESULT_RETRY_COUNT = 6;
+const FACE_RESULT_RETRY_DELAY_MS = 750;
+
+async function waitForFaceResultRetry() {
+  await new Promise<void>((resolve) => {
+    window.setTimeout(resolve, FACE_RESULT_RETRY_DELAY_MS);
+  });
+}
+
 type EnrollmentLiveness = {
   livenessSessionId: string;
   providerSessionId: string;
@@ -130,6 +146,11 @@ type EnrollmentLiveness = {
     sessionToken: string;
     expiration: string;
   };
+};
+
+type FaceCompletionResponse = {
+  message?: string;
+  code?: string;
 };
 
 async function resultOrThrow(
@@ -209,9 +230,13 @@ function booleanValue(
 export default function InternalOnboardingClient({
   actorName,
   role,
+  initialSchoolId,
+  returnHref,
 }: {
   actorName: string;
   role: string;
+  initialSchoolId: string;
+  returnHref: string;
 }) {
   const [
     schools,
@@ -222,7 +247,9 @@ export default function InternalOnboardingClient({
     schoolId,
     setSchoolId,
   ] =
-    useState("");
+    useState(
+      initialSchoolId,
+    );
   const [
     query,
     setQuery,
@@ -308,6 +335,15 @@ export default function InternalOnboardingClient({
     useState<EnrollmentLiveness | null>(
       null,
     );
+  const [
+    faceCapturePhase,
+    setFaceCapturePhase,
+  ] =
+    useState<FaceCapturePhase>(
+      "IDLE",
+    );
+  const completingFaceRef =
+    useRef(false);
 
   const selectedSchool =
     useMemo(
@@ -581,6 +617,7 @@ export default function InternalOnboardingClient({
         setSchoolId(
           (current) =>
             current ||
+            initialSchoolId ||
             next[0]?.id ||
             "",
         );
@@ -602,7 +639,9 @@ export default function InternalOnboardingClient({
       cancelled =
         true;
     };
-  }, []);
+  }, [
+    initialSchoolId,
+  ]);
 
   useEffect(() => {
     if (!schoolId) {
@@ -1022,9 +1061,11 @@ export default function InternalOnboardingClient({
     setError("");
     setMessage("");
 
+    const formElement =
+      event.currentTarget;
     const form =
       new FormData(
-        event.currentTarget,
+        formElement,
       );
 
     try {
@@ -1043,6 +1084,11 @@ export default function InternalOnboardingClient({
                 admissionNumber:
                   form.get(
                     "admissionNumber",
+                  ) ||
+                  null,
+                branchId:
+                  form.get(
+                    "branchId",
                   ) ||
                   null,
                 firstName:
@@ -1080,9 +1126,9 @@ export default function InternalOnboardingClient({
         ),
       );
 
-      event.currentTarget.reset();
+      formElement.reset();
       setMessage(
-        "Student registered. The record is ready for guardian, class and face completion.",
+        "Student identity registered. Add guardian/contact details now. Academic session/class assignment can be completed later after the school finishes academic setup; face capture remains a separate capture-day step.",
       );
       setCompletion(
         "INCOMPLETE",
@@ -1117,9 +1163,11 @@ export default function InternalOnboardingClient({
     setError("");
     setMessage("");
 
+    const formElement =
+      event.currentTarget;
     const form =
       new FormData(
-        event.currentTarget,
+        formElement,
       );
 
     try {
@@ -1215,9 +1263,11 @@ export default function InternalOnboardingClient({
     setError("");
     setMessage("");
 
+    const formElement =
+      event.currentTarget;
     const form =
       new FormData(
-        event.currentTarget,
+        formElement,
       );
 
     try {
@@ -1274,7 +1324,7 @@ export default function InternalOnboardingClient({
         ),
       );
 
-      event.currentTarget.reset();
+      formElement.reset();
       setMessage(
         "Guardian created and linked.",
       );
@@ -1313,9 +1363,11 @@ export default function InternalOnboardingClient({
     setError("");
     setMessage("");
 
+    const formElement =
+      event.currentTarget;
     const form =
       new FormData(
-        event.currentTarget,
+        formElement,
       );
 
     try {
@@ -1358,7 +1410,7 @@ export default function InternalOnboardingClient({
         ),
       );
 
-      event.currentTarget.reset();
+      formElement.reset();
       setMessage(
         "Class enrollment assigned.",
       );
@@ -1446,6 +1498,9 @@ export default function InternalOnboardingClient({
         body.liveness as
           EnrollmentLiveness,
       );
+      setFaceCapturePhase(
+        "CAMERA",
+      );
       setMessage(
         action ===
           "BIOMETRIC_ENROLL"
@@ -1468,7 +1523,8 @@ export default function InternalOnboardingClient({
     if (
       !selected ||
       !liveness ||
-      !endpoint
+      !endpoint ||
+      completingFaceRef.current
     ) {
       return;
     }
@@ -1476,48 +1532,119 @@ export default function InternalOnboardingClient({
     const current =
       liveness;
 
+    completingFaceRef.current =
+      true;
+    setFaceCapturePhase(
+      "VERIFYING",
+    );
     setBusy(true);
     setError("");
+    setMessage(
+      "Camera check complete. CASA is verifying liveness and enrolling the face with AWS. This normally takes only a few seconds.",
+    );
 
     try {
-      const response =
-        await fetch(
-          `${endpoint}/students/${encodeURIComponent(
-            selected.id,
-          )}/biometrics/liveness/complete`,
-          {
-            method:
-              "POST",
-            headers: {
-              "Content-Type":
-                "application/json",
-            },
-            credentials:
-              "same-origin",
-            cache:
-              "no-store",
-            body:
-              JSON.stringify({
+      let body: FaceCompletionResponse = {};
+      let completed = false;
+
+      for (
+        let attempt = 1;
+        attempt <=
+        FACE_RESULT_RETRY_COUNT;
+        attempt += 1
+      ) {
+        const response =
+          await fetch(
+            `${endpoint}/students/${encodeURIComponent(
+              selected.id,
+            )}/biometrics/liveness/complete`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type":
+                  "application/json",
+              },
+              credentials:
+                "same-origin",
+              cache: "no-store",
+              body: JSON.stringify({
                 livenessSessionId:
                   current
                     .livenessSessionId,
               }),
-          },
-        );
+            },
+          );
 
-      const body =
-        await response.json();
+        body =
+          (await response
+            .json()
+            .catch(() => ({}))) as
+            FaceCompletionResponse;
 
-      if (!response.ok) {
+        if (response.ok) {
+          completed = true;
+          break;
+        }
+
+        const code =
+          typeof body?.code ===
+          "string"
+            ? body.code
+            : "";
+
+        if (
+          code ===
+            "LIVENESS_NOT_COMPLETE" &&
+          attempt <
+            FACE_RESULT_RETRY_COUNT
+        ) {
+          setMessage(
+            `AWS is finishing the liveness result. Verification check ${attempt + 1} of ${FACE_RESULT_RETRY_COUNT}...`,
+          );
+          await waitForFaceResultRetry();
+          continue;
+        }
+
+        if (
+          response.status === 503 &&
+          (code ===
+            "BIOMETRIC_POLICY_NOT_CONFIGURED" ||
+            code ===
+              "BIOMETRIC_POLICY_INVALID" ||
+            code ===
+              "BIOMETRIC_PROVIDER_MODE_NOT_CONFIGURED" ||
+            code ===
+              "BIOMETRIC_PROVIDER_MODE_MISMATCH" ||
+            code ===
+              "AWS_BIOMETRIC_NOT_CONFIGURED" ||
+            code ===
+              "AWS_BIOMETRIC_INVALID_QUALITY_FILTER")
+        ) {
+          await cancelEnrollment(false);
+          throw new Error(
+            "AWS biometric runtime is not configured for this CASA staging deployment. The capture was not accepted. Configure the biometric runtime, then start one fresh capture.",
+          );
+        }
+
         throw new Error(
           typeof body?.message ===
             "string"
-            ? body.message
-            : "Face enrollment could not be completed.",
+            ? `${body.message}${code ? ` (${code})` : ""}`
+            : code ||
+                "Face enrollment could not be completed.",
+        );
+      }
+
+      if (!completed) {
+        throw new Error(
+          "AWS is taking longer than expected to finalize the liveness result. Cancel this capture and start one fresh session only if the student's face status still shows incomplete.",
         );
       }
 
       setLiveness(null);
+      setFaceCapturePhase(
+        "IDLE",
+      );
       setMessage(
         "Face enrollment completed and the student's biometric readiness was updated.",
       );
@@ -1527,21 +1654,22 @@ export default function InternalOnboardingClient({
           selected.id,
         );
 
-      setDetail(
-        refreshed,
-      );
-
-      await search(
-        page,
-      );
+      setDetail(refreshed);
+      await search(page);
     } catch (caught) {
+      setFaceCapturePhase(
+        liveness
+          ? "ERROR"
+          : "IDLE",
+      );
       setError(
-        caught instanceof
-          Error
+        caught instanceof Error
           ? caught.message
           : "Face enrollment could not be completed.",
       );
     } finally {
+      completingFaceRef.current =
+        false;
       setBusy(false);
     }
   }
@@ -1562,6 +1690,9 @@ export default function InternalOnboardingClient({
       liveness;
 
     setLiveness(null);
+    setFaceCapturePhase(
+      "IDLE",
+    );
 
     try {
       await fetch(
@@ -1652,7 +1783,7 @@ export default function InternalOnboardingClient({
           <section className="border-b border-black/15 px-5 py-6 sm:px-8 lg:border-r lg:border-b-0 lg:px-10 lg:py-8">
             <div className="flex items-center justify-between gap-5">
               <p className="casa-kicker">CASA</p>
-              <p className="font-mono text-[9px] uppercase tracking-[0.1em] text-black/35">Internal capture</p>
+              <a href={returnHref} className="font-mono text-[9px] uppercase tracking-[0.1em] text-black/45 underline underline-offset-4">Back to organization</a>
             </div>
             <p className="casa-kicker mt-12 text-black/40">Identity operations</p>
             <h1 className="casa-display-compact mt-4 max-w-[9ch]">
@@ -1666,7 +1797,7 @@ export default function InternalOnboardingClient({
             <div>
               <p className="casa-kicker text-black/40">CASA / Internal</p>
               <h2 className="mt-4 max-w-[13ch] text-3xl font-semibold tracking-[-0.05em] sm:text-5xl">
-                Search. Handle. Complete.
+                Search. Register. Onboard.
               </h2>
             </div>
             <div className="mt-10 border-l border-black/20 pl-4 font-mono text-[10px] uppercase leading-5 tracking-[0.12em]">
@@ -1691,6 +1822,9 @@ export default function InternalOnboardingClient({
               <select
                 className="casa-field"
                 disabled={
+                  Boolean(
+                    initialSchoolId,
+                  ) ||
                   busy ||
                   Boolean(
                     liveness,
@@ -2138,6 +2272,68 @@ export default function InternalOnboardingClient({
               </label>
               <label className="casa-label sm:col-span-2">
                 <span>
+                  Campus
+                </span>
+                <select
+                  className="casa-field"
+                  key={academicOptions.branches
+                    .map(
+                      (branch) =>
+                        branch.id,
+                    )
+                    .join("|")}
+                  name="branchId"
+                  defaultValue={
+                    academicOptions.branches.length ===
+                    1
+                      ? academicOptions.branches[0]
+                          ?.id
+                      : ""
+                  }
+                  required={
+                    academicOptions.branches.length >
+                    1
+                  }
+                >
+                  <option
+                    value=""
+                    disabled={
+                      academicOptions.branches.length >
+                      1
+                    }
+                  >
+                    {academicOptions.branches.length ===
+                    1
+                      ? "Only campus selected automatically"
+                      : "Select campus"}
+                  </option>
+                  {academicOptions.branches.map(
+                    (
+                      branch,
+                    ) => (
+                      <option
+                        key={
+                          branch.id
+                        }
+                        value={
+                          branch.id
+                        }
+                      >
+                        {branch.name}
+                        {branch.isHeadquarters
+                          ? " · HQ"
+                          : ""}
+                      </option>
+                    ),
+                  )}
+                </select>
+                <span className="mt-1 text-[10px] leading-4 text-black/45">
+                  One-campus schools are assigned automatically. Multi-campus schools require a campus.
+                </span>
+              </label>
+
+              <label className="casa-label sm:col-span-2">
+                <span>
                   Admission date
                 </span>
                 <input
@@ -2166,7 +2362,7 @@ export default function InternalOnboardingClient({
                 Capture-day workspace
               </p>
               <h2 className="casa-display-compact mt-5 max-w-xl">
-                Pick the student physically in front of you.
+                Search or register a student for this selected school.
               </h2>
               <p className="mt-5 max-w-xl text-sm leading-6 text-black/55">
                 Search first, acquire the lightweight operator lock, complete
@@ -2900,13 +3096,26 @@ export default function InternalOnboardingClient({
                   </form>
                 ) : (
                   <p className="casa-notice mt-4 text-[var(--casa-warning)]">
-                    No active or planned academic session/class options are
-                    available for this school.
+                    Academic setup is not ready yet. This does not block CASA
+                    from completing the student&apos;s identity and guardian/contact
+                    record. Ask the School Admin to finish session, terms, class
+                    and branch setup; then return here to assign the student.
                   </p>
                 )}
               </details>
 
               <div className="mt-6 border-t border-black pt-5">
+                <div className="mb-5 border border-black bg-[var(--casa-paper)] p-4">
+                  <p className="casa-kicker">Onboarding order</p>
+                  <p className="mt-2 text-xs leading-5 text-black/60">
+                    CASA can complete student identity and guardian/contact data
+                    before the school creates a session or class. School setup
+                    comes next: session + three terms, classes/branches, calendar
+                    and holidays, attendance policy and terminal. Then assign the
+                    student academically, capture the face, produce/print the card,
+                    and let the school confirm physical handover to activate it.
+                  </p>
+                </div>
                 <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-end">
                   <div>
                     <p className="casa-kicker">
@@ -2932,17 +3141,54 @@ export default function InternalOnboardingClient({
                         void startEnrollment()
                       }
                     >
-                      {faceStatus ===
-                      "COMPLETE"
-                        ? "Re-enroll face with Passkey"
-                        : "Capture face with Passkey"}
+                      {faceCapturePhase ===
+                      "ERROR"
+                        ? "Start fresh face capture with Passkey"
+                        : faceStatus ===
+                            "COMPLETE"
+                          ? "Re-enroll face with Passkey"
+                          : "Capture face with Passkey"}
                     </button>
                   ) : null}
                 </div>
 
+                {faceCapturePhase ===
+                "ERROR" &&
+                !liveness ? (
+                  <div
+                    className="casa-notice mt-5 border border-black p-5"
+                    role="alert"
+                  >
+                    <p className="casa-kicker">
+                      Face capture needs a fresh session
+                    </p>
+                    <p className="mt-3 text-sm leading-6">
+                      The previous AWS liveness session was cancelled after
+                      CASA rejected the runtime configuration. It cannot be
+                      safely resumed. Once System Health shows the biometric
+                      configuration as complete, use â€œStart fresh face capture
+                      with Passkeyâ€ once. A new Passkey step-up is required
+                      because this is a genuinely new biometric session.
+                    </p>
+                  </div>
+                ) : null}
+
                 {liveness &&
                 credentialProvider ? (
                   <div className="mt-5">
+                    {faceCapturePhase ===
+                    "VERIFYING" ? (
+                      <div className="casa-notice border border-black p-5" role="status">
+                        <p className="casa-kicker">Verifying face</p>
+                        <p className="mt-3 text-sm leading-6">
+                          Camera capture is complete. CASA is waiting for AWS
+                          liveness results and securely enrolling the student&apos;s
+                          face. Keep this page open; you will not be asked for
+                          another Passkey unless a genuinely new capture session
+                          is required.
+                        </p>
+                      </div>
+                    ) : (
                     <div className="min-h-[28rem] overflow-hidden border border-black bg-black">
                       <ThemeProvider>
                         <FaceLivenessDetectorCore
@@ -2974,6 +3220,7 @@ export default function InternalOnboardingClient({
                         />
                       </ThemeProvider>
                     </div>
+                    )}
 
                     <button
                       className="casa-button-secondary mt-4"

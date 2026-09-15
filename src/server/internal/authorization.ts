@@ -62,7 +62,7 @@ export class CasaInternalSchoolScopeError
   extends Error {
   constructor() {
     super(
-      "CASA internal school assignment is required.",
+      "An active CASA school is required.",
     );
     this.name =
       "CasaInternalSchoolScopeError";
@@ -224,22 +224,6 @@ export async function requireCasaInternalSchoolAccess(
           ${schoolId}::uuid
         and school.status =
           'ACTIVE'::school_status
-        and (
-          ${access.membership.role} =
-            'CASA_SUPER_ADMIN'
-          or exists (
-            select 1
-            from casa_internal_school_assignments
-              assignment
-            where
-              assignment.membership_id =
-                ${access.membership.id}::uuid
-              and assignment.school_id =
-                school.id
-              and assignment.status =
-                'ACTIVE'
-          )
-        )
       limit 1
     `),
     );

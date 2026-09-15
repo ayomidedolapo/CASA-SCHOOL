@@ -73,6 +73,8 @@ export default function PasswordChangeClient(
   ] =
     useState(false);
 
+  const [showPasswords, setShowPasswords] = useState(false);
+
   async function continueToWorkspace() {
     const destination =
       safeNextPath(nextPath);
@@ -275,21 +277,23 @@ export default function PasswordChangeClient(
             <div className="mt-9 border-t border-black pt-7">
               <label className="casa-label">
                 <span>Current password</span>
-                <input type="password" autoComplete="current-password" required value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} className="casa-field" />
+                <input type={showPasswords ? "text" : "password"} autoComplete="current-password" required value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} className="casa-field" />
               </label>
               <label className="casa-label mt-5">
                 <span>New password</span>
-                <input type="password" autoComplete="new-password" minLength={12} required value={newPassword} onChange={(event) => setNewPassword(event.target.value)} className="casa-field" />
+                <input type={showPasswords ? "text" : "password"} autoComplete="new-password" minLength={12} required value={newPassword} onChange={(event) => setNewPassword(event.target.value)} className="casa-field" />
               </label>
               <label className="casa-label mt-5">
                 <span>Confirm new password</span>
-                <input type="password" autoComplete="new-password" minLength={12} required value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} className="casa-field" />
+                <input type={showPasswords ? "text" : "password"} autoComplete="new-password" minLength={12} required value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} className="casa-field" />
               </label>
 
               {error ? <div className="casa-error mt-5" role="alert">{error}</div> : null}
               {success ? <div className="mt-5 border-l-2 border-[#176b45] bg-[#e6f0ea] px-4 py-3 text-sm text-[#176b45]" role="status">{success}</div> : null}
 
-              <button type="submit" disabled={busy} className="casa-button mt-6 w-full">
+              <button type="button" className="casa-button-secondary mt-4 inline-flex items-center gap-2" onClick={() => setShowPasswords((value) => !value)} aria-pressed={showPasswords} aria-label={showPasswords ? "Hide passwords" : "Show passwords"}><svg aria-hidden="true" viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.75"/></svg><span>{showPasswords ? "Hide passwords" : "Show passwords"}</span></button>
+
+            <button type="submit" disabled={busy} className="casa-button mt-6 w-full">
                 {busy ? "Updating..." : "Save new password →"}
               </button>
             </div>

@@ -154,6 +154,18 @@ export default function StaffAccessClient(
     );
 
   const [
+    recovery,
+    setRecovery,
+  ] =
+    useState<{
+      name: string;
+      url: string;
+      expiresAt: string;
+    } | null>(
+      null,
+    );
+
+  const [
     notice,
     setNotice,
   ] =
@@ -649,6 +661,69 @@ export default function StaffAccessClient(
     }
   }
 
+  async function createRecovery(
+    person: {
+      membershipId: string;
+      fullName: string;
+      roles: string[];
+    },
+  ) {
+    setBusy(true);
+    setError("");
+    setNotice("");
+    setRecovery(null);
+
+    try {
+      const response =
+        await fetch(
+          `${base}/staff-access/${encodeURIComponent(
+            person.membershipId,
+          )}/recovery`,
+          {
+            method: "POST",
+          },
+        );
+
+      const body =
+        (await response
+          .json()
+          .catch(() => ({}))) as {
+          message?: string;
+          setup?: {
+            url: string;
+            expiresAt: string;
+          };
+        };
+
+      if (!response.ok) {
+        throw new Error(
+          body.message ??
+            "Recovery link could not be created.",
+        );
+      }
+
+      if (!body.setup) {
+        throw new Error(
+          "CASA did not return a recovery link.",
+        );
+      }
+
+      setRecovery({
+        name: person.fullName,
+        url: body.setup.url,
+        expiresAt: body.setup.expiresAt,
+      });
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Recovery link could not be created.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <main className="casa-noise min-h-screen bg-[#f2f2ef] text-[#0b0b0a]">
       <div className="casa-container min-h-screen bg-white px-5 py-7 sm:px-8 lg:px-12 lg:py-10">
@@ -699,6 +774,23 @@ export default function StaffAccessClient(
             role="status"
           >
             {notice}
+          </div>
+        ) : null}
+
+        {recovery ? (
+          <div
+            className="mt-6 border-l-2 border-black bg-black/5 px-4 py-3 text-sm"
+            role="status"
+          >
+            <strong>
+              Password recovery / {recovery.name}
+            </strong>
+            <p className="mt-2 break-all font-mono text-xs">
+              {recovery.url}
+            </p>
+            <p className="mt-2 text-xs text-black/55">
+              Single-use link. Expires after 24 hours.
+            </p>
           </div>
         ) : null}
 
@@ -761,6 +853,29 @@ export default function StaffAccessClient(
                           {person.membershipStatus} · {person.activePasskeys} active Passkey{person.activePasskeys === 1 ? "" : "s"}
                         </p>
                       </div>
+
+                      {!person.roles.includes(
+                        "OWNER",
+                      ) &&
+                      (
+                        !person.roles.includes(
+                          "ADMIN",
+                        ) ||
+                        canCreateAdmin
+                      ) ? (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() =>
+                            void createRecovery(
+                              person,
+                            )
+                          }
+                          className="mt-3 border-b border-black font-mono text-[9px] font-semibold uppercase tracking-[0.1em] disabled:cursor-not-allowed disabled:opacity-30"
+                        >
+                          Password recovery
+                        </button>
+                      ) : null}
 
                       {!person.roles.includes(
                         "OWNER",

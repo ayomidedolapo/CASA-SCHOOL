@@ -569,7 +569,7 @@ const now =
           recipients.occurred_at,
         'message',
           recipients.student_name ||
-          ' has signed out of school early with authorized staff approval.'
+          ' has checked out of school early.'
       ),
       'PENDING'::school_notification_delivery_status,
       0,

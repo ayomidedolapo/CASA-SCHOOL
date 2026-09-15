@@ -15,6 +15,11 @@ import {
   createCasaOnboardingStudent,
   searchCasaOnboardingStudents,
 } from "@/server/internal/onboarding";
+import {
+  StudentCampusInvalidError,
+  StudentCampusRequiredError,
+  StudentDuplicateError,
+} from "@/server/students/registration";
 
 export const dynamic =
   "force-dynamic";
@@ -35,6 +40,11 @@ const createSchema =
         .trim()
         .min(1)
         .max(64)
+        .optional()
+        .nullable(),
+    branchId:
+      z.string()
+        .uuid()
         .optional()
         .nullable(),
     firstName:
@@ -238,6 +248,48 @@ export async function POST(
 
     if (response) {
       return response;
+    }
+
+    if (
+      error instanceof
+      StudentDuplicateError
+    ) {
+      return NextResponse.json(
+        {
+          message:
+            error.message,
+          duplicate: {
+            id:
+              error.existing.id,
+            casaStudentId:
+              error.existing.casa_student_id,
+          },
+        },
+        {
+          status: 409,
+          headers:
+            casaInternalNoStoreHeaders,
+        },
+      );
+    }
+
+    if (
+      error instanceof
+        StudentCampusRequiredError ||
+      error instanceof
+        StudentCampusInvalidError
+    ) {
+      return NextResponse.json(
+        {
+          message:
+            error.message,
+        },
+        {
+          status: 400,
+          headers:
+            casaInternalNoStoreHeaders,
+        },
+      );
     }
 
     throw error;

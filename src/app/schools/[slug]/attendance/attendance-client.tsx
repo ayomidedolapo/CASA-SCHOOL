@@ -11,6 +11,12 @@ import {
 import {
   obtainPasskeyStepUpGrant,
 } from "@/client/passkey-step-up";
+import {
+  CasaConfirmDialog,
+} from "@/components/casa-confirm-dialog";
+import {
+  CasaInputDialog,
+} from "@/components/casa-input-dialog";
 
 import styles from "./attendance.module.css";
 
@@ -39,6 +45,8 @@ interface TodayStudent {
     string | null;
   checkedOutAt:
     string | null;
+  earlyDeparturePreauthorized:
+    boolean;
 }
 
 interface TodayData {
@@ -113,6 +121,24 @@ interface Policy {
     checkOutClosesAt: string;
   }>;
 }
+
+type PendingAttendanceConfirm =
+  | {
+      kind: "FIRST_CARD";
+      student: TodayStudent;
+    };
+
+type PendingAttendanceInput =
+  | {
+      kind: "SUPERVISED_LATE";
+      student: TodayStudent;
+    }
+  | {
+      kind: "REOPEN";
+    }
+  | {
+      kind: "REBIND";
+    };
 
 const weekdayLabels = [
   "Sun",
@@ -219,6 +245,18 @@ export default function AttendanceClient(
     );
 
   const [
+    selectedEarlyStudentIds,
+    setSelectedEarlyStudentIds,
+  ] =
+    useState<string[]>([]);
+
+  const [
+    selectedEarlyReason,
+    setSelectedEarlyReason,
+  ] =
+    useState("");
+
+  const [
     busy,
     setBusy,
   ] =
@@ -307,6 +345,18 @@ export default function AttendanceClient(
         5,
       ],
     );
+
+  const [
+    pendingConfirm,
+    setPendingConfirm,
+  ] =
+    useState<PendingAttendanceConfirm | null>(null);
+
+  const [
+    pendingInput,
+    setPendingInput,
+  ] =
+    useState<PendingAttendanceInput | null>(null);
 
   const refreshToday =
     useCallback(
@@ -575,14 +625,6 @@ export default function AttendanceClient(
   async function recordFirstCardException(
     student: TodayStudent,
   ) {
-    if (
-      !window.confirm(
-        `Confirm that ${studentName(student)} is physically present and their face matches the existing enrolled biometric profile.`,
-      )
-    ) {
-      return;
-    }
-
     setBusy(true);
     setError(null);
     setNotice(null);
@@ -624,6 +666,7 @@ export default function AttendanceClient(
       setNotice(
         "Supervised first-card attendance recorded with face-confirmation audit.",
       );
+      setPendingConfirm(null);
       await refreshToday();
     } catch (caught) {
       setError(
@@ -638,24 +681,8 @@ export default function AttendanceClient(
 
   async function recordSupervisedLate(
     student: TodayStudent,
+    reason: string,
   ) {
-    const entered = window.prompt(
-      `Reason for supervised late arrival for ${studentName(student)}:`,
-      "Arrived after the normal check-in window",
-    );
-
-    if (entered === null) {
-      return;
-    }
-
-    const reason = entered.trim();
-    if (reason.length < 3 || reason.length > 240) {
-      setError(
-        "Enter a supervised late-arrival reason between 3 and 240 characters.",
-      );
-      return;
-    }
-
     setBusy(true);
     setError(null);
     setNotice(null);
@@ -694,6 +721,7 @@ export default function AttendanceClient(
       setNotice(
         "Supervised arrival recorded as LATE and preserved in attendance audit history.",
       );
+      setPendingInput(null);
       await refreshToday();
     } catch (caught) {
       setError(
@@ -711,39 +739,14 @@ export default function AttendanceClient(
       | "OPEN"
       | "CLOSE"
       | "REOPEN",
+    reason: string | null = null,
   ) {
-    let reason:
-      string | null =
-        null;
-
     if (
-      action ===
-        "REOPEN"
+      action === "REOPEN" &&
+      !reason
     ) {
-      const entered =
-        window.prompt(
-          "Why are you reopening today's attendance session? This reason is kept in the audit history.",
-          "Closed accidentally",
-        );
-
-      if (entered === null) {
-        return;
-      }
-
-      reason =
-        entered.trim();
-
-      if (
-        reason.length <
-          8 ||
-        reason.length >
-          240
-      ) {
-        setError(
-          "Enter a reopen reason between 8 and 240 characters.",
-        );
-        return;
-      }
+      setPendingInput({ kind: "REOPEN" });
+      return;
     }
 
     setBusy(
@@ -867,29 +870,11 @@ export default function AttendanceClient(
     }
   }
 
-  async function rebindSessionPolicy() {
-    const entered =
-      window.prompt(
-        "Why should today's open attendance session use the current default policy? The reason and Passkey authorization are kept in the audit history.",
-        "Use corrected current attendance schedule",
-      );
-
-    if (entered === null) {
-      return;
-    }
-
-    const reason =
-      entered.trim();
-
-    if (
-      reason.length <
-        8 ||
-      reason.length >
-        240
-    ) {
-      setError(
-        "Enter a policy correction reason between 8 and 240 characters.",
-      );
+  async function rebindSessionPolicy(
+    reason?: string,
+  ) {
+    if (!reason) {
+      setPendingInput({ kind: "REBIND" });
       return;
     }
 
@@ -1231,6 +1216,112 @@ const validFrom =
     }
   }
 
+
+  async function authorizeSelectedEarlyDepartures() {
+    const reason =
+      selectedEarlyReason.trim();
+
+    if (!selectedBranchId) {
+      setError(
+        "Choose one branch before authorizing selected students.",
+      );
+      return;
+    }
+
+    if (
+      selectedEarlyStudentIds.length ===
+        0
+    ) {
+      setError(
+        "Select at least one student who is currently on campus.",
+      );
+      return;
+    }
+
+    if (
+      reason.length <
+        3
+    ) {
+      setError(
+        "Enter the reason for the selected students leaving early.",
+      );
+      return;
+    }
+
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const grant =
+        await obtainPasskeyStepUpGrant({
+          schoolSlug:
+            slug,
+          action:
+            "EARLY_DEPARTURE",
+        });
+
+      const response =
+        await fetch(
+          `/api/schools/${encodeURIComponent(
+            slug,
+          )}/attendance/early-departures/preauthorize`,
+          {
+            method:
+              "POST",
+            headers: {
+              "Content-Type":
+                "application/json",
+              "x-casa-passkey-step-up":
+                grant,
+            },
+            credentials:
+              "same-origin",
+            body:
+              JSON.stringify({
+                branchId:
+                  selectedBranchId,
+                studentIds:
+                  selectedEarlyStudentIds,
+                reason,
+              }),
+          },
+        );
+
+      const body =
+        await response.json() as {
+          message?: string;
+          code?: string;
+          requested?: number;
+          newlyAuthorized?: number;
+          alreadyAuthorized?: number;
+        };
+
+      if (!response.ok) {
+        throw new Error(
+          body.message ??
+            body.code ??
+            "Selected students could not be authorized for early departure.",
+        );
+      }
+
+      setNotice(
+        `${body.requested ?? selectedEarlyStudentIds.length} student(s) are cleared to use the Scanner for early departure. Each student must still scan their own card and pass face/liveness.`,
+      );
+      setSelectedEarlyStudentIds([]);
+      setSelectedEarlyReason("");
+      await refreshToday();
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Selected students could not be authorized for early departure.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const metrics =
     data
       ? [
@@ -1338,12 +1429,20 @@ const validFrom =
               Technical
             </Link>
             {canManage ? (
-              <Link
-                className={styles.headerLink}
-                href={`/schools/${encodeURIComponent(slug)}/attendance/transport`}
-              >
-                Transport &amp; grace
-              </Link>
+              <>
+                <Link
+                  className={styles.headerLink}
+                  href={`/schools/${encodeURIComponent(slug)}/attendance/transport`}
+                >
+                  Transport &amp; grace
+                </Link>
+                <Link
+                  className={styles.headerLink}
+                  href={`/schools/${encodeURIComponent(slug)}/messaging`}
+                >
+                  Messaging
+                </Link>
+              </>
             ) : (
               <Link
                 className={styles.headerLink}
@@ -1565,7 +1664,98 @@ const validFrom =
         )}
       </section>
 
-      {canManage &&
+      {canSuperviseAttendance &&
+        data?.session?.status ===
+          "OPEN" && (
+        <section
+          className={
+            styles.section
+          }
+        >
+          <div
+            className={
+              styles.sectionHeader
+            }
+          >
+            <div>
+              <h2
+                className={
+                  styles.sectionTitle
+                }
+              >
+                Early departure
+              </h2>
+              <p
+                className={
+                  styles.muted
+                }
+              >
+                For a known group, select any on-campus students from the same branch, enter one reason, and authorize once with Passkey. They may be from different classes.
+              </p>
+            </div>
+            <span
+              className={
+                styles.muted
+              }
+            >
+              {selectedEarlyStudentIds.length} selected
+            </span>
+          </div>
+
+          {!selectedBranchId ? (
+            <p
+              className={
+                styles.muted
+              }
+            >
+              Choose a branch below first. Group early departure is branch-scoped.
+            </p>
+          ) : null}
+
+          <div
+            className={
+              styles.filters
+            }
+          >
+            <input
+              className={
+                styles.input
+              }
+              value={
+                selectedEarlyReason
+              }
+              maxLength={240}
+              placeholder="Reason, e.g. Sent home for outstanding school fees"
+              onChange={
+                (event) =>
+                  setSelectedEarlyReason(
+                    event.target.value,
+                  )
+              }
+            />
+            <button
+              type="button"
+              className={
+                styles.button
+              }
+              disabled={
+                busy ||
+                !selectedBranchId ||
+                selectedEarlyStudentIds.length ===
+                  0
+              }
+              onClick={
+                () =>
+                  void authorizeSelectedEarlyDepartures()
+              }
+            >
+              Authorize selected with Passkey
+            </button>
+          </div>
+        </section>
+      )}
+
+      {canSuperviseAttendance &&
         data &&
         data.earlyDepartures
           .length >
@@ -1740,6 +1930,7 @@ const validFrom =
               value={selectedBranchId}
               onChange={(event) => {
                 setSelectedBranchId(event.target.value);
+                setSelectedEarlyStudentIds([]);
                 setPage(1);
               }}
             >
@@ -1938,7 +2129,45 @@ const validFrom =
                       </td>
                       {canSuperviseAttendance && (
                         <td>
-                          {student.presenceStatus === "NOT_ARRIVED" ||
+                          {student.presenceStatus === "ON_CAMPUS" ? (
+                            student.earlyDeparturePreauthorized ? (
+                              <span className="casa-status">
+                                Early departure authorized
+                              </span>
+                            ) : (
+                              <label className={styles.actions}>
+                                <input
+                                  type="checkbox"
+                                  disabled={
+                                    busy ||
+                                    !selectedBranchId
+                                  }
+                                  checked={
+                                    selectedEarlyStudentIds.includes(
+                                      student.studentId,
+                                    )
+                                  }
+                                  onChange={(event) => {
+                                    setSelectedEarlyStudentIds(
+                                      (current) =>
+                                        event.target.checked
+                                          ? Array.from(
+                                              new Set([
+                                                ...current,
+                                                student.studentId,
+                                              ]),
+                                            )
+                                          : current.filter(
+                                              (id) =>
+                                                id !== student.studentId,
+                                            ),
+                                    );
+                                  }}
+                                />
+                                Select for early departure
+                              </label>
+                            )
+                          ) : student.presenceStatus === "NOT_ARRIVED" ||
                           student.presenceStatus === "ABSENT" ? (
                             <div className={styles.actions}>
                               <button
@@ -1946,7 +2175,7 @@ const validFrom =
                                 className={styles.secondaryButton}
                                 disabled={busy}
                                 onClick={() =>
-                                  void recordFirstCardException(student)
+                                  setPendingConfirm({ kind: "FIRST_CARD", student })
                                 }
                               >
                                 First-card face
@@ -1956,7 +2185,7 @@ const validFrom =
                                 className={styles.secondaryButton}
                                 disabled={busy}
                                 onClick={() =>
-                                  void recordSupervisedLate(student)
+                                  setPendingInput({ kind: "SUPERVISED_LATE", student })
                                 }
                               >
                                 Record late
@@ -2294,6 +2523,42 @@ const validFrom =
           </div>
         </section>
       )}
+
+      <CasaConfirmDialog
+        open={pendingConfirm?.kind === "FIRST_CARD"}
+        title="Record first-card attendance?"
+        message={pendingConfirm?.kind === "FIRST_CARD" ? `Confirm that ${studentName(pendingConfirm.student)} is physically present and their face matches the existing enrolled biometric profile.` : ""}
+        confirmLabel="Record attendance"
+        busy={busy}
+        onCancel={() => setPendingConfirm(null)}
+        onConfirm={() => {
+          if (pendingConfirm?.kind === "FIRST_CARD") {
+            void recordFirstCardException(pendingConfirm.student);
+          }
+        }}
+      />
+
+      <CasaInputDialog
+        open={pendingInput !== null}
+        title={pendingInput?.kind === "SUPERVISED_LATE" ? "Record supervised late arrival" : pendingInput?.kind === "REOPEN" ? "Reopen attendance session" : "Use current attendance policy"}
+        message={pendingInput?.kind === "SUPERVISED_LATE" ? `Enter the reason ${studentName(pendingInput.student)} arrived after the normal check-in window.` : pendingInput?.kind === "REOPEN" ? "Explain why today's attendance session needs to be reopened. This reason stays in the audit history." : "Explain why today's open attendance session should use the current default policy. The reason and Passkey authorization stay in the audit history."}
+        label="Reason"
+        initialValue={pendingInput?.kind === "SUPERVISED_LATE" ? "Arrived after the normal check-in window" : pendingInput?.kind === "REOPEN" ? "Closed accidentally" : "Use corrected current attendance schedule"}
+        minLength={pendingInput?.kind === "SUPERVISED_LATE" ? 3 : 8}
+        maxLength={240}
+        confirmLabel={pendingInput?.kind === "SUPERVISED_LATE" ? "Record late arrival" : pendingInput?.kind === "REOPEN" ? "Continue to reopen" : "Continue"}
+        busy={busy}
+        onCancel={() => setPendingInput(null)}
+        onConfirm={(reason) => {
+          if (pendingInput?.kind === "SUPERVISED_LATE") {
+            void recordSupervisedLate(pendingInput.student, reason);
+          } else if (pendingInput?.kind === "REOPEN") {
+            void mutateSession("REOPEN", reason);
+          } else if (pendingInput?.kind === "REBIND") {
+            void rebindSessionPolicy(reason);
+          }
+        }}
+      />
     </main>
   );
 }

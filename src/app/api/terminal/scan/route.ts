@@ -1,6 +1,8 @@
 import {
   and,
   eq,
+  isNull,
+  sql,
 } from "drizzle-orm";
 import {
   NextRequest,
@@ -9,6 +11,7 @@ import {
 
 import { getDb } from "@/db";
 import {
+  attendanceEarlyDeparturePreauthorizations,
   attendanceVerificationAttempts,
   studentAttendanceRecords,
   studentIdentityCards,
@@ -60,6 +63,10 @@ type AttemptResult = {
   completedAt: Date | null;
 };
 
+function rowsOf<T>(r:unknown):T[]{if(Array.isArray(r))return r as T[];if(r&&typeof r==="object"&&"rows" in r&&Array.isArray((r as {rows?:unknown}).rows))return (r as {rows:T[]}).rows;return []}
+
+async function studentDisplayDetail(db:ReturnType<typeof getDb>,schoolId:string,studentId:string){return rowsOf<{schoolName:string;branchName:string|null;className:string|null;sex:string|null}>(await db.execute(sql`select sc.name as "schoolName",b.name as "branchName",concat_ws(' ',cl.name,ca.name) as "className",s.sex::text as sex from students s join schools sc on sc.id=s.school_id left join lateral(select e.class_arm_id from student_enrollments e where e.school_id=s.school_id and e.student_id=s.id and e.status='ACTIVE' order by e.created_at desc limit 1) e on true left join class_arms ca on ca.school_id=s.school_id and ca.id=e.class_arm_id left join class_levels cl on cl.school_id=ca.school_id and cl.id=ca.class_level_id left join school_branch_class_arms ba on ba.school_id=s.school_id and ba.class_arm_id=ca.id left join school_branches b on b.school_id=s.school_id and b.id=ba.branch_id where s.school_id=${schoolId}::uuid and s.id=${studentId}::uuid limit 1`))[0]??null}
+
 function attemptResponse(
   attempt: AttemptResult,
   options?: {
@@ -69,6 +76,10 @@ function attemptResponse(
       firstName: string;
       middleName: string | null;
       lastName: string;
+      schoolName?: string;
+      branchName?: string | null;
+      className?: string | null;
+      sex?: string | null;
     } | null;
     replayed?: boolean;
     requiresBiometric?: boolean;
@@ -291,6 +302,10 @@ export async function POST(
 
       student =
         studentRows[0] ?? null;
+      if(student){
+        const detail=await studentDisplayDetail(db,access.school.id,student.id);
+        student={...student,...(detail??{}),schoolName:detail?.schoolName??access.school.name};
+      }
     }
 
     return NextResponse.json(
@@ -383,6 +398,7 @@ export async function POST(
   let departureResult:
     | "NOT_RUN"
     | "NORMAL"
+    | "EARLY"
     | "OUTSIDE_WINDOW" =
       "NOT_RUN";
 
@@ -396,6 +412,19 @@ export async function POST(
 
   let classification:
     string | null = null;
+
+  let manualVerifiedByMembershipId:
+    string | null = null;
+
+  let earlyPreauthorization:
+    | {
+        id: string;
+        attendanceRecordId: string;
+        authorizedByMembershipId: string;
+        passkeyGrantId: string;
+        reason: string;
+      }
+    | null = null;
 
   let requiresStaffAuthorization =
     false;
@@ -601,10 +630,72 @@ export async function POST(
         classification ===
         "EARLY"
       ) {
-        requiresStaffAuthorization =
-          true;
-        reasonCode =
-          "EARLY_DEPARTURE_AUTH_REQUIRED";
+        const preauthorizationRows =
+          await db
+            .select({
+              id:
+                attendanceEarlyDeparturePreauthorizations.id,
+              attendanceRecordId:
+                attendanceEarlyDeparturePreauthorizations.attendanceRecordId,
+              authorizedByMembershipId:
+                attendanceEarlyDeparturePreauthorizations.authorizedByMembershipId,
+              passkeyGrantId:
+                attendanceEarlyDeparturePreauthorizations.passkeyGrantId,
+              reason:
+                attendanceEarlyDeparturePreauthorizations.reason,
+            })
+            .from(
+              attendanceEarlyDeparturePreauthorizations,
+            )
+            .where(
+              and(
+                eq(
+                  attendanceEarlyDeparturePreauthorizations.schoolId,
+                  access.school.id,
+                ),
+                eq(
+                  attendanceEarlyDeparturePreauthorizations.sessionId,
+                  active.session.id,
+                ),
+                eq(
+                  attendanceEarlyDeparturePreauthorizations.studentId,
+                  card.studentId,
+                ),
+                isNull(
+                  attendanceEarlyDeparturePreauthorizations.consumedAttemptId,
+                ),
+                isNull(
+                  attendanceEarlyDeparturePreauthorizations.revokedAt,
+                ),
+              ),
+            )
+            .limit(1);
+
+        earlyPreauthorization =
+          preauthorizationRows[0] ??
+          null;
+
+        if (
+          earlyPreauthorization &&
+          earlyPreauthorization.attendanceRecordId ===
+            record.id
+        ) {
+          departureResult =
+            "EARLY";
+          manualVerifiedByMembershipId =
+            earlyPreauthorization.authorizedByMembershipId;
+          requiresStaffAuthorization =
+            false;
+          reasonCode =
+            null;
+        } else {
+          earlyPreauthorization =
+            null;
+          requiresStaffAuthorization =
+            true;
+          reasonCode =
+            "EARLY_DEPARTURE_AUTH_REQUIRED";
+        }
       } else {
         departureResult =
           "OUTSIDE_WINDOW";
@@ -649,6 +740,7 @@ export async function POST(
         departureResult,
         outcome,
         reasonCode,
+        manualVerifiedByMembershipId,
         occurredAt: now,
         completedAt,
       })
@@ -735,20 +827,154 @@ export async function POST(
     );
   }
 
+
+  if (
+    earlyPreauthorization &&
+    attempt.outcome ===
+      "PENDING" &&
+    attempt.operation ===
+      "CHECK_OUT" &&
+    attempt.studentId
+  ) {
+    const claimResult =
+      await db.execute(sql`
+        with claimed as (
+          update attendance_early_departure_preauthorizations
+          set
+            consumed_attempt_id =
+              ${attempt.id}::uuid,
+            consumed_at =
+              ${now.toISOString()}::timestamptz
+          where
+            school_id =
+              ${access.school.id}::uuid
+            and id =
+              ${earlyPreauthorization.id}::uuid
+            and session_id =
+              ${active.session.id}::uuid
+            and student_id =
+              ${attempt.studentId}::uuid
+            and attendance_record_id =
+              ${earlyPreauthorization.attendanceRecordId}::uuid
+            and consumed_attempt_id is null
+            and revoked_at is null
+          returning
+            school_id,
+            session_id,
+            student_id,
+            attendance_record_id,
+            authorized_by_membership_id,
+            passkey_grant_id,
+            reason,
+            authorized_at
+        ),
+        inserted_authorization as (
+          insert into attendance_early_departure_authorizations (
+            school_id,
+            session_id,
+            attempt_id,
+            student_id,
+            attendance_record_id,
+            authorized_by_membership_id,
+            passkey_grant_id,
+            authorization_method,
+            reason,
+            authorized_at,
+            created_at
+          )
+          select
+            claimed.school_id,
+            claimed.session_id,
+            ${attempt.id}::uuid,
+            claimed.student_id,
+            claimed.attendance_record_id,
+            claimed.authorized_by_membership_id,
+            claimed.passkey_grant_id,
+            'PASSKEY',
+            claimed.reason,
+            claimed.authorized_at,
+            ${now.toISOString()}::timestamptz
+          from claimed
+          on conflict (
+            school_id,
+            attempt_id
+          )
+          do nothing
+          returning id
+        )
+        select
+          count(*)::int
+            as claimed_count
+        from inserted_authorization
+      `);
+
+    const claimRows =
+      rowsOf<{
+        claimed_count:
+          number;
+      }>(
+        claimResult,
+      );
+
+    if (
+      Number(
+        claimRows[0]
+          ?.claimed_count ??
+          0,
+      ) !== 1
+    ) {
+      await db
+        .update(
+          attendanceVerificationAttempts,
+        )
+        .set({
+          outcome:
+            "REJECTED",
+          reasonCode:
+            "EARLY_DEPARTURE_PREAUTHORIZATION_ALREADY_USED",
+          completedAt:
+            now,
+        })
+        .where(
+          and(
+            eq(
+              attendanceVerificationAttempts.schoolId,
+              access.school.id,
+            ),
+            eq(
+              attendanceVerificationAttempts.id,
+              attempt.id,
+            ),
+            eq(
+              attendanceVerificationAttempts.outcome,
+              "PENDING",
+            ),
+          ),
+        );
+
+      attempt = {
+        ...attempt,
+        outcome:
+          "REJECTED",
+        reasonCode:
+          "EARLY_DEPARTURE_PREAUTHORIZATION_ALREADY_USED",
+        completedAt:
+          now,
+      };
+    }
+  }
+
   const student =
     card &&
     cardResult === "MATCHED"
       ? {
-          id:
-            card.studentId,
-          casaStudentId:
-            card.casaStudentId,
-          firstName:
-            card.firstName,
-          middleName:
-            card.middleName,
-          lastName:
-            card.lastName,
+          id: card.studentId,
+          casaStudentId: card.casaStudentId,
+          firstName: card.firstName,
+          middleName: card.middleName,
+          lastName: card.lastName,
+          ...(await studentDisplayDetail(db,access.school.id,card.studentId) ?? {}),
+          schoolName: access.school.name,
         }
       : null;
 

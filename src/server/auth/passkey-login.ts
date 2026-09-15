@@ -268,10 +268,34 @@ export async function finishPasskeyLogin(
         p.id
     `);
 
-  if (
-    !Array.isArray(consumed) ||
-    !consumed[0]
-  ) {
+  // Drizzle/Neon may return either Row[] or QueryResult { rows }.
+  // Treat a returned row as the authoritative proof that the
+  // one-use login challenge was consumed and the credential
+  // counter update committed.
+  const consumedRows =
+    Array.isArray(
+      consumed,
+    )
+      ? consumed
+      : consumed &&
+          typeof consumed ===
+            "object" &&
+          "rows" in consumed &&
+          Array.isArray(
+            (
+              consumed as {
+                rows?: unknown;
+              }
+            ).rows,
+          )
+        ? (
+            consumed as {
+              rows: unknown[];
+            }
+          ).rows
+        : [];
+
+  if (!consumedRows[0]) {
     return {
       ok: false as const,
       status: 409 as const,

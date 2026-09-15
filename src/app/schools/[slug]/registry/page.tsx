@@ -58,8 +58,7 @@ export default async function RegistryPage({
               Registry access denied.
             </h1>
             <p className="mt-5 max-w-xl text-sm leading-6 text-black/55">
-              Your current school role does not permit Registry operations for
-              this workspace.
+              Your current school membership was not authorized for Registry operations. Owner, Admin and School Technician roles are permitted. Creating the basic student record does not require an academic session or class first; those are only required when the student is enrolled.
             </p>
           </div>
         </main>

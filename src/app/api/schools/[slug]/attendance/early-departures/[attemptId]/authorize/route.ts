@@ -10,8 +10,10 @@ import {
 import {
   attendanceAuthErrorResponse,
   attendanceNoStoreHeaders,
-  requireEarlyDepartureAuthorizer,
 } from "@/server/attendance/http";
+import {
+  requireSchoolAccess,
+} from "@/server/auth/authorization";
 
 export const dynamic =
   "force-dynamic";
@@ -66,7 +68,7 @@ export async function POST(
 
   try {
     const access =
-      await requireEarlyDepartureAuthorizer(
+      await requireSchoolAccess(
         slug,
       );
 

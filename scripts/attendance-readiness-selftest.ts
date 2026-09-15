@@ -150,11 +150,11 @@ assert.match(
   lifecycleRoute,
   /requireAttendanceOperator/,
 );
-assert.match(
+assert.doesNotMatch(
   lifecycleRoute,
   /requireAttendanceController/,
 );
-assert.doesNotMatch(
+assert.match(
   lifecycleRoute,
   /await requireAttendanceManager\(/,
   "Attendance lifecycle mutations must use the Wave 1 controller boundary.",

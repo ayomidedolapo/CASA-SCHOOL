@@ -4,6 +4,7 @@ import {
   count,
   eq,
   ilike,
+  ne,
   or,
 } from "drizzle-orm";
 import {
@@ -11,10 +12,13 @@ import {
   NextResponse,
 } from "next/server";
 
-import { getDb } from "@/db";
+import {
+  getDb,
+} from "@/db";
 import {
   classArms,
   classLevels,
+  schoolBranches,
   studentEnrollments,
   students,
 } from "@/db/schema";
@@ -27,8 +31,15 @@ import {
 import {
   studentCreateSchema,
 } from "@/server/registry/validation";
+import {
+  registerStudentOnce,
+  StudentCampusInvalidError,
+  StudentCampusRequiredError,
+  StudentDuplicateError,
+} from "@/server/students/registration";
 
-export const dynamic = "force-dynamic";
+export const dynamic =
+  "force-dynamic";
 
 interface RouteContext {
   params: Promise<{
@@ -40,177 +51,247 @@ export async function GET(
   request: NextRequest,
   context: RouteContext,
 ) {
-  const { slug } =
+  const {
+    slug,
+  } =
     await context.params;
 
   try {
     const access =
-      await requireRegistryOperator(slug);
+      await requireRegistryOperator(
+        slug,
+      );
 
     const searchParams =
-      request.nextUrl.searchParams;
+      request.nextUrl
+        .searchParams;
 
     const q =
       searchParams
         .get("q")
         ?.trim()
-        .slice(0, 100) ?? "";
+        .slice(
+          0,
+          100,
+        ) ??
+      "";
 
-    const page = Math.max(
-      1,
-      Number.parseInt(
-        searchParams.get("page") ??
-          "1",
-        10,
-      ) || 1,
-    );
+    const page =
+      Math.max(
+        1,
+        Number.parseInt(
+          searchParams.get(
+            "page",
+          ) ??
+            "1",
+          10,
+        ) ||
+          1,
+      );
 
-    const pageSize = 25;
+    const pageSize =
+      25;
     const offset =
-      (page - 1) * pageSize;
-    const db = getDb();
+      (
+        page -
+        1
+      ) *
+      pageSize;
+    const db =
+      getDb();
 
-    const searchCondition = q
-      ? or(
-          ilike(
-            students.casaStudentId,
-            `%${q}%`,
-          ),
-          ilike(
-            students.admissionNumber,
-            `%${q}%`,
-          ),
-          ilike(
-            students.firstName,
-            `%${q}%`,
-          ),
-          ilike(
-            students.lastName,
-            `%${q}%`,
-          ),
-        )
-      : undefined;
+    const searchCondition =
+      q
+        ? or(
+            ilike(
+              students.casaStudentId,
+              `%${q}%`,
+            ),
+            ilike(
+              students.admissionNumber,
+              `%${q}%`,
+            ),
+            ilike(
+              students.firstName,
+              `%${q}%`,
+            ),
+            ilike(
+              students.lastName,
+              `%${q}%`,
+            ),
+          )
+        : undefined;
+
+    const baseCondition =
+      and(
+        eq(
+          students.schoolId,
+          access.school.id,
+        ),
+        ne(
+          students.status,
+          "ARCHIVED",
+        ),
+      );
 
     const whereCondition =
       searchCondition
         ? and(
-            eq(
-              students.schoolId,
-              access.school.id,
-            ),
+            baseCondition,
             searchCondition,
           )
-        : eq(
-            students.schoolId,
-            access.school.id,
-          );
+        : baseCondition;
 
-        const [
+    const [
       rows,
       totals,
     ] =
       await Promise.all([
-      db
-              .select({
-                id: students.id,
-                casaStudentId:
-                  students.casaStudentId,
-                admissionNumber:
-                  students.admissionNumber,
-                firstName:
-                  students.firstName,
-                middleName:
-                  students.middleName,
-                lastName:
-                  students.lastName,
-                preferredName:
-                  students.preferredName,
-                dateOfBirth:
-                  students.dateOfBirth,
-                sex: students.sex,
-                status: students.status,
-                admissionDate:
-                  students.admissionDate,
-                classArmName:
-                  classArms.name,
-                classLevelName:
-                  classLevels.name,
-              })
-              .from(students)
-              .leftJoin(
-                studentEnrollments,
-                and(
-                  eq(
-                    studentEnrollments.schoolId,
-                    students.schoolId,
-                  ),
-                  eq(
-                    studentEnrollments.studentId,
-                    students.id,
-                  ),
-                  eq(
-                    studentEnrollments.status,
-                    "ACTIVE",
-                  ),
-                ),
-              )
-              .leftJoin(
-                classArms,
-                and(
-                  eq(
-                    classArms.schoolId,
-                    students.schoolId,
-                  ),
-                  eq(
-                    classArms.id,
-                    studentEnrollments.classArmId,
-                  ),
-                ),
-              )
-              .leftJoin(
-                classLevels,
-                and(
-                  eq(
-                    classLevels.schoolId,
-                    students.schoolId,
-                  ),
-                  eq(
-                    classLevels.id,
-                    classArms.classLevelId,
-                  ),
-                ),
-              )
-              .where(whereCondition)
-              .orderBy(
-                asc(students.lastName),
-                asc(students.firstName),
-              )
-              .limit(pageSize)
-              .offset(offset),
-      db
-              .select({
-                count: count(),
-              })
-              .from(students)
-              .where(whereCondition),
-    ]);
+        db
+          .select({
+            id:
+              students.id,
+            casaStudentId:
+              students.casaStudentId,
+            admissionNumber:
+              students.admissionNumber,
+            firstName:
+              students.firstName,
+            middleName:
+              students.middleName,
+            lastName:
+              students.lastName,
+            preferredName:
+              students.preferredName,
+            dateOfBirth:
+              students.dateOfBirth,
+            sex:
+              students.sex,
+            status:
+              students.status,
+            admissionDate:
+              students.admissionDate,
+            homeBranchId:
+              students.homeBranchId,
+            homeBranchName:
+              schoolBranches.name,
+            classArmName:
+              classArms.name,
+            classLevelName:
+              classLevels.name,
+          })
+          .from(
+            students,
+          )
+          .leftJoin(
+            schoolBranches,
+            and(
+              eq(
+                schoolBranches.schoolId,
+                students.schoolId,
+              ),
+              eq(
+                schoolBranches.id,
+                students.homeBranchId,
+              ),
+            ),
+          )
+          .leftJoin(
+            studentEnrollments,
+            and(
+              eq(
+                studentEnrollments.schoolId,
+                students.schoolId,
+              ),
+              eq(
+                studentEnrollments.studentId,
+                students.id,
+              ),
+              eq(
+                studentEnrollments.status,
+                "ACTIVE",
+              ),
+            ),
+          )
+          .leftJoin(
+            classArms,
+            and(
+              eq(
+                classArms.schoolId,
+                students.schoolId,
+              ),
+              eq(
+                classArms.id,
+                studentEnrollments.classArmId,
+              ),
+            ),
+          )
+          .leftJoin(
+            classLevels,
+            and(
+              eq(
+                classLevels.schoolId,
+                students.schoolId,
+              ),
+              eq(
+                classLevels.id,
+                classArms.classLevelId,
+              ),
+            ),
+          )
+          .where(
+            whereCondition,
+          )
+          .orderBy(
+            asc(
+              students.lastName,
+            ),
+            asc(
+              students.firstName,
+            ),
+          )
+          .limit(
+            pageSize,
+          )
+          .offset(
+            offset,
+          ),
+        db
+          .select({
+            count:
+              count(),
+          })
+          .from(
+            students,
+          )
+          .where(
+            whereCondition,
+          ),
+      ]);
 
     const total =
-      Number(totals[0]?.count ?? 0);
+      Number(
+        totals[0]
+          ?.count ??
+          0,
+      );
 
     return NextResponse.json(
       {
-        students: rows,
+        students:
+          rows,
         pagination: {
           page,
           pageSize,
           total,
-          pages: Math.max(
-            1,
-            Math.ceil(
-              total / pageSize,
+          pages:
+            Math.max(
+              1,
+              Math.ceil(
+                total /
+                  pageSize,
+              ),
             ),
-          ),
         },
       },
       {
@@ -218,13 +299,17 @@ export async function GET(
           registryNoStoreHeaders,
       },
     );
-  } catch (error) {
+  } catch (
+    error
+  ) {
     const authResponse =
       registryAuthErrorResponse(
         error,
       );
 
-    if (authResponse) {
+    if (
+      authResponse
+    ) {
       return authResponse;
     }
 
@@ -236,17 +321,23 @@ export async function POST(
   request: NextRequest,
   context: RouteContext,
 ) {
-  const { slug } =
+  const {
+    slug,
+  } =
     await context.params;
 
   try {
     const access =
-      await requireRegistryOperator(slug);
+      await requireRegistryOperator(
+        slug,
+      );
 
-    let body: unknown;
+    let body:
+      unknown;
 
     try {
-      body = await request.json();
+      body =
+        await request.json();
     } catch {
       return NextResponse.json(
         {
@@ -266,16 +357,22 @@ export async function POST(
         body,
       );
 
-    if (!parsed.success) {
+    if (
+      !parsed.success
+    ) {
       return NextResponse.json(
         {
           message:
             "Invalid student details.",
           issues:
             parsed.error.issues.map(
-              (issue) => ({
+              (
+                issue,
+              ) => ({
                 path:
-                  issue.path.join("."),
+                  issue.path.join(
+                    ".",
+                  ),
                 message:
                   issue.message,
               }),
@@ -289,65 +386,98 @@ export async function POST(
       );
     }
 
-    const db = getDb();
-    const input = parsed.data;
-
-    const inserted = await db
-      .insert(students)
-      .values({
+    const student =
+      await registerStudentOnce({
         schoolId:
           access.school.id,
+        branchId:
+          parsed.data.branchId ??
+          null,
         admissionNumber:
-          input.admissionNumber
-            ? input.admissionNumber
-                .trim()
-                .toUpperCase()
-            : null,
+          parsed.data.admissionNumber,
         firstName:
-          input.firstName,
+          parsed.data.firstName,
         middleName:
-          input.middleName || null,
+          parsed.data.middleName,
         lastName:
-          input.lastName,
+          parsed.data.lastName,
         preferredName:
-          input.preferredName || null,
+          parsed.data.preferredName,
         dateOfBirth:
-          input.dateOfBirth,
-        sex: input.sex,
+          parsed.data.dateOfBirth,
+        sex:
+          parsed.data.sex,
         admissionDate:
-          input.admissionDate,
-      })
-      .returning({
-        id: students.id,
-        casaStudentId:
-          students.casaStudentId,
-        admissionNumber:
-          students.admissionNumber,
-        firstName:
-          students.firstName,
-        lastName:
-          students.lastName,
-        status: students.status,
+          parsed.data.admissionDate,
       });
 
     return NextResponse.json(
       {
-        student: inserted[0],
+        student,
       },
       {
-        status: 201,
+        status:
+          201,
         headers:
           registryNoStoreHeaders,
       },
     );
-  } catch (error) {
+  } catch (
+    error
+  ) {
     const authResponse =
       registryAuthErrorResponse(
         error,
       );
 
-    if (authResponse) {
+    if (
+      authResponse
+    ) {
       return authResponse;
+    }
+
+    if (
+      error instanceof
+      StudentDuplicateError
+    ) {
+      return NextResponse.json(
+        {
+          message:
+            error.message,
+          duplicate: {
+            id:
+              error.existing.id,
+            casaStudentId:
+              error.existing.casa_student_id,
+          },
+        },
+        {
+          status:
+            409,
+          headers:
+            registryNoStoreHeaders,
+        },
+      );
+    }
+
+    if (
+      error instanceof
+        StudentCampusRequiredError ||
+      error instanceof
+        StudentCampusInvalidError
+    ) {
+      return NextResponse.json(
+        {
+          message:
+            error.message,
+        },
+        {
+          status:
+            400,
+          headers:
+            registryNoStoreHeaders,
+        },
+      );
     }
 
     const databaseResponse =
@@ -355,7 +485,9 @@ export async function POST(
         error,
       );
 
-    if (databaseResponse) {
+    if (
+      databaseResponse
+    ) {
       return databaseResponse;
     }
 

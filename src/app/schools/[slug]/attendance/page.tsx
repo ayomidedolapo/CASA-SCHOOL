@@ -1,3 +1,4 @@
+import Link from "next/link";
 import {
   redirect,
 } from "next/navigation";
@@ -49,10 +50,10 @@ export default async function AttendancePage(
   const canManage =
     visibility.organizationAdmin;
   const canViewOrganization =
-    visibility.organizationAdmin ||
-    isTechnician;
+    visibility.organizationAdmin;
   const canSuperviseAttendance =
     visibility.organizationAdmin ||
+    isTechnician ||
     visibility.branches.length > 0;
 
   if (
@@ -63,37 +64,63 @@ export default async function AttendancePage(
   }
 
   return (
-    <AttendanceClient
-      slug={slug}
-      schoolName={
-        visibility.access.school.name
-      }
-      canManage={canManage}
-      canViewOrganization={
-        canViewOrganization
-      }
-      canSuperviseAttendance={
-        canSuperviseAttendance
-      }
-      branches={
-        visibility.branches.map(
-          (branch) => ({
-            id: String(
-              (branch as { id: unknown }).id,
-            ),
-            name: String(
-              (branch as { name: unknown }).name,
-            ),
-            code: String(
-              (branch as { code: unknown }).code,
-            ),
-            isHeadquarters: Boolean(
-              (branch as { is_headquarters?: unknown })
-                .is_headquarters,
-            ),
-          }),
-        )
-      }
-    />
+    <>
+      {canManage ? (
+        <div className="border-b border-black bg-[#f2f2ef] px-5 py-3 sm:px-8">
+          <div className="mx-auto flex max-w-[1500px] flex-wrap items-center justify-between gap-3">
+            <p className="font-mono text-[9px] uppercase tracking-[0.12em] text-black/45">
+              School setup & attendance
+            </p>
+            <nav className="flex flex-wrap gap-3 text-xs">
+              <Link
+                className="border-b border-black"
+                href={`/schools/${encodeURIComponent(slug)}/academic`}
+              >
+                Academic setup
+              </Link>
+              <Link
+                className="border-b border-black"
+                href={`/schools/${encodeURIComponent(slug)}/calendar`}
+              >
+                Calendar & holidays
+              </Link>
+            </nav>
+          </div>
+        </div>
+      ) : null}
+
+      <AttendanceClient
+        slug={slug}
+        schoolName={
+          visibility.access.school.name
+        }
+        canManage={canManage}
+        canViewOrganization={
+          canViewOrganization
+        }
+        canSuperviseAttendance={
+          canSuperviseAttendance
+        }
+        branches={
+          visibility.branches.map(
+            (branch) => ({
+              id: String(
+                (branch as { id: unknown }).id,
+              ),
+              name: String(
+                (branch as { name: unknown }).name,
+              ),
+              code: String(
+                (branch as { code: unknown }).code,
+              ),
+              isHeadquarters: Boolean(
+                (branch as { is_headquarters?: unknown })
+                  .is_headquarters,
+              ),
+            }),
+          )
+        }
+      />
+    </>
   );
 }

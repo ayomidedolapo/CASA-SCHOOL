@@ -1,6 +1,9 @@
 import { sql } from "drizzle-orm";
 
 import { getDb } from "@/db";
+import {
+  registerStudentOnce,
+} from "@/server/students/registration";
 import type {
   CasaInternalAccess,
   CasaInternalSchoolAccess,
@@ -95,6 +98,7 @@ export async function writeCasaInternalAudit(
 export async function listCasaInternalSchools(
   access: CasaInternalAccess,
 ) {
+  void access;
   const db = getDb();
 
   const result =
@@ -109,22 +113,6 @@ export async function listCasaInternalSchools(
       where
         school.status =
           'ACTIVE'::school_status
-        and (
-          ${access.membership.role} =
-            'CASA_SUPER_ADMIN'
-          or exists (
-            select 1
-            from casa_internal_school_assignments
-              assignment
-            where
-              assignment.membership_id =
-                ${access.membership.id}::uuid
-              and assignment.school_id =
-                school.id
-              and assignment.status =
-                'ACTIVE'
-          )
-        )
       order by
         school.name asc
     `);
@@ -363,6 +351,8 @@ export async function searchCasaOnboardingStudents(
         where
           student.school_id =
             ${input.access.school.id}::uuid
+          and student.status <>
+            'ARCHIVED'::student_status
       ),
       filtered as (
         select *
@@ -536,6 +526,9 @@ export async function getCasaOnboardingStudent(
           as status,
         student.admission_date::text
           as admission_date,
+        student.home_branch_id,
+        home_branch.name
+          as home_branch_name,
         case
           when exists (
             select 1
@@ -593,11 +586,19 @@ export async function getCasaOnboardingStudent(
         end as card_production_need
       from students
         student
+      left join school_branches
+        home_branch
+        on home_branch.school_id =
+           student.school_id
+       and home_branch.id =
+           student.home_branch_id
       where
         student.school_id =
           ${input.access.school.id}::uuid
         and student.id =
           ${input.studentId}::uuid
+        and student.status <>
+          'ARCHIVED'::student_status
       limit 1
     `);
 
@@ -814,6 +815,9 @@ export async function createCasaOnboardingStudent(
   input: {
     access:
       CasaInternalSchoolAccess;
+    branchId?:
+      | string
+      | null;
     admissionNumber?:
       string | null;
     firstName: string;
@@ -830,83 +834,58 @@ export async function createCasaOnboardingStudent(
     admissionDate: string;
   },
 ) {
-  const db = getDb();
-
-  const result =
-    await db.execute(sql`
-      insert into students (
-        school_id,
-        admission_number,
-        first_name,
-        middle_name,
-        last_name,
-        preferred_name,
-        date_of_birth,
-        sex,
-        status,
-        admission_date,
-        created_at,
-        updated_at
-      )
-      values (
-        ${input.access.school.id}::uuid,
-        ${input.admissionNumber
-          ?.trim()
-          .toUpperCase() ??
-          null},
-        ${input.firstName.trim()},
-        ${input.middleName
-          ?.trim() ||
-          null},
-        ${input.lastName.trim()},
-        ${input.preferredName
-          ?.trim() ||
-          null},
-        ${input.dateOfBirth}::date,
-        ${input.sex}::student_sex,
-        'ACTIVE'::student_status,
-        ${input.admissionDate}::date,
-        now(),
-        now()
-      )
-      returning
-        id,
-        casa_student_id,
-        admission_number,
-        first_name,
-        last_name,
-        status::text
-          as status
-    `);
-
   const student =
-    rowsOf<Record<
-      string,
-      unknown
-    >>(
-      result,
-    )[0];
+    await registerStudentOnce({
+      schoolId:
+        input.access.school.id,
+      branchId:
+        input.branchId ??
+        null,
+      admissionNumber:
+        input.admissionNumber,
+      firstName:
+        input.firstName,
+      middleName:
+        input.middleName,
+      lastName:
+        input.lastName,
+      preferredName:
+        input.preferredName,
+      dateOfBirth:
+        input.dateOfBirth,
+      sex:
+        input.sex,
+      admissionDate:
+        input.admissionDate,
+    });
 
-  if (!student) {
-    throw new Error(
-      "CASA_INTERNAL_STUDENT_CREATE_FAILED",
+  try {
+    await writeCasaInternalAudit({
+      access:
+        input.access,
+      schoolId:
+        input.access.school.id,
+      action:
+        "ONBOARDING_STUDENT_CREATED",
+      subjectType:
+        "STUDENT",
+      subjectId:
+        String(
+          student.id,
+        ),
+      metadata: {
+        homeBranchId:
+          student.home_branch_id,
+      },
+    });
+  } catch (
+    auditError
+  ) {
+    console.error(
+      "Student registration succeeded but the CASA internal audit write failed.",
+      auditError,
     );
   }
-
-  await writeCasaInternalAudit({
-    access:
-      input.access,
-    schoolId:
-      input.access.school.id,
-    action:
-      "ONBOARDING_STUDENT_CREATED",
-    subjectType:
-      "STUDENT",
-    subjectId:
-      String(
-        student.id,
-      ),
-  });
 
   return student;
 }

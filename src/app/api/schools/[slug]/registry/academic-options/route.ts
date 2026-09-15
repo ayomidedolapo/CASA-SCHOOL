@@ -14,6 +14,7 @@ import {
   academicSessions,
   classArms,
   classLevels,
+  schoolBranches,
 } from "@/db/schema";
 import {
   registryAuthErrorResponse,
@@ -41,7 +42,7 @@ export async function GET(
       await requireRegistryOperator(slug);
     const db = getDb();
 
-    const [sessions, arms] =
+    const [sessions, branches, arms] =
       await db.batch([
         db
           .select({
@@ -75,6 +76,40 @@ export async function GET(
           .orderBy(
             asc(
               academicSessions.startsOn,
+            ),
+          ),
+        db
+          .select({
+            id:
+              schoolBranches.id,
+            name:
+              schoolBranches.name,
+            code:
+              schoolBranches.code,
+            isHeadquarters:
+              schoolBranches.isHeadquarters,
+          })
+          .from(
+            schoolBranches,
+          )
+          .where(
+            and(
+              eq(
+                schoolBranches.schoolId,
+                access.school.id,
+              ),
+              eq(
+                schoolBranches.status,
+                "ACTIVE",
+              ),
+            ),
+          )
+          .orderBy(
+            asc(
+              schoolBranches.isHeadquarters,
+            ),
+            asc(
+              schoolBranches.name,
             ),
           ),
         db
@@ -132,6 +167,7 @@ export async function GET(
     return NextResponse.json(
       {
         sessions,
+        branches,
         classArms: arms,
       },
       {

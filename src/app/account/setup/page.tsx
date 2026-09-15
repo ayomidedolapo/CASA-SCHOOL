@@ -1,0 +1,3 @@
+import { redirect } from "next/navigation";
+import AccountSetupClient from "./account-setup-client";
+export default async function Page({searchParams}:{searchParams:Promise<{token?:string}>}){const {token}=await searchParams;if(!token)redirect("/");return <main className="casa-noise min-h-screen bg-[#f2f2ef] px-5 py-10 text-[#0b0b0a]"><div className="mx-auto max-w-2xl border border-black bg-white p-7 sm:p-10"><p className="casa-kicker text-black/45">CASA / Secure account setup</p><h1 className="mt-4 text-4xl font-semibold tracking-[-0.06em] sm:text-5xl">Create your password.</h1><p className="mt-4 max-w-xl text-sm leading-6 text-black/50">This link works once. After setup, use your normal CASA sign-in page.</p><AccountSetupClient token={token}/></div></main>}
