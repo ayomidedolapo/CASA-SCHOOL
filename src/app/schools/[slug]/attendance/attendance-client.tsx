@@ -23,6 +23,7 @@ import styles from "./attendance.module.css";
 interface TodayStudent {
   studentId: string;
   casaStudentId: string;
+  academicSessionId: string;
   admissionNumber:
     string | null;
   firstName: string;
@@ -50,6 +51,8 @@ interface TodayStudent {
 }
 
 interface TodayData {
+  todayDate: string;
+  readOnly: boolean;
   clock: {
     date: string;
     clock: string;
@@ -63,6 +66,9 @@ interface TodayData {
           | "OPEN"
           | "CLOSED"
           | "CANCELLED";
+        mode:
+          | "INSTRUCTIONAL"
+          | "PRESENCE_ONLY";
       }
     | null;
   summary: {
@@ -99,6 +105,34 @@ interface TodayData {
     signOutsWithoutGuardianOutbox:
       number;
   };
+}
+
+interface StudentAttendanceHistory {
+  student: {
+    id: string;
+    casaStudentId: string;
+    admissionNumber: string | null;
+    firstName: string;
+    middleName: string | null;
+    lastName: string;
+  };
+  period: {
+    academicSessionName: string;
+    academicTermName: string | null;
+    startsOn: string;
+    endsOn: string;
+  };
+  attendancePercentage: number | null;
+  punctualityPercentage: number | null;
+  earlyDepartures: number;
+  trend: Array<{
+    date: string;
+    status: string;
+    actualArrivalStatus: string | null;
+    recordedAt: string | null;
+    checkedOutAt: string | null;
+    className: string;
+  }>;
 }
 
 interface Policy {
@@ -149,6 +183,40 @@ const weekdayLabels = [
   "Fri",
   "Sat",
 ];
+
+type AttendanceDayTimes = {
+  checkInOpensAt: string;
+  onTimeUntil: string;
+  checkInClosesAt: string;
+  normalDismissalAt: string;
+  checkOutClosesAt: string;
+};
+
+const defaultAttendanceDayTimes:
+  AttendanceDayTimes = {
+    checkInOpensAt: "07:00",
+    onTimeUntil: "07:45",
+    checkInClosesAt: "09:00",
+    normalDismissalAt: "14:00",
+    checkOutClosesAt: "17:00",
+  };
+
+function createDefaultAttendanceDayTimes():
+  Record<number, AttendanceDayTimes> {
+  return Object.fromEntries(
+    [0, 1, 2, 3, 4, 5, 6].map(
+      (weekday) => [
+        weekday,
+        {
+          ...defaultAttendanceDayTimes,
+        },
+      ],
+    ),
+  ) as Record<
+    number,
+    AttendanceDayTimes
+  >;
+}
 
 function studentName(
   student:
@@ -239,9 +307,7 @@ export default function AttendanceClient(
     setSelectedBranchId,
   ] =
     useState(
-      canViewOrganization
-        ? ""
-        : branches[0]?.id ?? "",
+      branches[0]?.id ?? "",
     );
 
   const [
@@ -255,6 +321,31 @@ export default function AttendanceClient(
     setSelectedEarlyReason,
   ] =
     useState("");
+
+  const [
+    selectedLateStudentIds,
+    setSelectedLateStudentIds,
+  ] = useState<string[]>([]);
+
+  const [
+    selectedLateReason,
+    setSelectedLateReason,
+  ] = useState("");
+
+  const [
+    selectedLateAllowedUntil,
+    setSelectedLateAllowedUntil,
+  ] = useState("");
+
+  const [
+    schoolBusGraceMinutes,
+    setSchoolBusGraceMinutes,
+  ] = useState(0);
+
+  const [
+    independentGraceMinutes,
+    setIndependentGraceMinutes,
+  ] = useState(0);
 
   const [
     busy,
@@ -297,6 +388,26 @@ export default function AttendanceClient(
     useState(1);
 
   const [
+    selectedDate,
+    setSelectedDate,
+  ] = useState("");
+
+  const [
+    historyStudent,
+    setHistoryStudent,
+  ] = useState<TodayStudent | null>(null);
+
+  const [
+    historyData,
+    setHistoryData,
+  ] = useState<StudentAttendanceHistory | null>(null);
+
+  const [
+    historyBusy,
+    setHistoryBusy,
+  ] = useState(false);
+
+  const [
     earlyReasons,
     setEarlyReasons,
   ] =
@@ -316,21 +427,17 @@ export default function AttendanceClient(
     );
 
   const [
-    times,
-    setTimes,
+    dayTimes,
+    setDayTimes,
   ] =
-    useState({
-      checkInOpensAt:
-        "07:00",
-      onTimeUntil:
-        "07:45",
-      checkInClosesAt:
-        "09:00",
-      normalDismissalAt:
-        "14:00",
-      checkOutClosesAt:
-        "17:00",
-    });
+    useState<
+      Record<
+        number,
+        AttendanceDayTimes
+      >
+    >(
+      createDefaultAttendanceDayTimes,
+    );
 
   const [
     selectedWeekdays,
@@ -384,6 +491,10 @@ export default function AttendanceClient(
             pageSize:
               "50",
           });
+
+        if (selectedDate) {
+          params.set("date", selectedDate);
+        }
 
         const attendancePath =
           selectedBranchId
@@ -442,16 +553,24 @@ export default function AttendanceClient(
         view,
         page,
         selectedBranchId,
+        selectedDate,
       ],
     );
 
   const refreshPolicies =
     useCallback(
       async () => {
+        if (!selectedBranchId) {
+          setPolicies([]);
+          return;
+        }
+
         const response =
           await fetch(
             `/api/schools/${encodeURIComponent(
               slug,
+            )}/branches/${encodeURIComponent(
+              selectedBranchId,
             )}/attendance/policies`,
             {
               cache:
@@ -507,9 +626,6 @@ export default function AttendanceClient(
                   right.weekday,
               );
 
-          const representativeDay =
-            orderedDays[0];
-
           const normalizeTime =
             (
               value:
@@ -534,37 +650,52 @@ export default function AttendanceClient(
             ),
           );
 
-          setTimes({
-            checkInOpensAt:
-              normalizeTime(
-                representativeDay
-                  .checkInOpensAt,
-              ),
-            onTimeUntil:
-              normalizeTime(
-                representativeDay
-                  .onTimeUntil,
-              ),
-            checkInClosesAt:
-              normalizeTime(
-                representativeDay
-                  .checkInClosesAt,
-              ),
-            normalDismissalAt:
-              normalizeTime(
-                representativeDay
-                  .normalDismissalAt,
-              ),
-            checkOutClosesAt:
-              normalizeTime(
-                representativeDay
-                  .checkOutClosesAt,
-              ),
-          });
+          setDayTimes(
+            (
+              current,
+            ) => {
+              const next = {
+                ...current,
+              };
+
+              for (
+                const day of
+                orderedDays
+              ) {
+                next[
+                  day.weekday
+                ] = {
+                  checkInOpensAt:
+                    normalizeTime(
+                      day.checkInOpensAt,
+                    ),
+                  onTimeUntil:
+                    normalizeTime(
+                      day.onTimeUntil,
+                    ),
+                  checkInClosesAt:
+                    normalizeTime(
+                      day.checkInClosesAt,
+                    ),
+                  normalDismissalAt:
+                    normalizeTime(
+                      day.normalDismissalAt,
+                    ),
+                  checkOutClosesAt:
+                    normalizeTime(
+                      day.checkOutClosesAt,
+                    ),
+                };
+              }
+
+              return next;
+            },
+          );
         }
       },
       [
         slug,
+        selectedBranchId,
       ],
     );
 
@@ -574,7 +705,7 @@ export default function AttendanceClient(
         window.setTimeout(
           () => {
             void refreshToday();
-            if (canManage) {
+            if (canManage && selectedBranchId) {
               void refreshPolicies();
             }
           },
@@ -605,6 +736,7 @@ export default function AttendanceClient(
       refreshToday,
       refreshPolicies,
       canManage,
+      selectedBranchId,
     ],
   );
 
@@ -666,7 +798,6 @@ export default function AttendanceClient(
       setNotice(
         "Supervised first-card attendance recorded with face-confirmation audit.",
       );
-      setPendingConfirm(null);
       await refreshToday();
     } catch (caught) {
       setError(
@@ -721,7 +852,6 @@ export default function AttendanceClient(
       setNotice(
         "Supervised arrival recorded as LATE and preserved in attendance audit history.",
       );
-      setPendingInput(null);
       await refreshToday();
     } catch (caught) {
       setError(
@@ -736,11 +866,17 @@ export default function AttendanceClient(
 
   async function mutateSession(
     action:
+      | "PREPARE"
       | "OPEN"
       | "CLOSE"
       | "REOPEN",
     reason: string | null = null,
+    mode: "INSTRUCTIONAL" | "PRESENCE_ONLY" = "INSTRUCTIONAL",
   ) {
+    if (!selectedBranchId) {
+      setError("Attendance must be opened for one campus.");
+      return;
+    }
     if (
       action === "REOPEN" &&
       !reason
@@ -775,6 +911,8 @@ export default function AttendanceClient(
         await fetch(
           `/api/schools/${encodeURIComponent(
             slug,
+          )}/branches/${encodeURIComponent(
+            selectedBranchId,
           )}/attendance/sessions/today`,
           {
             method:
@@ -801,9 +939,14 @@ export default function AttendanceClient(
                       action,
                       reason,
                     }
-                  : {
-                      action,
-                    },
+                  : action === "PREPARE"
+                    ? {
+                        action,
+                        mode,
+                      }
+                    : {
+                        action,
+                      },
               ),
           },
         );
@@ -847,12 +990,17 @@ export default function AttendanceClient(
 
       setNotice(
         action ===
-          "OPEN"
-          ? "Attendance is open."
+          "PREPARE"
+          ? mode === "PRESENCE_ONLY"
+            ? "Presence-only Saturday is prepared. Open it when the campus is ready to scan."
+            : "Attendance is prepared. Review the policy, then open when the campus is ready."
           : action ===
-              "REOPEN"
-            ? "Attendance reopened. The original session and audit history were preserved."
-            : "Attendance is closed.",
+              "OPEN"
+            ? "Attendance is open."
+            : action ===
+                "REOPEN"
+              ? "Attendance reopened. The original session and audit history were preserved."
+              : "Attendance is closed.",
       );
 
       await refreshToday();
@@ -870,9 +1018,45 @@ export default function AttendanceClient(
     }
   }
 
+  async function openStudentHistory(student: TodayStudent) {
+    if (!selectedBranchId) {
+      setError("Choose one campus to view student attendance history.");
+      return;
+    }
+
+    setHistoryStudent(student);
+    setHistoryData(null);
+    setHistoryBusy(true);
+    setError(null);
+
+    try {
+      const params = new URLSearchParams({
+        academicSessionId: student.academicSessionId,
+      });
+      const response = await fetch(
+        `/api/schools/${encodeURIComponent(slug)}/branches/${encodeURIComponent(selectedBranchId)}/students/${encodeURIComponent(student.studentId)}/attendance-analytics?${params.toString()}`,
+        { cache: "no-store", credentials: "same-origin" },
+      );
+      const body = await response.json() as StudentAttendanceHistory & { message?: string };
+      if (!response.ok) {
+        throw new Error(body.message ?? "Student attendance history could not be loaded.");
+      }
+      setHistoryData(body);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Student attendance history could not be loaded.");
+      setHistoryStudent(null);
+    } finally {
+      setHistoryBusy(false);
+    }
+  }
+
   async function rebindSessionPolicy(
     reason?: string,
   ) {
+    if (!selectedBranchId) {
+      setError("Attendance must be scoped to one campus.");
+      return;
+    }
     if (!reason) {
       setPendingInput({ kind: "REBIND" });
       return;
@@ -901,6 +1085,8 @@ export default function AttendanceClient(
         await fetch(
           `/api/schools/${encodeURIComponent(
             slug,
+          )}/branches/${encodeURIComponent(
+            selectedBranchId,
           )}/attendance/sessions/today/policy-rebind`,
           {
             method:
@@ -979,6 +1165,11 @@ export default function AttendanceClient(
   }
 
   async function createPolicy() {
+    if (!selectedBranchId) {
+      setError("Choose one campus before creating an attendance policy.");
+      return;
+    }
+
     if (
       selectedWeekdays.length ===
       0
@@ -1000,35 +1191,7 @@ export default function AttendanceClient(
     );
 
     try {
-            if (
-        !defaultPolicy ||
-        !Number.isInteger(
-          defaultPolicy
-            .schoolBusGraceMinutes,
-        ) ||
-        !Number.isInteger(
-          defaultPolicy
-            .independentGraceMinutes,
-        ) ||
-        defaultPolicy
-          .schoolBusGraceMinutes <
-          0 ||
-        defaultPolicy
-          .schoolBusGraceMinutes >
-          240 ||
-        defaultPolicy
-          .independentGraceMinutes <
-          0 ||
-        defaultPolicy
-          .independentGraceMinutes >
-          240
-      ) {
-        throw new Error(
-          "Current attendance grace settings are unavailable. Refresh Attendance before creating a schedule revision.",
-        );
-      }
-
-const validFrom =
+      const validFrom =
         data?.clock
           .date ??
         new Date()
@@ -1042,6 +1205,8 @@ const validFrom =
         await fetch(
           `/api/schools/${encodeURIComponent(
             slug,
+          )}/branches/${encodeURIComponent(
+            selectedBranchId,
           )}/attendance/policies`,
           {
             method:
@@ -1061,19 +1226,20 @@ const validFrom =
                   null,
                 isDefault:
                   true,
-                schoolBusGraceMinutes:
-                  defaultPolicy
-                    .schoolBusGraceMinutes,
-                independentGraceMinutes:
-                  defaultPolicy
-                    .independentGraceMinutes,
+                schoolBusGraceMinutes,
+                independentGraceMinutes,
                 days:
                   selectedWeekdays.map(
                     (
                       weekday,
                     ) => ({
                       weekday,
-                      ...times,
+                      ...(
+                        dayTimes[
+                          weekday
+                        ] ??
+                        defaultAttendanceDayTimes
+                      ),
                     }),
                   ),
               }),
@@ -1322,6 +1488,67 @@ const validFrom =
     }
   }
 
+  async function authorizeSelectedLateStay() {
+    const reason = selectedLateReason.trim();
+    const allowed = new Date(selectedLateAllowedUntil);
+
+    if (!selectedBranchId) {
+      setError("Choose one campus before authorizing late stay.");
+      return;
+    }
+    if (selectedLateStudentIds.length === 0) {
+      setError("Select at least one student who is still on campus.");
+      return;
+    }
+    if (reason.length < 3) {
+      setError("Enter the reason for the selected students staying after close.");
+      return;
+    }
+    if (!Number.isFinite(allowed.getTime()) || allowed.getTime() <= Date.now()) {
+      setError("Choose a future allowed-until time for late stay.");
+      return;
+    }
+
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const grant = await obtainPasskeyStepUpGrant({
+        schoolSlug: slug,
+        action: "LATE_DEPARTURE",
+      });
+      const response = await fetch(
+        `/api/schools/${encodeURIComponent(slug)}/branches/${encodeURIComponent(selectedBranchId)}/attendance/late-stay`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-casa-passkey-step-up": grant,
+          },
+          credentials: "same-origin",
+          body: JSON.stringify({
+            studentIds: selectedLateStudentIds,
+            reason,
+            allowedUntil: allowed.toISOString(),
+          }),
+        },
+      );
+      const body = await response.json() as { message?: string; code?: string; authorized?: number };
+      if (!response.ok) {
+        throw new Error(body.message ?? body.code ?? "Late-stay authorization failed.");
+      }
+      setNotice(`${body.authorized ?? selectedLateStudentIds.length} student(s) may check out after campus close until the approved time. Each checkout still requires the student's own card and biometric verification.`);
+      setSelectedLateStudentIds([]);
+      setSelectedLateReason("");
+      setSelectedLateAllowedUntil("");
+      await refreshToday();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Late-stay authorization failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const metrics =
     data
       ? [
@@ -1390,9 +1617,9 @@ const validFrom =
               styles.brand
             }
           >
-            TODAY
-            <br />
             ATTENDANCE
+            <br />
+            REGISTER
           </h1>
         </div>
 
@@ -1428,6 +1655,12 @@ const validFrom =
             >
               Technical
             </Link>
+            <Link
+              className={styles.headerLink}
+              href={`/schools/${encodeURIComponent(slug)}/notifications`}
+            >
+              Notifications
+            </Link>
             {canManage ? (
               <>
                 <Link
@@ -1438,9 +1671,9 @@ const validFrom =
                 </Link>
                 <Link
                   className={styles.headerLink}
-                  href={`/schools/${encodeURIComponent(slug)}/messaging`}
+                  href={`/schools/${encodeURIComponent(slug)}/summer`}
                 >
-                  Messaging
+                  Summer
                 </Link>
               </>
             ) : (
@@ -1480,6 +1713,42 @@ const validFrom =
             : "No default attendance policy"}
         </span>
 
+        <label className={styles.actions}>
+          <span className={styles.muted}>Day</span>
+          <input
+            className={styles.input}
+            type="date"
+            max={data?.todayDate ?? undefined}
+            value={selectedDate || data?.clock.date || ""}
+            onChange={(event) => {
+              setSelectedDate(event.target.value);
+              setPage(1);
+              setSelectedEarlyStudentIds([]);
+              setSelectedLateStudentIds([]);
+            }}
+          />
+          {data?.readOnly && (
+            <button
+              type="button"
+              className={styles.secondaryButton}
+              onClick={() => {
+                setSelectedDate("");
+                setPage(1);
+              }}
+            >
+              Today
+            </button>
+          )}
+        </label>
+
+        {data?.readOnly && (
+          <span className="casa-status">Historical · read only</span>
+        )}
+
+        {data?.session?.mode === "PRESENCE_ONLY" && (
+          <span className="casa-status">Presence only · not graded</span>
+        )}
+
         <span
           className={
             styles.muted
@@ -1501,80 +1770,90 @@ const validFrom =
           }
         </span>
 
-        {canManage && (
-          <div
-            className={
-              styles.actions
-            }
-          >
-            {data?.session
-              ?.status !==
-              "OPEN" ? (
-              <button
-                type="button"
-                className={
-                  styles.button
-                }
-                disabled={
-                  busy ||
-                  data?.session?.status ===
-                    "CANCELLED"
-                }
-                onClick={
-                  () =>
-                    void mutateSession(
-                      data?.session?.status ===
-                        "CLOSED"
-                        ? "REOPEN"
-                        : "OPEN",
-                    )
-                }
-              >
-                {data?.session?.status ===
-                "CLOSED"
-                  ? "Reopen today"
-                  : data?.session?.status ===
-                      "CANCELLED"
-                    ? "Session cancelled"
-                    : "Open today"}
-              </button>
-            ) : (
-              <button
-                type="button"
-                className={
-                  styles.button
-                }
-                disabled={
-                  busy
-                }
-                onClick={
-                  () =>
-                    void mutateSession(
-                      "CLOSE",
-                    )
-                }
-              >
-                Close today
-              </button>
+        {canManage && !data?.readOnly && (
+          <div className={styles.actions}>
+            {!data?.session && (
+              <>
+                {(data?.clock.weekday !== 6 ||
+                  defaultPolicy?.days.some((day) => day.weekday === 6)) && (
+                  <button
+                    type="button"
+                    className={styles.button}
+                    disabled={busy || !selectedBranchId}
+                    onClick={() => void mutateSession("PREPARE", null, "INSTRUCTIONAL")}
+                  >
+                    Prepare attendance
+                  </button>
+                )}
+                {data?.clock.weekday === 6 && (
+                  <button
+                    type="button"
+                    className={styles.secondaryButton}
+                    disabled={busy || !selectedBranchId}
+                    onClick={() => void mutateSession("PREPARE", null, "PRESENCE_ONLY")}
+                  >
+                    Prepare presence-only
+                  </button>
+                )}
+              </>
             )}
-            {data?.session?.status ===
-              "OPEN" && (
+
+            {data?.session?.status === "PLANNED" && (
+              <>
+                <button
+                  type="button"
+                  className={styles.button}
+                  disabled={busy}
+                  onClick={() => void mutateSession("OPEN")}
+                >
+                  Open today
+                </button>
+                <button
+                  type="button"
+                  className={styles.secondaryButton}
+                  disabled={busy}
+                  onClick={() => void rebindSessionPolicy()}
+                >
+                  Use current policy
+                </button>
+              </>
+            )}
+
+            {data?.session?.status === "OPEN" && (
+              <>
+                <button
+                  type="button"
+                  className={styles.button}
+                  disabled={busy}
+                  onClick={() => void mutateSession("CLOSE")}
+                >
+                  Close today
+                </button>
+                <button
+                  type="button"
+                  className={styles.secondaryButton}
+                  disabled={busy}
+                  onClick={() => void rebindSessionPolicy()}
+                >
+                  Use current policy
+                </button>
+              </>
+            )}
+
+            {data?.session?.status === "CLOSED" && (
               <button
                 type="button"
-                onClick={() =>
-                  void rebindSessionPolicy()
-                }
-                disabled={
-                  busy
-                }
-                className={
-                  styles.button
-                }
+                className={styles.button}
+                disabled={busy}
+                onClick={() => void mutateSession("REOPEN")}
               >
-                Use current policy
+                Reopen today
               </button>
             )}
 
+            {data?.session?.status === "CANCELLED" && (
+              <span className="casa-status">Session cancelled</span>
+            )}
           </div>
         )}
       </div>
@@ -1756,6 +2035,44 @@ const validFrom =
       )}
 
       {canSuperviseAttendance &&
+        data?.session?.status === "CLOSED" && (
+        <section className={styles.section}>
+          <div className={styles.sectionHeader}>
+            <div>
+              <h2 className={styles.sectionTitle}>Late-stay checkout</h2>
+              <p className={styles.muted}>
+                Select only students who remain on campus, give one reason and allowed-until time, then approve the group once with Passkey. Each student still checks out with their own card and face/liveness.
+              </p>
+            </div>
+            <span className={styles.muted}>{selectedLateStudentIds.length} selected</span>
+          </div>
+          <div className={styles.filters}>
+            <input
+              className={styles.input}
+              value={selectedLateReason}
+              maxLength={240}
+              placeholder="Reason, e.g. Waiting for parent pickup"
+              onChange={(event) => setSelectedLateReason(event.target.value)}
+            />
+            <input
+              className={styles.input}
+              type="datetime-local"
+              value={selectedLateAllowedUntil}
+              onChange={(event) => setSelectedLateAllowedUntil(event.target.value)}
+            />
+            <button
+              type="button"
+              className={styles.button}
+              disabled={busy || selectedLateStudentIds.length === 0 || !selectedLateAllowedUntil}
+              onClick={() => void authorizeSelectedLateStay()}
+            >
+              Authorize late stay with Passkey
+            </button>
+          </div>
+        </section>
+      )}
+
+      {canSuperviseAttendance &&
         data &&
         data.earlyDepartures
           .length >
@@ -1924,19 +2241,18 @@ const validFrom =
             styles.filters
           }
         >
-          {(canViewOrganization || branches.length > 1) && (
+          {branches.length > 1 && (
             <select
               className={styles.select}
               value={selectedBranchId}
               onChange={(event) => {
                 setSelectedBranchId(event.target.value);
                 setSelectedEarlyStudentIds([]);
+                setSelectedLateStudentIds([]);
+                setPolicies([]);
                 setPage(1);
               }}
             >
-              {canViewOrganization && (
-                <option value="">Organization-wide</option>
-              )}
               {branches.map((branch) => (
                 <option
                   key={branch.id}
@@ -2059,9 +2375,9 @@ const validFrom =
                 <th>
                   Signed out
                 </th>
-                {canSuperviseAttendance && (
+                {(canSuperviseAttendance || canManage) && (
                   <th>
-                    Supervised action
+                    Actions
                   </th>
                 )}
               </tr>
@@ -2127,73 +2443,92 @@ const validFrom =
                           student.checkedOutAt,
                         )}
                       </td>
-                      {canSuperviseAttendance && (
+                      {(canSuperviseAttendance || canManage) && (
                         <td>
-                          {student.presenceStatus === "ON_CAMPUS" ? (
-                            student.earlyDeparturePreauthorized ? (
-                              <span className="casa-status">
-                                Early departure authorized
-                              </span>
-                            ) : (
-                              <label className={styles.actions}>
-                                <input
-                                  type="checkbox"
-                                  disabled={
-                                    busy ||
-                                    !selectedBranchId
-                                  }
-                                  checked={
-                                    selectedEarlyStudentIds.includes(
-                                      student.studentId,
-                                    )
-                                  }
-                                  onChange={(event) => {
-                                    setSelectedEarlyStudentIds(
-                                      (current) =>
+                          <div className={styles.actions}>
+                            {canManage && selectedBranchId && (
+                              <button
+                                type="button"
+                                className={styles.secondaryButton}
+                                disabled={historyBusy}
+                                onClick={() => void openStudentHistory(student)}
+                              >
+                                History
+                              </button>
+                            )}
+
+                            {canSuperviseAttendance &&
+                              !data?.readOnly &&
+                              data?.session?.mode === "INSTRUCTIONAL" &&
+                              student.presenceStatus === "ON_CAMPUS" &&
+                              data?.session?.status === "CLOSED" && (
+                                <label className={styles.actions}>
+                                  <input
+                                    type="checkbox"
+                                    disabled={busy || !selectedBranchId}
+                                    checked={selectedLateStudentIds.includes(student.studentId)}
+                                    onChange={(event) => {
+                                      setSelectedLateStudentIds((current) =>
                                         event.target.checked
-                                          ? Array.from(
-                                              new Set([
-                                                ...current,
-                                                student.studentId,
-                                              ]),
-                                            )
-                                          : current.filter(
-                                              (id) =>
-                                                id !== student.studentId,
-                                            ),
-                                    );
-                                  }}
-                                />
-                                Select for early departure
-                              </label>
-                            )
-                          ) : student.presenceStatus === "NOT_ARRIVED" ||
-                          student.presenceStatus === "ABSENT" ? (
-                            <div className={styles.actions}>
-                              <button
-                                type="button"
-                                className={styles.secondaryButton}
-                                disabled={busy}
-                                onClick={() =>
-                                  setPendingConfirm({ kind: "FIRST_CARD", student })
-                                }
-                              >
-                                First-card face
-                              </button>
-                              <button
-                                type="button"
-                                className={styles.secondaryButton}
-                                disabled={busy}
-                                onClick={() =>
-                                  setPendingInput({ kind: "SUPERVISED_LATE", student })
-                                }
-                              >
-                                Record late
-                              </button>
-                            </div>
-                          ) : (
-                            <span className={styles.muted}>—</span>
-                          )}
+                                          ? Array.from(new Set([...current, student.studentId]))
+                                          : current.filter((id) => id !== student.studentId),
+                                      );
+                                    }}
+                                  />
+                                  Late stay
+                                </label>
+                              )}
+
+                            {canSuperviseAttendance &&
+                              !data?.readOnly &&
+                              data?.session?.mode === "INSTRUCTIONAL" &&
+                              data?.session?.status === "OPEN" &&
+                              student.presenceStatus === "ON_CAMPUS" &&
+                              (student.earlyDeparturePreauthorized ? (
+                                <span className="casa-status">Early departure authorized</span>
+                              ) : (
+                                <label className={styles.actions}>
+                                  <input
+                                    type="checkbox"
+                                    disabled={busy || !selectedBranchId}
+                                    checked={selectedEarlyStudentIds.includes(student.studentId)}
+                                    onChange={(event) => {
+                                      setSelectedEarlyStudentIds((current) =>
+                                        event.target.checked
+                                          ? Array.from(new Set([...current, student.studentId]))
+                                          : current.filter((id) => id !== student.studentId),
+                                      );
+                                    }}
+                                  />
+                                  Early departure
+                                </label>
+                              ))}
+
+                            {canSuperviseAttendance &&
+                              !data?.readOnly &&
+                              data?.session?.mode === "INSTRUCTIONAL" &&
+                              data?.session?.status === "OPEN" &&
+                              (student.presenceStatus === "NOT_ARRIVED" || student.presenceStatus === "ABSENT") && (
+                                <>
+                                  <button
+                                    type="button"
+                                    className={styles.secondaryButton}
+                                    disabled={busy}
+                                    onClick={() => setPendingConfirm({ kind: "FIRST_CARD", student })}
+                                  >
+                                    First-card face
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={styles.secondaryButton}
+                                    disabled={busy}
+                                    onClick={() => setPendingInput({ kind: "SUPERVISED_LATE", student })}
+                                  >
+                                    Record late
+                                  </button>
+                                </>
+                              )}
+                          </div>
                         </td>
                       )}
                     </tr>
@@ -2207,7 +2542,7 @@ const validFrom =
                 <tr>
                   <td
                     colSpan={
-                      canSuperviseAttendance ? 7 : 6
+                      (canSuperviseAttendance || canManage) ? 7 : 6
                     }
                   >
                     No students match this view.
@@ -2217,6 +2552,71 @@ const validFrom =
             </tbody>
           </table>
         </div>
+
+        {historyStudent && (
+          <section className={styles.section}>
+            <div className={styles.sectionHeader}>
+              <div>
+                <h3 className={styles.sectionTitle}>
+                  {studentName(historyStudent)} · Attendance history
+                </h3>
+                <span className={styles.muted}>
+                  {historyData
+                    ? `${historyData.period.academicSessionName}${historyData.period.academicTermName ? ` · ${historyData.period.academicTermName}` : ""}`
+                    : "Loading history..."}
+                </span>
+              </div>
+              <button
+                type="button"
+                className={styles.secondaryButton}
+                onClick={() => {
+                  setHistoryStudent(null);
+                  setHistoryData(null);
+                }}
+              >
+                Close history
+              </button>
+            </div>
+
+            {historyBusy && <p className={styles.muted}>Loading attendance history...</p>}
+
+            {historyData && (
+              <>
+                <div className={styles.filters}>
+                  <span className="casa-status">Attendance {historyData.attendancePercentage ?? "—"}%</span>
+                  <span className="casa-status">Punctuality {historyData.punctualityPercentage ?? "—"}%</span>
+                  <span className="casa-status">Early departures {historyData.earlyDepartures}</span>
+                </div>
+                <div className={styles.tableWrap}>
+                  <table className={styles.table}>
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>Class</th>
+                        <th>Status</th>
+                        <th>Arrival</th>
+                        <th>Arrived</th>
+                        <th>Signed out</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {historyData.trend.slice().reverse().map((entry) => (
+                        <tr key={entry.date}>
+                          <td>{entry.date}</td>
+                          <td>{entry.className || "—"}</td>
+                          <td>{entry.status}</td>
+                          <td>{entry.actualArrivalStatus ?? "—"}</td>
+                          <td>{formatTime(entry.recordedAt)}</td>
+                          <td>{formatTime(entry.checkedOutAt)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </section>
+        )}
 
         {data &&
           data.page.pages >
@@ -2346,85 +2746,6 @@ const validFrom =
 
             <div
               className={
-                styles.policyTimes
-              }
-            >
-              {(
-                [
-                  [
-                    "checkInOpensAt",
-                    "Check-in opens",
-                  ],
-                  [
-                    "onTimeUntil",
-                    "On-time until",
-                  ],
-                  [
-                    "checkInClosesAt",
-                    "Check-in closes",
-                  ],
-                  [
-                    "normalDismissalAt",
-                    "Normal dismissal",
-                  ],
-                  [
-                    "checkOutClosesAt",
-                    "Sign-out closes",
-                  ],
-                ] as const
-              ).map(
-                (
-                  [
-                    key,
-                    label,
-                  ],
-                ) => (
-                  <label
-                    key={
-                      key
-                    }
-                  >
-                    <span
-                      className={
-                        styles.muted
-                      }
-                    >
-                      {label}
-                    </span>
-                    <input
-                      className={
-                        styles.input
-                      }
-                      type="time"
-                      value={
-                        times[
-                          key
-                        ]
-                      }
-                      onChange={
-                        (
-                          event,
-                        ) =>
-                          setTimes(
-                            (
-                              current,
-                            ) => ({
-                              ...current,
-                              [key]:
-                                event
-                                  .target
-                                  .value,
-                            }),
-                          )
-                      }
-                    />
-                  </label>
-                ),
-              )}
-            </div>
-
-            <div
-              className={
                 styles.weekdays
               }
             >
@@ -2434,7 +2755,6 @@ const validFrom =
                 3,
                 4,
                 5,
-                6,
                 0,
               ].map(
                 (
@@ -2490,6 +2810,233 @@ const validFrom =
               )}
             </div>
 
+            <div className="mt-4 grid gap-4">
+              <div className="border border-black bg-[#f7f7f3] p-4">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <strong className="block">
+                      Saturday lessons
+                    </strong>
+                    <p className={styles.muted}>
+                      Choose whether Saturday is part of the normal school attendance week.
+                    </p>
+                  </div>
+                  <strong>
+                    {selectedWeekdays.includes(6)
+                      ? "ON"
+                      : "OFF"}
+                  </strong>
+                </div>
+
+                <div className="mt-4 flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    className={styles.button}
+                    aria-pressed={
+                      selectedWeekdays.includes(
+                        6,
+                      )
+                    }
+                    onClick={() =>
+                      setSelectedWeekdays(
+                        (
+                          current,
+                        ) =>
+                          current.includes(
+                            6,
+                          )
+                            ? current
+                            : [
+                                ...current,
+                                6,
+                              ],
+                      )
+                    }
+                  >
+                    There is lesson on Saturday
+                  </button>
+
+                  <button
+                    type="button"
+                    className={styles.button}
+                    aria-pressed={
+                      !selectedWeekdays.includes(
+                        6,
+                      )
+                    }
+                    onClick={() =>
+                      setSelectedWeekdays(
+                        (
+                          current,
+                        ) =>
+                          current.filter(
+                            (
+                              weekday,
+                            ) =>
+                              weekday !==
+                              6,
+                          ),
+                      )
+                    }
+                  >
+                    No lesson on Saturday
+                  </button>
+                </div>
+
+                <p className="mt-3 text-xs leading-5 text-black/50">
+                  When Saturday is ON, its own check-in, on-time, check-in close, dismissal and sign-out close times appear below. When Saturday is OFF, Saturday is not an instructional day and students are not expected for attendance.
+                </p>
+              </div>
+
+              {[...selectedWeekdays]
+                .sort(
+                  (
+                    left,
+                    right,
+                  ) => {
+                    const order = [
+                      1,
+                      2,
+                      3,
+                      4,
+                      5,
+                      6,
+                      0,
+                    ];
+
+                    return (
+                      order.indexOf(
+                        left,
+                      ) -
+                      order.indexOf(
+                        right,
+                      )
+                    );
+                  },
+                )
+                .map(
+                  (
+                    weekday,
+                  ) => {
+                    const schedule =
+                      dayTimes[
+                        weekday
+                      ] ??
+                      defaultAttendanceDayTimes;
+
+                    return (
+                      <div
+                        key={
+                          weekday
+                        }
+                        className="border border-black/15 bg-white p-4"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <strong>
+                            {
+                              weekdayLabels[
+                                weekday
+                              ]
+                            }
+                          </strong>
+                          <span className={styles.muted}>
+                            Instructional day
+                          </span>
+                        </div>
+
+                        <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                          {(
+                            [
+                              [
+                                "checkInOpensAt",
+                                "Check-in opens",
+                              ],
+                              [
+                                "onTimeUntil",
+                                "On-time until",
+                              ],
+                              [
+                                "checkInClosesAt",
+                                "Check-in closes",
+                              ],
+                              [
+                                "normalDismissalAt",
+                                "Normal dismissal",
+                              ],
+                              [
+                                "checkOutClosesAt",
+                                "Sign-out closes",
+                              ],
+                            ] as const
+                          ).map(
+                            (
+                              [
+                                key,
+                                label,
+                              ],
+                            ) => (
+                              <label
+                                key={
+                                  key
+                                }
+                              >
+                                <span className={styles.muted}>
+                                  {label}
+                                </span>
+                                <input
+                                  className={styles.input}
+                                  type="time"
+                                  value={
+                                    schedule[
+                                      key
+                                    ]
+                                  }
+                                  onChange={
+                                    (
+                                      event,
+                                    ) =>
+                                      setDayTimes(
+                                        (
+                                          current,
+                                        ) => ({
+                                          ...current,
+                                          [weekday]:
+                                            {
+                                              ...(
+                                                current[
+                                                  weekday
+                                                ] ??
+                                                defaultAttendanceDayTimes
+                                              ),
+                                              [key]:
+                                                event
+                                                  .target
+                                                  .value,
+                                            },
+                                        }),
+                                      )
+                                  }
+                                />
+                              </label>
+                            ),
+                          )}
+                        </div>
+                      </div>
+                    );
+                  },
+                )}
+
+              {selectedWeekdays.length === 0 ? (
+                <p className={styles.muted}>
+                  Select at least one instructional weekday. Leave Saturday unchecked when Saturday is normally closed.
+                </p>
+              ) : null}
+
+              <p className={styles.muted}>
+                Each selected weekday has its own attendance times. Each instructional weekday has its own attendance times. Use the Saturday Lessons control above to turn normal Saturday attendance on or off. Calendar remains for exceptional dates such as holidays, breaks, branch closures or a Special non-instructional day.
+              </p>
+            </div>
+
             <button
               type="button"
               className={
@@ -2533,7 +3080,9 @@ const validFrom =
         onCancel={() => setPendingConfirm(null)}
         onConfirm={() => {
           if (pendingConfirm?.kind === "FIRST_CARD") {
-            void recordFirstCardException(pendingConfirm.student);
+            const student = pendingConfirm.student;
+            setPendingConfirm(null);
+            void recordFirstCardException(student);
           }
         }}
       />
@@ -2550,11 +3099,13 @@ const validFrom =
         busy={busy}
         onCancel={() => setPendingInput(null)}
         onConfirm={(reason) => {
-          if (pendingInput?.kind === "SUPERVISED_LATE") {
-            void recordSupervisedLate(pendingInput.student, reason);
-          } else if (pendingInput?.kind === "REOPEN") {
+          const pending = pendingInput;
+          setPendingInput(null);
+          if (pending?.kind === "SUPERVISED_LATE") {
+            void recordSupervisedLate(pending.student, reason);
+          } else if (pending?.kind === "REOPEN") {
             void mutateSession("REOPEN", reason);
-          } else if (pendingInput?.kind === "REBIND") {
+          } else if (pending?.kind === "REBIND") {
             void rebindSessionPolicy(reason);
           }
         }}

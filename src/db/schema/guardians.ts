@@ -179,16 +179,6 @@ export const studentGuardians = pgTable(
       .where(
         sql`${table.isPrimary} = true`,
       ),
-    uniqueIndex(
-      "student_guardians_one_notification_recipient_per_student_idx",
-    )
-      .on(
-        table.schoolId,
-        table.studentId,
-      )
-      .where(
-        sql`${table.receivesNotifications} = true`,
-      ),
     index(
       "student_guardians_guardian_idx",
     ).on(

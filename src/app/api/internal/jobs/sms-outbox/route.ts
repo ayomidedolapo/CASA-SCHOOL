@@ -7,10 +7,6 @@ import {
   NextResponse,
 } from "next/server";
 
-import {
-  runSmsOutbox,
-} from "@/server/messaging/outbox-worker";
-
 export const dynamic =
   "force-dynamic";
 export const maxDuration =
@@ -96,22 +92,16 @@ export async function GET(
     );
   }
 
-  const result =
-    await runSmsOutbox({
-      limit:
-        50,
-    });
-
   return NextResponse.json(
     {
-      ok:
-        true,
-      ...result,
+      ok: false,
+      message: "SMS attendance delivery is retired. CASA guardian attendance notifications use Firebase Cloud Messaging.",
+      code: "SMS_ATTENDANCE_DELIVERY_RETIRED",
     },
     {
+      status: 410,
       headers: {
-        "Cache-Control":
-          "no-store",
+        "Cache-Control": "no-store",
       },
     },
   );

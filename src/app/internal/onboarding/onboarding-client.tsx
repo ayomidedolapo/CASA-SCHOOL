@@ -251,6 +251,11 @@ export default function InternalOnboardingClient({
       initialSchoolId,
     );
   const [
+    branchId,
+    setBranchId,
+  ] =
+    useState("");
+  const [
     query,
     setQuery,
   ] =
@@ -411,7 +416,7 @@ export default function InternalOnboardingClient({
         completionOverride?:
           string,
       ) => {
-        if (!schoolId) {
+        if (!schoolId || !branchId) {
           return {
             students:
               [] as StudentSummary[],
@@ -428,6 +433,7 @@ export default function InternalOnboardingClient({
           new URLSearchParams({
             q:
               query,
+            branchId,
             section,
             face,
             completion:
@@ -481,6 +487,7 @@ export default function InternalOnboardingClient({
         };
       },
       [
+        branchId,
         completion,
         endpoint,
         face,
@@ -670,6 +677,12 @@ export default function InternalOnboardingClient({
           return;
         }
 
+        const nextBranches =
+          Array.isArray(
+            body.branches,
+          )
+            ? body.branches as AcademicOptions["branches"]
+            : [];
         setAcademicOptions({
           sessions:
             Array.isArray(
@@ -678,17 +691,17 @@ export default function InternalOnboardingClient({
               ? body.sessions
               : [],
           branches:
-            Array.isArray(
-              body.branches,
-            )
-              ? body.branches
-              : [],
+            nextBranches,
           classArms:
             Array.isArray(
               body.classArms,
             )
               ? body.classArms
               : [],
+        });
+        setBranchId((current) => {
+          if (current && nextBranches.some((branch) => branch.id === current)) return current;
+          return nextBranches.find((branch) => branch.isHeadquarters)?.id ?? nextBranches[0]?.id ?? "";
         });
       } catch (caught) {
         if (cancelled) {
@@ -1814,7 +1827,7 @@ export default function InternalOnboardingClient({
 
       <div className="casa-container grid bg-white lg:grid-cols-[minmax(0,0.92fr)_minmax(430px,1.08fr)]">
         <section className="border-b border-black p-5 sm:p-8 lg:border-b-0 lg:border-r">
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             <label className="casa-label">
               <span>
                 Assigned school
@@ -1834,6 +1847,7 @@ export default function InternalOnboardingClient({
                   setSchoolId(
                     event.target.value,
                   );
+                  setBranchId("");
                   setSelected(null);
                   setDetail(null);
                   setPage(1);
@@ -1854,6 +1868,28 @@ export default function InternalOnboardingClient({
                     </option>
                   ),
                 )}
+              </select>
+            </label>
+
+            <label className="casa-label">
+              <span>Campus / HQ</span>
+              <select
+                className="casa-field"
+                disabled={busy || Boolean(liveness) || academicOptions.branches.length === 0}
+                value={branchId}
+                onChange={(event) => {
+                  setBranchId(event.target.value);
+                  setSelected(null);
+                  setDetail(null);
+                  setPage(1);
+                }}
+              >
+                {academicOptions.branches.length === 0 ? <option value="">No active campus</option> : null}
+                {academicOptions.branches.map((branch) => (
+                  <option key={branch.id} value={branch.id}>
+                    {branch.name}{branch.isHeadquarters ? " · HQ" : ""}
+                  </option>
+                ))}
               </select>
             </label>
 
@@ -1901,7 +1937,7 @@ export default function InternalOnboardingClient({
               aria-label="Section filter"
             >
               <option value="ALL">
-                All sections
+                All school sections
               </option>
               <option value="PRIMARY">
                 Primary
@@ -1923,16 +1959,16 @@ export default function InternalOnboardingClient({
               aria-label="Face status filter"
             >
               <option value="ALL">
-                All faces
+                All face statuses
               </option>
               <option value="NEEDED">
-                Face needed
+                Face not enrolled
               </option>
               <option value="COMPLETE">
-                Face complete
+                Face enrolled
               </option>
               <option value="REVIEW">
-                Face review
+                Face needs review
               </option>
             </select>
 
@@ -1948,16 +1984,17 @@ export default function InternalOnboardingClient({
               aria-label="Onboarding completion filter"
             >
               <option value="ALL">
-                All
+                All onboarding statuses
               </option>
               <option value="INCOMPLETE">
-                Incomplete
+                Onboarding incomplete
               </option>
               <option value="COMPLETE">
-                Complete
+                Onboarding complete
               </option>
             </select>
           </div>
+          <p className="mt-2 text-[11px] leading-5 text-black/45">Campus/HQ limits the roster first. Section, face status and onboarding status then narrow that campus list together. Onboarding complete means guardian + active enrollment + active face profile.</p>
 
           <div className="mt-5 grid grid-cols-[1fr_auto] gap-3 border-y border-black py-3">
             <div>

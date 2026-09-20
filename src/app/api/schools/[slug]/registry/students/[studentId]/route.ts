@@ -2,6 +2,7 @@ import {
   and,
   asc,
   eq,
+  sql,
 } from "drizzle-orm";
 import {
   NextRequest,
@@ -114,6 +115,30 @@ export async function GET(
                   studentGuardians.pickupAuthorized,
                 receivesNotifications:
                   studentGuardians.receivesNotifications,
+                activeNotificationDevices:
+                  sql<number>`(
+                    select count(*)::int
+                    from guardian_push_devices device
+                    where
+                      device.school_id = ${studentGuardians.schoolId}
+                      and device.student_guardian_link_id = ${studentGuardians.id}
+                      and device.status = 'ACTIVE'
+                  )`,
+                notificationInviteState:
+                  sql<string | null>`(
+                    select case
+                      when invite.claimed_at is not null then 'CLAIMED'
+                      when invite.revoked_at is not null then 'REPLACED'
+                      when invite.expires_at <= now() then 'EXPIRED'
+                      else 'OPEN'
+                    end
+                    from guardian_push_enrollment_links invite
+                    where
+                      invite.school_id = ${studentGuardians.schoolId}
+                      and invite.student_guardian_link_id = ${studentGuardians.id}
+                    order by invite.created_at desc
+                    limit 1
+                  )`,
               })
               .from(studentGuardians)
               .innerJoin(

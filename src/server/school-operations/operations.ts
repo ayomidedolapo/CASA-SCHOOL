@@ -41,12 +41,41 @@ export function hasOrganizationAdminAuthority(
 export async function requireOrganizationAdmin(
   schoolSlug: string,
 ) {
-  return requireSchoolRole(
-    schoolSlug,
-    ["OWNER", "ADMIN"],
-  );
-}
+  const access =
+    await requireSchoolRole(
+      schoolSlug,
+      ["OWNER", "ADMIN"],
+    );
+  const db = getDb();
+  const branchAssignment =
+    await db.execute(sql`
+      select a.id
+      from school_branch_admin_assignments a
+      join school_branches b
+        on b.school_id = a.school_id
+       and b.id = a.branch_id
+      where
+        a.school_id =
+          ${access.school.id}::uuid
+        and a.membership_id =
+          ${access.membership.id}::uuid
+        and a.is_active = true
+        and b.status =
+          'ACTIVE'::school_branch_status
+        and b.is_headquarters = false
+      limit 1
+    `);
 
+  if (
+    rowsOf<{ id: string }>(
+      branchAssignment,
+    ).length > 0
+  ) {
+    throw new SchoolAccessDeniedError();
+  }
+
+  return access;
+}
 export async function requireBranchAccess(
   schoolSlug: string,
   branchId: string,
@@ -94,16 +123,6 @@ export async function requireBranchAccess(
     );
   }
 
-  if (
-    hasOrganizationAdminAuthority(access)
-  ) {
-    return {
-      access,
-      branch,
-      organizationAdmin: true,
-    };
-  }
-
   const assignment =
     await db.execute(sql`
       select id
@@ -122,24 +141,79 @@ export async function requireBranchAccess(
   if (
     rowsOf<{ id: string }>(
       assignment,
-    ).length === 0
+    ).length > 0
   ) {
-    throw new SchoolAccessDeniedError();
+    return {
+      access,
+      branch,
+      organizationAdmin: false,
+    };
   }
 
-  return {
-    access,
-    branch,
-    organizationAdmin: false,
-  };
-}
+  if (
+    hasOrganizationAdminAuthority(access)
+  ) {
+    if (!branch.is_headquarters) {
+      throw new SchoolOperationsError(
+        "HQ can create and oversee branches, but branch operations belong to that branch administrator.",
+        403,
+        "HEADQUARTERS_OPERATION_SCOPE_REQUIRED",
+      );
+    }
 
+    return {
+      access,
+      branch,
+      organizationAdmin: true,
+    };
+  }
+
+  throw new SchoolAccessDeniedError();
+}
 export async function listVisibleBranches(
   schoolSlug: string,
 ) {
   const access =
     await requireSchoolAccess(schoolSlug);
   const db = getDb();
+
+  const assignedResult =
+    await db.execute(sql`
+      select
+        b.id,
+        b.name,
+        b.code,
+        b.address,
+        b.is_headquarters,
+        b.status,
+        b.created_at,
+        b.updated_at
+      from school_branch_admin_assignments a
+      join school_branches b
+        on b.school_id = a.school_id
+       and b.id = a.branch_id
+      where
+        a.school_id =
+          ${access.school.id}::uuid
+        and a.membership_id =
+          ${access.membership.id}::uuid
+        and a.is_active = true
+        and b.status =
+          'ACTIVE'::school_branch_status
+      order by b.name asc
+    `);
+
+  const assignedBranches =
+    rowsOf(assignedResult);
+
+  if (assignedBranches.length > 0) {
+    return {
+      access,
+      organizationAdmin: false,
+      branches:
+        assignedBranches,
+    };
+  }
 
   if (
     hasOrganizationAdminAuthority(access)
@@ -156,11 +230,13 @@ export async function listVisibleBranches(
           created_at,
           updated_at
         from school_branches
-        where school_id =
-          ${access.school.id}::uuid
-        order by
-          is_headquarters desc,
-          name asc
+        where
+          school_id =
+            ${access.school.id}::uuid
+          and is_headquarters = true
+          and status =
+            'ACTIVE'::school_branch_status
+        order by name asc
       `);
 
     return {
@@ -205,39 +281,12 @@ export async function listVisibleBranches(
     };
   }
 
-  const result =
-    await db.execute(sql`
-      select
-        b.id,
-        b.name,
-        b.code,
-        b.address,
-        b.is_headquarters,
-        b.status,
-        b.created_at,
-        b.updated_at
-      from school_branch_admin_assignments a
-      join school_branches b
-        on b.school_id = a.school_id
-       and b.id = a.branch_id
-      where
-        a.school_id =
-          ${access.school.id}::uuid
-        and a.membership_id =
-          ${access.membership.id}::uuid
-        and a.is_active = true
-        and b.status =
-          'ACTIVE'::school_branch_status
-      order by b.name asc
-    `);
-
   return {
     access,
     organizationAdmin: false,
-    branches: rowsOf(result),
+    branches: [],
   };
 }
-
 export async function createBranch(
   input: {
     access: SchoolAccess;

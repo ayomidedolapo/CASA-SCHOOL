@@ -147,23 +147,6 @@ export async function POST(
       );
     }
 
-    if (
-      parsed.data.receivesNotifications &&
-      !guardianRows[0].phone?.trim()
-    ) {
-      return NextResponse.json(
-        {
-          message:
-            "Guardian must have a phone number before receiving attendance SMS.",
-        },
-        {
-          status: 409,
-          headers:
-            registryNoStoreHeaders,
-        },
-      );
-    }
-
     const inserted = await db
       .insert(studentGuardians)
       .values({
@@ -181,70 +164,11 @@ export async function POST(
         pickupAuthorized:
           parsed.data.pickupAuthorized,
         receivesNotifications:
-          false,
+          parsed.data.receivesNotifications,
       })
       .returning({
         id: studentGuardians.id,
       });
-
-    if (
-      parsed.data.receivesNotifications &&
-      inserted[0]
-    ) {
-      await db
-        .update(
-          studentGuardians,
-        )
-        .set({
-          receivesNotifications:
-            false,
-          updatedAt:
-            new Date(),
-        })
-        .where(
-          and(
-            eq(
-              studentGuardians.schoolId,
-              access.school.id,
-            ),
-            eq(
-              studentGuardians.studentId,
-              studentId,
-            ),
-            eq(
-              studentGuardians.receivesNotifications,
-              true,
-            ),
-          ),
-        );
-
-      await db
-        .update(
-          studentGuardians,
-        )
-        .set({
-          receivesNotifications:
-            true,
-          updatedAt:
-            new Date(),
-        })
-        .where(
-          and(
-            eq(
-              studentGuardians.schoolId,
-              access.school.id,
-            ),
-            eq(
-              studentGuardians.studentId,
-              studentId,
-            ),
-            eq(
-              studentGuardians.id,
-              inserted[0].id,
-            ),
-          ),
-        );
-    }
 
     return NextResponse.json(
       {
@@ -346,14 +270,11 @@ export async function PATCH(
     }
 
     const db = getDb();
-
     const targetRows =
       await db
         .select({
           id:
             studentGuardians.id,
-          phone:
-            guardians.phone,
         })
         .from(
           studentGuardians,
@@ -396,49 +317,19 @@ export async function PATCH(
     const target =
       targetRows[0];
 
-    if (
-      !target ||
-      !target.phone?.trim()
-    ) {
+    if (!target) {
       return NextResponse.json(
         {
           message:
-            "Guardian must be active and have a phone number before receiving attendance SMS.",
+            "Guardian relationship is unavailable.",
         },
         {
-          status: 409,
+          status: 404,
           headers:
             registryNoStoreHeaders,
         },
       );
     }
-
-    await db
-      .update(
-        studentGuardians,
-      )
-      .set({
-        receivesNotifications:
-          false,
-        updatedAt:
-          new Date(),
-      })
-      .where(
-        and(
-          eq(
-            studentGuardians.schoolId,
-            access.school.id,
-          ),
-          eq(
-            studentGuardians.studentId,
-            studentId,
-          ),
-          eq(
-            studentGuardians.receivesNotifications,
-            true,
-          ),
-        ),
-      );
 
     const selectedRows =
       await db
@@ -479,7 +370,7 @@ export async function PATCH(
 
     return NextResponse.json(
       {
-        attendanceSmsRecipient:
+        notificationRecipient:
           selected,
       },
       {

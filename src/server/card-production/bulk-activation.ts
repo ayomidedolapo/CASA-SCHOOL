@@ -166,8 +166,7 @@ export async function getBranchBulkCardActivationReadiness(
       )::int as awaiting_print_count,
       count(*) filter (
         where
-          production_status = 'PRINTED'
-          and not face_ready
+          not face_ready
       )::int as awaiting_face_count,
       count(*) filter (
         where

@@ -98,6 +98,19 @@ export async function GET(
       );
     const search =
       request.nextUrl.searchParams;
+    const branchIdRaw =
+      search.get("branchId");
+    const branchIdParsed =
+      branchIdRaw
+        ? z.string().uuid().safeParse(branchIdRaw)
+        : null;
+    if (branchIdParsed && !branchIdParsed.success) {
+      return NextResponse.json(
+        { message: "Select a valid campus." },
+        { status: 400, headers: casaInternalNoStoreHeaders },
+      );
+    }
+    const branchId = branchIdParsed?.success ? branchIdParsed.data : null;
     const page =
       Math.max(
         1,
@@ -144,6 +157,7 @@ export async function GET(
           "",
         page,
         pageSize: 25,
+        branchId,
         section,
         face,
         completion,

@@ -12,6 +12,8 @@ import {
   schools,
 } from "@/db/schema";
 
+import { reconcileTerminalHealthNotifications } from "@/server/internal/terminal-health";
+
 import {
   parseTerminalToken,
   terminalSecretMatches,
@@ -144,6 +146,8 @@ export async function authenticateTerminalRequest(
         ),
       ),
     );
+
+  await reconcileTerminalHealthNotifications({ schoolId: row.schoolId });
 
   return {
     terminal: {

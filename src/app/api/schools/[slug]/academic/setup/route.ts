@@ -7,6 +7,7 @@ import { z } from "zod";
 
 import { getDatabaseUrl } from "@/config/env";
 import { getDb } from "@/db";
+import { listVisibleBranches, requireBranchAccess } from "@/server/school-operations/operations";
 import {
   AuthRequiredError,
   SchoolAccessDeniedError,
@@ -156,12 +157,17 @@ export async function GET(
       `),
     ]);
 
+    const visible = await listVisibleBranches(slug);
+    const visibleIds = new Set((visible.branches as Array<{id:string}>).map((branch) => branch.id));
+    const visibleBranches = rowsOf<{id:string}>(branches).filter((branch) => visibleIds.has(branch.id));
+    const visibleClassArms = rowsOf<{branch_id:string|null}>(structure).filter((arm) => arm.branch_id ? visibleIds.has(arm.branch_id) : false);
+
     return NextResponse.json(
       {
         sessions: rowsOf(sessions),
         terms: rowsOf(terms),
-        classArms: rowsOf(structure),
-        branches: rowsOf(branches),
+        classArms: visibleClassArms,
+        branches: visibleBranches,
       },
       { headers: noStore() },
     );
@@ -249,6 +255,7 @@ export async function POST(
 
     if (parsed.data.action === "CREATE_CLASS_ARM") {
       const input = parsed.data;
+      await requireBranchAccess(slug, input.branchId);
       const db = getDb();
       const rows = rowsOf<Record<string, unknown>>(
         await db.execute(sql`
@@ -302,6 +309,7 @@ export async function POST(
       return NextResponse.json({ classArm: rows[0] }, { status: 201, headers: noStore() });
     }
 
+    await requireBranchAccess(slug, parsed.data.branchId);
     const db = getDb();
     const updated = rowsOf(
       await db.execute(sql`

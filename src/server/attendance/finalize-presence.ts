@@ -26,6 +26,15 @@ import {
 import {
   resolveTransportPunctuality,
 } from "./transport-punctuality";
+function rowsOf<T>(result: unknown): T[] {
+  if (Array.isArray(result)) return result as T[];
+  if (result && typeof result === "object" && "rows" in result) {
+    const rows = (result as { rows?: unknown }).rows;
+    if (Array.isArray(rows)) return rows as T[];
+  }
+  return [];
+}
+
 export type FinalizePresenceResult =
   | {
       ok: true;
@@ -396,9 +405,24 @@ export async function finalizeVerifiedPresence(
   const now =
     new Date().toISOString();
 
+  const branchModeRow = rowsOf<{ mode: "INSTRUCTIONAL" | "PRESENCE_ONLY" }>(
+    await db.execute(sql`
+      select bs.mode
+      from school_branch_terminals terminal_branch
+      join attendance_branch_sessions bs
+        on bs.school_id = terminal_branch.school_id
+       and bs.branch_id = terminal_branch.branch_id
+       and bs.session_id = ${attempt.sessionId}::uuid
+      where terminal_branch.school_id = ${access.school.id}::uuid
+        and terminal_branch.terminal_id = ${attempt.terminalId}::uuid
+      limit 1
+    `),
+  )[0];
+  const presenceOnly = branchModeRow?.mode === "PRESENCE_ONLY";
+
   const punctuality =
     attempt.operation ===
-      "CHECK_IN"
+      "CHECK_IN" && !presenceOnly
       ? await resolveTransportPunctuality({
           schoolId:
             access.school.id,
@@ -468,6 +492,7 @@ export async function finalizeVerifiedPresence(
           minutes_after_official_start,
           punctuality_outcome,
           punctuality_policy_id,
+          count_for_attendance,
           presence_state,
           departure_result,
           recorded_at,
@@ -489,6 +514,7 @@ export async function finalizeVerifiedPresence(
           ${punctuality?.minutesAfterOfficialStart ?? null},
           ${punctuality?.outcome ?? null},
           ${punctuality?.policyId ?? null}::uuid,
+          ${!presenceOnly},
           'ON_CAMPUS'::attendance_presence_state,
           'NOT_RUN'::attendance_departure_result,
           ${now}::timestamptz,

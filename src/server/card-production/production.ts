@@ -389,6 +389,7 @@ export async function produceStudentCard(
     student,
     activeTemplate,
     activeCards,
+    previousCards,
   ] =
     await Promise.all([
       getStudentSnapshotSource({
@@ -421,6 +422,27 @@ export async function produceStudentCard(
             eq(
               studentIdentityCards.status,
               "ACTIVE",
+            ),
+          ),
+        )
+        .limit(1),
+      db
+        .select({
+          id:
+            studentIdentityCards.id,
+        })
+        .from(
+          studentIdentityCards,
+        )
+        .where(
+          and(
+            eq(
+              studentIdentityCards.schoolId,
+              input.access.school.id,
+            ),
+            eq(
+              studentIdentityCards.studentId,
+              input.studentId,
             ),
           ),
         )
@@ -536,9 +558,13 @@ export async function produceStudentCard(
     };
   }
 
+  const previousCard =
+    previousCards[0] ??
+    null;
+
   const action:
     CardProductionAction =
-      activeCard
+      previousCard
         ? "CARD_REISSUE"
         : "CARD_ISSUE";
 
@@ -981,6 +1007,8 @@ export async function listCentralProductionJobs(
       null;
     schoolId:
       string | null;
+    branchId?:
+      string | null;
     limit:
       number;
     origin:
@@ -1012,6 +1040,14 @@ export async function listCentralProductionJobs(
         studentCardProductionJobs.schoolId,
         input.schoolId,
       ),
+    );
+  }
+
+  if (
+    input.branchId
+  ) {
+    conditions.push(
+      sql`${studentCardProductionJobs.renderSnapshot} ->> 'branchId' = ${input.branchId}`,
     );
   }
 

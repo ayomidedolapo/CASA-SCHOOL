@@ -814,6 +814,11 @@ export const studentAttendanceRecords =
         attendanceRecordStatusEnum(
           "status",
         ).notNull(),
+      countForAttendance: boolean(
+        "count_for_attendance",
+      )
+        .default(true)
+        .notNull(),
       presenceState:
         attendancePresenceStateEnum(
           "presence_state",

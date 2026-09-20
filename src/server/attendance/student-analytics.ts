@@ -283,6 +283,8 @@ export async function getStudentAttendanceAnalytics(
         attendance.attendance_date,
         attendance.status
           as session_status,
+        coalesce(branch_session.mode, 'INSTRUCTIONAL')
+          as branch_mode,
         enrollment.id
           as enrollment_id,
         branch_map.branch_id,
@@ -294,6 +296,7 @@ export async function getStudentAttendanceAnalytics(
           as attendance_record_id,
         record.status
           as arrival_status,
+        record.count_for_attendance,
         record.recorded_at,
         record.presence_state,
         record.departure_result,
@@ -355,6 +358,10 @@ export async function getStudentAttendanceAnalytics(
            arm.school_id
        and level.id =
            arm.class_level_id
+      left join attendance_branch_sessions branch_session
+        on branch_session.school_id = attendance.school_id
+       and branch_session.session_id = attendance.id
+       and branch_session.branch_id = branch_map.branch_id
       left join student_attendance_records
         record
         on record.school_id =
@@ -439,6 +446,8 @@ export async function getStudentAttendanceAnalytics(
         string;
       session_status:
         "OPEN" | "CLOSED";
+      branch_mode:
+        "INSTRUCTIONAL" | "PRESENCE_ONLY";
       enrollment_id:
         string;
       branch_id:
@@ -454,6 +463,8 @@ export async function getStudentAttendanceAnalytics(
         | "LATE"
         | "MANUAL"
         | null;
+      count_for_attendance:
+        boolean | null;
       recorded_at:
         Date | string | null;
       presence_state:
@@ -507,12 +518,19 @@ export async function getStudentAttendanceAnalytics(
           | "ABSENT"
           | "EXCUSED"
           | "NON_INSTRUCTIONAL"
+          | "PRESENCE_ONLY"
           | "PENDING";
 
         // Calendar exclusions outrank normal grading even when a special
         // activity produced an attendance record. The actual arrival status
         // remains exposed separately for operational visibility.
-        if (
+        const presenceOnly =
+          row.branch_mode === "PRESENCE_ONLY" ||
+          row.count_for_attendance === false;
+
+        if (presenceOnly) {
+          status = "PRESENCE_ONLY";
+        } else if (
           row.calendar_event_id
         ) {
           status =

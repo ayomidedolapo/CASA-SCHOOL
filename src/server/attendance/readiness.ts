@@ -288,6 +288,10 @@ export async function isInstructionalDate(
           where
             p.school_id =
               ${input.schoolId}::uuid
+            and (
+              ${input.branchId ?? null}::uuid is null
+              or p.branch_id = ${input.branchId ?? null}::uuid
+            )
             and p.is_default = true
             and p.is_active = true
             and p.valid_from <=

@@ -6,6 +6,7 @@ const baseNav = [
   ["/internal", "Overview", "overview"],
   ["/internal/schools", "Schools", "schools"],
   ["/internal/operations", "Operations", "operations"],
+  ["/internal/notifications", "Notifications", "notifications"],
   ["/security/passkeys", "Security", "security"],
 ] as const;
 const superNav = [
@@ -15,7 +16,7 @@ const superNav = [
   ["/internal/audit", "Audit", "audit"],
   ["/internal/team", "CASA Team", "team"],
 ] as const;
-type Active = "overview" | "schools" | "operations" | "security" | "templates" | "finance" | "health" | "audit" | "team";
+type Active = "overview" | "schools" | "operations" | "notifications" | "security" | "templates" | "finance" | "health" | "audit" | "team";
 
 export default function InternalShell({actorName,role,active,children}:{actorName:string;role:string;active:Active;children:ReactNode}) {
   const nav = role === "CASA_SUPER_ADMIN" ? [...baseNav, ...superNav] : baseNav;

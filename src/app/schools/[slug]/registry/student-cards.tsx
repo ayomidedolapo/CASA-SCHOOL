@@ -223,6 +223,11 @@ export function StudentCards({
     ) ??
     null;
 
+  const reissueRequired =
+    !activeCard &&
+    !pendingCard &&
+    cards.length > 0;
+
   const pendingProduction =
     pendingCard
       ? jobs.find(
@@ -361,6 +366,33 @@ export function StudentCards({
       ],
     );
 
+  useEffect(() => {
+    const handleCardChanged =
+      () => {
+        void reload().catch(
+          (caught: unknown) =>
+            setError(
+              caught instanceof
+                Error
+                ? caught.message
+                : "Unable to refresh card status.",
+            ),
+        );
+      };
+
+    window.addEventListener(
+      "casa:student-card-changed",
+      handleCardChanged,
+    );
+
+    return () => {
+      window.removeEventListener(
+        "casa:student-card-changed",
+        handleCardChanged,
+      );
+    };
+  }, [reload]);
+
   useEffect(
     () => {
       const timer =
@@ -402,16 +434,12 @@ export function StudentCards({
       return;
     }
 
-    const action =
-      activeCard
-        ? "CARD_REISSUE"
-        : "CARD_ISSUE";
-
     const actionReason =
       reason.trim();
 
     if (
-      activeCard &&
+      (activeCard ||
+        reissueRequired) &&
       actionReason.length <
         3
     ) {
@@ -446,15 +474,19 @@ export function StudentCards({
 
       if (!schoolSlug) {
         throw new Error(
-          "Unable to resolve the school for Passkey authorization.",
+          "Unable to resolve the school for card production.",
         );
       }
 
       const grant =
-        await obtainPasskeyStepUpGrant({
-          schoolSlug,
-          action,
-        });
+        activeCard ||
+        reissueRequired
+          ? await obtainPasskeyStepUpGrant({
+              schoolSlug,
+              action:
+                "CARD_REISSUE",
+            })
+          : null;
 
       const response =
         await fetch(
@@ -465,8 +497,12 @@ export function StudentCards({
             headers: {
               "Content-Type":
                 "application/json",
-              "x-casa-passkey-step-up":
-                grant,
+              ...(grant
+                ? {
+                    "x-casa-passkey-step-up":
+                      grant,
+                  }
+                : {}),
             },
             credentials:
               "same-origin",
@@ -475,7 +511,8 @@ export function StudentCards({
             body:
               JSON.stringify({
                 reason:
-                  activeCard
+                  activeCard ||
+                  reissueRequired
                     ? actionReason
                     : null,
               }),
@@ -498,7 +535,7 @@ export function StudentCards({
       setNotice(
         activeCard
           ? "Exceptional replacement card rendered and queued for CASA production."
-          : "Student card rendered and queued for CASA production.",
+          : "Missing first digital card created from the active enrollment. No per-student Passkey was required.",
       );
       setReason("");
 
@@ -544,6 +581,31 @@ export function StudentCards({
     setNotice(null);
 
     try {
+      const schoolSlug =
+        decodeURIComponent(
+          apiBase
+            .split(
+              "/api/schools/",
+            )[1]
+            ?.split(
+              "/",
+            )[0] ??
+            "",
+        );
+
+      if (!schoolSlug) {
+        throw new Error(
+          "Unable to resolve the school for Passkey authorization.",
+        );
+      }
+
+      const grant =
+        await obtainPasskeyStepUpGrant({
+          schoolSlug,
+          action:
+            "CARD_BULK_ACTIVATE",
+        });
+
       const response =
         await fetch(
           `${endpoint}/${pendingCard.id}/activate`,
@@ -552,6 +614,8 @@ export function StudentCards({
             headers: {
               "Content-Type":
                 "application/json",
+              "x-casa-passkey-step-up":
+                grant,
             },
             credentials:
               "same-origin",
@@ -681,12 +745,11 @@ export function StudentCards({
             Card production & lifecycle
           </h4>
           <p className="mt-2 max-w-2xl text-xs leading-5 text-black/50">
-            CASA renders the personalized card server-side. The reusable QR
-            credential is never returned to this browser or stored for later
-            printing. This physical card remains valid across class and
-            academic-session changes; those details stay authoritative in CASA
-            digitally. Replace the card only if it is lost, damaged, revoked,
-            or otherwise compromised.
+            CASA creates the first digital card automatically after the
+            student receives an active enrollment. No individual Passkey is
+            required for first-card creation. The campus can later activate all
+            eligible first cards with one Passkey ceremony after printing and
+            face enrollment. Replacement remains Passkey-protected.
           </p>
         </div>
 
@@ -702,9 +765,10 @@ export function StudentCards({
             ? "Working..."
             : pendingCard
               ? "Awaiting handover"
-              : activeCard
-                ? "Replace card with Passkey"
-                : "Issue with Passkey"}
+              : activeCard ||
+                  reissueRequired
+                ? "Reissue card with Passkey"
+                : "Create missing first card"}
         </button>
       </div>
 
@@ -770,7 +834,7 @@ export function StudentCards({
                 void activateHandover()
               }
             >
-              Confirm handover & activate
+              Confirm handover with Passkey
             </button>
           </div>
         </div>
@@ -911,13 +975,35 @@ export function StudentCards({
             </button>
           </div>
         </div>
+      ) : reissueRequired ? (
+        <div className="mt-5 border border-black p-4">
+          <p className="casa-kicker text-black/45">
+            Reissue required
+          </p>
+          <p className="mt-2 text-xs leading-5 text-black/55">
+            This student has card history but no current active card. CASA will not treat this as a first-card issue. Enter the replacement reason and use the Passkey-protected reissue action.
+          </p>
+          <label className="casa-label mt-4">
+            <span>Replacement reason</span>
+            <input
+              className="casa-field"
+              onChange={(event) =>
+                setReason(
+                  event.target.value,
+                )
+              }
+              placeholder="Lost, damaged, expired, revoked, or other security reason"
+              value={reason}
+            />
+          </label>
+        </div>
       ) : (
         <div className="mt-5 border-y border-black/25 py-5">
           <p className="casa-kicker text-black/45">
             Card status
           </p>
           <p className="mt-2 text-sm">
-            No active student card.
+            No student card yet. CASA creates the first digital card automatically after active enrollment.
           </p>
         </div>
       )}

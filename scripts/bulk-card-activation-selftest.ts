@@ -49,9 +49,9 @@ for (const marker of [
 }
 
 for (const marker of [
-  "Activate a campus in one Passkey ceremony",
+  "Activate ready cards in one Passkey ceremony",
   'action:\n            "CARD_BULK_ACTIVATE"',
-  "Branch Admins see only assigned campuses",
+  "Branch Admins activate their own campus",
   "Activate ${readiness.eligibleCount} with Passkey",
   "new AbortController()",
   "controller.signal",

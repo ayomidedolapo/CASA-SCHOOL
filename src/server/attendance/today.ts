@@ -90,25 +90,47 @@ export async function getTodayAttendanceOperations(
       string | null;
     academicSessionId?:
       string | null;
+    date?:
+      string | null;
   },
 ) {
   const db = getDb();
 
-  const clock =
+  const liveClock =
     getSchoolClock(
       new Date(),
       input.access.school.timezone,
     );
 
+  const requestedDate =
+    input.date && /^\d{4}-\d{2}-\d{2}$/.test(input.date)
+      ? input.date
+      : liveClock.date;
+
+  const clock =
+    requestedDate === liveClock.date
+      ? liveClock
+      : {
+          date: requestedDate,
+          weekday: new Date(`${requestedDate}T12:00:00.000Z`).getUTCDay(),
+          clock: requestedDate < liveClock.date ? "23:59" : "00:00",
+        };
+
+  const readOnly = requestedDate !== liveClock.date;
+
   const sessionResult =
     await db.execute(sql`
       select
         session.id,
-        session.policy_id,
+        coalesce(branch_session.policy_id, session.policy_id) as policy_id,
         session.attendance_date,
-        session.status,
-        session.opened_at,
-        session.closed_at,
+        case
+          when ${input.branchId ?? null}::uuid is not null then branch_session.status
+          else session.status::text
+        end as status,
+        coalesce(branch_session.mode, 'INSTRUCTIONAL') as mode,
+        coalesce(branch_session.opened_at, session.opened_at) as opened_at,
+        coalesce(branch_session.closed_at, session.closed_at) as closed_at,
         day.check_in_opens_at,
         day.on_time_until,
         day.check_in_closes_at,
@@ -116,19 +138,23 @@ export async function getTodayAttendanceOperations(
         day.check_out_closes_at
       from attendance_sessions
         session
+      left join attendance_branch_sessions
+        branch_session
+        on branch_session.school_id = session.school_id
+       and branch_session.session_id = session.id
+       and branch_session.branch_id = ${input.branchId ?? null}::uuid
       left join attendance_policy_days
         day
-        on day.school_id =
-           session.school_id
-       and day.policy_id =
-           session.policy_id
-       and day.weekday =
-           ${clock.weekday}
+        on day.school_id = session.school_id
+       and day.policy_id = coalesce(branch_session.policy_id, session.policy_id)
+       and day.weekday = ${clock.weekday}
       where
-        session.school_id =
-          ${input.access.school.id}::uuid
-        and session.attendance_date =
-          ${clock.date}::date
+        session.school_id = ${input.access.school.id}::uuid
+        and session.attendance_date = ${clock.date}::date
+        and (
+          ${input.branchId ?? null}::uuid is null
+          or branch_session.id is not null
+        )
       limit 1
     `);
 
@@ -145,6 +171,8 @@ export async function getTodayAttendanceOperations(
         | "OPEN"
         | "CLOSED"
         | "CANCELLED";
+      mode:
+        "INSTRUCTIONAL" | "PRESENCE_ONLY";
       opened_at:
         Date | string | null;
       closed_at:
@@ -174,6 +202,8 @@ export async function getTodayAttendanceOperations(
             sessionRow.attendance_date,
           status:
             sessionRow.status,
+          mode:
+            sessionRow.mode,
           openedAt:
             sessionRow.opened_at,
           closedAt:
@@ -216,6 +246,7 @@ export async function getTodayAttendanceOperations(
             as student_id,
           student.casa_student_id,
           student.admission_number,
+          enrollment.academic_session_id,
           student.first_name,
           student.middle_name,
           student.last_name,
@@ -575,6 +606,8 @@ export async function getTodayAttendanceOperations(
         string;
       admission_number:
         string | null;
+      academic_session_id:
+        string;
       first_name:
         string;
       middle_name:
@@ -663,9 +696,14 @@ export async function getTodayAttendanceOperations(
                 ? "EXCUSED" as const
                 : null;
 
+        const presenceOnly =
+          session?.mode === "PRESENCE_ONLY";
+
         const presenceStatus =
           attendanceExclusion ??
-          classifyTodayPresence({
+          (presenceOnly && !hasRecord
+            ? "NOT_ARRIVED" as const
+            : classifyTodayPresence({
             hasAttendanceRecord:
               hasRecord,
             presenceState:
@@ -677,7 +715,7 @@ export async function getTodayAttendanceOperations(
               policyDay
                 ? policyDay.checkInClosesAt
                 : null,
-          });
+          }));
 
         return {
           studentId:
@@ -686,6 +724,8 @@ export async function getTodayAttendanceOperations(
             student.casa_student_id,
           admissionNumber:
             student.admission_number,
+          academicSessionId:
+            student.academic_session_id,
           firstName:
             student.first_name,
           middleName:
@@ -704,8 +744,10 @@ export async function getTodayAttendanceOperations(
             student.branch_name,
           presenceStatus,
           arrivalStatus:
-            student.punctuality_outcome ??
-            student.arrival_status,
+            presenceOnly
+              ? null
+              : student.punctuality_outcome ??
+                student.arrival_status,
           arrivalMethod:
             student.arrival_method,
           officialStartTime:
@@ -751,11 +793,13 @@ export async function getTodayAttendanceOperations(
     );
 
   const eligible =
-    studentsWithState.filter(
-      (student) =>
-        student.attendanceExclusion ===
-        null,
-    );
+    session?.mode === "PRESENCE_ONLY"
+      ? []
+      : studentsWithState.filter(
+          (student) =>
+            student.attendanceExclusion ===
+            null,
+        );
 
   const summary = {
     expected:
@@ -1026,6 +1070,8 @@ export async function getTodayAttendanceOperations(
         string;
       casa_student_id:
         string;
+      academic_session_id:
+        string;
       first_name:
         string;
       middle_name:
@@ -1114,6 +1160,8 @@ export async function getTodayAttendanceOperations(
 
   return {
     clock,
+    todayDate: liveClock.date,
+    readOnly,
     session,
     policyDay,
     branchId:

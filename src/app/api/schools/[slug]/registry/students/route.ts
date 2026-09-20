@@ -26,7 +26,7 @@ import {
   registryAuthErrorResponse,
   registryDatabaseErrorResponse,
   registryNoStoreHeaders,
-  requireRegistryOperator,
+  requireRegistryAdmin,
 } from "@/server/registry/http";
 import {
   studentCreateSchema,
@@ -37,6 +37,9 @@ import {
   StudentCampusRequiredError,
   StudentDuplicateError,
 } from "@/server/students/registration";
+import {
+  listVisibleBranches,
+} from "@/server/school-operations/operations";
 
 export const dynamic =
   "force-dynamic";
@@ -57,10 +60,44 @@ export async function GET(
     await context.params;
 
   try {
+    const visibility =
+      await listVisibleBranches(slug);
     const access =
-      await requireRegistryOperator(
-        slug,
+      await requireRegistryAdmin(slug);
+    const operationalBranches =
+      visibility.branches as
+        Array<{
+          id: string;
+          name: string;
+          is_headquarters: boolean;
+        }>;
+
+    if (
+      operationalBranches.length !==
+      1
+    ) {
+      return NextResponse.json(
+        {
+          message:
+            operationalBranches.length ===
+            0
+              ? "No operational campus is assigned to this administrator."
+              : "This administrator is assigned to more than one campus. Student registration requires one unambiguous operating campus.",
+        },
+        {
+          status:
+            operationalBranches.length ===
+            0
+              ? 403
+              : 409,
+          headers:
+            registryNoStoreHeaders,
+        },
       );
+    }
+
+    const operationalBranch =
+      operationalBranches[0];
 
     const searchParams =
       request.nextUrl
@@ -131,6 +168,10 @@ export async function GET(
         ne(
           students.status,
           "ARCHIVED",
+        ),
+        eq(
+          students.homeBranchId,
+          operationalBranch.id,
         ),
       );
 
@@ -293,6 +334,14 @@ export async function GET(
               ),
             ),
         },
+        registrationCampus: {
+          id:
+            operationalBranch.id,
+          name:
+            operationalBranch.name,
+          isHeadquarters:
+            operationalBranch.is_headquarters,
+        },
       },
       {
         headers:
@@ -327,10 +376,44 @@ export async function POST(
     await context.params;
 
   try {
+    const visibility =
+      await listVisibleBranches(slug);
     const access =
-      await requireRegistryOperator(
-        slug,
+      await requireRegistryAdmin(slug);
+    const operationalBranches =
+      visibility.branches as
+        Array<{
+          id: string;
+          name: string;
+          is_headquarters: boolean;
+        }>;
+
+    if (
+      operationalBranches.length !==
+      1
+    ) {
+      return NextResponse.json(
+        {
+          message:
+            operationalBranches.length ===
+            0
+              ? "No operational campus is assigned to this administrator."
+              : "This administrator is assigned to more than one campus. Student registration requires one unambiguous operating campus.",
+        },
+        {
+          status:
+            operationalBranches.length ===
+            0
+              ? 403
+              : 409,
+          headers:
+            registryNoStoreHeaders,
+        },
       );
+    }
+
+    const operationalBranch =
+      operationalBranches[0];
 
     let body:
       unknown;
@@ -391,8 +474,7 @@ export async function POST(
         schoolId:
           access.school.id,
         branchId:
-          parsed.data.branchId ??
-          null,
+          operationalBranch.id,
         admissionNumber:
           parsed.data.admissionNumber,
         firstName:

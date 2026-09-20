@@ -162,8 +162,8 @@ export async function listTeacherClasses(
           ${access.membership.id}::uuid
         and assignment.is_active =
           true
-        and academic_session.status =
-          'ACTIVE'::academic_period_status
+        and academic_session.starts_on <= current_date
+        and academic_session.ends_on >= current_date
         and arm.is_active =
           true
         and level.is_active =
@@ -283,10 +283,11 @@ export async function requireAssignedTeacherClass(
              ${input.academicSessionId ?? null}::uuid
         )
         and (
-          ${input.academicSessionId ?? null}::uuid
-            is not null
-          or academic_session.status =
-             'ACTIVE'::academic_period_status
+          ${input.academicSessionId ?? null}::uuid is not null
+          or (
+            academic_session.starts_on <= current_date
+            and academic_session.ends_on >= current_date
+          )
         )
         and arm.is_active =
           true

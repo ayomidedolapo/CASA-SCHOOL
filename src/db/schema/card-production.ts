@@ -211,6 +211,7 @@ export const studentCardProductionJobs =
       )
         .$type<
           | "SCHOOL_MEMBERSHIP"
+          | "SCHOOL_ENROLLMENT_AUTO_ISSUE"
           | "CASA_INTERNAL_RENEWAL"
         >()
         .default(
@@ -395,7 +396,7 @@ export const studentCardProductionJobs =
         table.internalAuthorityReference,
       )
       .where(
-        sql`undefined is not null`,
+        sql`${table.internalAuthorityReference} is not null`,
       ),
     index(
       "student_card_production_jobs_authority_status_idx",
@@ -407,17 +408,24 @@ export const studentCardProductionJobs =
       "student_card_production_jobs_authority_check",
       sql`
         (
-          undefined = 'SCHOOL_MEMBERSHIP'
-          and undefined is not null
-          and undefined is not null
-          and undefined is null
+          ${table.productionAuthority} = 'SCHOOL_MEMBERSHIP'
+          and ${table.issuedByMembershipId} is not null
+          and ${table.passkeyGrantId} is not null
+          and ${table.internalAuthorityReference} is null
         )
         or
         (
-          undefined = 'CASA_INTERNAL_RENEWAL'
-          and undefined is null
-          and undefined is null
-          and undefined is not null
+          ${table.productionAuthority} = 'SCHOOL_ENROLLMENT_AUTO_ISSUE'
+          and ${table.issuedByMembershipId} is not null
+          and ${table.passkeyGrantId} is null
+          and ${table.internalAuthorityReference} is not null
+        )
+        or
+        (
+          ${table.productionAuthority} = 'CASA_INTERNAL_RENEWAL'
+          and ${table.issuedByMembershipId} is null
+          and ${table.passkeyGrantId} is null
+          and ${table.internalAuthorityReference} is not null
         )
       `,
     ),

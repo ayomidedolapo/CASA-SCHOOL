@@ -15,6 +15,7 @@ import {
 } from "@/components/casa-confirm-dialog";
 import { StudentCards } from "./student-cards";
 import { BulkCardActivation } from "./bulk-card-activation";
+import { RegistryM34AOperations } from "./m34a-registry-operations";
 
 interface RegistryClientProps {
   school: {
@@ -84,6 +85,12 @@ interface StudentDetail {
   }>;
 }
 
+interface RegistrationCampus {
+  id: string;
+  name: string;
+  isHeadquarters: boolean;
+}
+
 interface AcademicOptions {
   branches: Array<{
     id: string;
@@ -139,6 +146,14 @@ export function RegistryClient({
       sessions: [],
       classArms: [],
     });
+  const [
+    registrationCampus,
+    setRegistrationCampus,
+  ] =
+    useState<
+      RegistrationCampus |
+      null
+    >(null);
   const [busy, setBusy] =
     useState(false);
   const [notice, setNotice] =
@@ -240,6 +255,8 @@ export function RegistryClient({
         pagination: {
           total: number;
         };
+        registrationCampus:
+          RegistrationCampus;
       }>(
         `/students?q=${encodeURIComponent(
           query,
@@ -249,6 +266,9 @@ export function RegistryClient({
       setStudents(body.students);
       setStudentTotal(
         body.pagination.total,
+      );
+      setRegistrationCampus(
+        body.registrationCampus,
       );
     },
     [query, request],
@@ -296,6 +316,8 @@ export function RegistryClient({
         pagination: {
           total: number;
         };
+        registrationCampus:
+          RegistrationCampus;
       }>(
         `/students?q=${encodeURIComponent(
           query,
@@ -324,6 +346,9 @@ export function RegistryClient({
           );
           setStudentTotal(
             studentBody.pagination.total,
+          );
+          setRegistrationCampus(
+            studentBody.registrationCampus,
           );
           setGuardians(
             guardianBody.guardians,
@@ -460,10 +485,6 @@ export function RegistryClient({
               form.get(
                 "admissionNumber",
               ) || null,
-            branchId:
-              form.get(
-                "branchId",
-              ) || null,
             firstName:
               form.get("firstName"),
             middleName:
@@ -544,6 +565,11 @@ export function RegistryClient({
         "Guardian added to the registry.",
       );
       await refresh();
+      window.dispatchEvent(
+        new Event(
+          "casa:guardian-registry-changed",
+        ),
+      );
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -554,119 +580,6 @@ export function RegistryClient({
       setBusy(false);
     }
   }
-
-  async function linkGuardian(
-    event: FormEvent<HTMLFormElement>,
-  ) {
-    event.preventDefault();
-
-    if (!selectedStudentId) {
-      return;
-    }
-
-    setError(null);
-    setNotice(null);
-    setBusy(true);
-
-    const formElement =
-      event.currentTarget;
-    const form =
-      new FormData(
-        formElement,
-      );
-
-    try {
-      await request(
-        `/students/${selectedStudentId}/guardians`,
-        {
-          method: "POST",
-          body: JSON.stringify({
-            guardianId:
-              form.get(
-                "guardianId",
-              ),
-            relationshipLabel:
-              form.get(
-                "relationshipLabel",
-              ),
-            isPrimary:
-              form.get(
-                "isPrimary",
-              ) === "on",
-            isEmergencyContact:
-              form.get(
-                "isEmergencyContact",
-              ) === "on",
-            pickupAuthorized:
-              form.get(
-                "pickupAuthorized",
-              ) === "on",
-            receivesNotifications:
-              form.get(
-                "receivesNotifications",
-              ) === "on",
-          }),
-        },
-      );
-
-      formElement.reset();
-      setNotice(
-        "Guardian linked to the student.",
-      );
-      await refresh();
-    } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "Unable to link guardian.",
-      );
-    } finally {
-      setBusy(false);
-    }
-  }
-
-
-  async function setAttendanceSmsRecipient(
-    linkId: string,
-  ) {
-    if (!selectedStudentId) {
-      return;
-    }
-
-    setError(null);
-    setNotice(null);
-    setBusy(true);
-
-    try {
-      await request(
-        `/students/${selectedStudentId}/guardians`,
-        {
-          method: "PATCH",
-          body:
-            JSON.stringify({
-              linkId,
-            }),
-        },
-      );
-
-      setNotice(
-        "Attendance SMS will now go to this guardian only.",
-      );
-
-      await loadStudentDetail(
-        selectedStudentId,
-      );
-    } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "Unable to change the attendance SMS recipient.",
-      );
-    } finally {
-      setBusy(false);
-    }
-  }
-
 
   async function createEnrollment(
     event: FormEvent<HTMLFormElement>,
@@ -689,28 +602,74 @@ export function RegistryClient({
       );
 
     try {
+      const enrollmentResult =
+        await request<{
+          cardProvisioning?: {
+            status?: string;
+          };
+        }>(
+          `/students/${selectedStudentId}/enrollments`,
+          {
+            method: "POST",
+            body: JSON.stringify({
+              academicSessionId:
+                form.get(
+                  "academicSessionId",
+                ),
+              classArmId:
+                form.get(
+                  "classArmId",
+                ),
+              startsOn:
+                form.get("startsOn"),
+            }),
+          },
+        );
+
       await request(
-        `/students/${selectedStudentId}/enrollments`,
+        `/students/${selectedStudentId}/arrival-method`,
         {
-          method: "POST",
+          method: "PATCH",
           body: JSON.stringify({
-            academicSessionId:
+            arrivalMethod:
               form.get(
-                "academicSessionId",
+                "arrivalMethod",
               ),
-            classArmId:
+            effectiveFrom:
               form.get(
-                "classArmId",
+                "startsOn",
               ),
-            startsOn:
-              form.get("startsOn"),
+            reason:
+              "Set during enrollment",
           }),
         },
       );
 
       formElement.reset();
+      const cardStatus =
+        enrollmentResult
+          .cardProvisioning
+          ?.status;
+
       setNotice(
-        "Student enrollment created.",
+        cardStatus ===
+          "CREATED"
+          ? "Student enrollment and arrival method saved. CASA created the first digital card automatically."
+          : cardStatus ===
+              "ALREADY_PRESENT"
+            ? "Student enrollment and arrival method saved. The student already has a current card."
+            : cardStatus ===
+                "DEFERRED_NO_TEMPLATE"
+              ? "Student enrollment saved. First-card creation is waiting for an active school card template."
+              : cardStatus ===
+                  "DEFERRED_INCOMPLETE_CARD_DATA"
+                ? "Student enrollment saved. Complete the student card-visible details before creating the first card."
+                : "Student enrollment and arrival method saved.",
+      );
+      window.dispatchEvent(
+        new Event(
+          "casa:student-card-changed",
+        ),
       );
       await refresh();
     } catch (cause) {
@@ -915,7 +874,7 @@ export function RegistryClient({
                 <p className="text-xs font-semibold">{user.fullName}</p>
                 <p className="mt-1 font-mono text-[9px] uppercase tracking-[0.1em] text-black/45">{roles.join(" · ")}</p>
               </div>
-              <button onClick={() => void logout()} className="casa-button-quiet" type="button">Sign out</button>
+              <div className="flex flex-wrap gap-2"><a className="casa-button-quiet" href={`/schools/${encodeURIComponent(school.slug)}/branches`}>Branches</a><a className="casa-button-quiet" href={`/schools/${encodeURIComponent(school.slug)}/summer`}>Summer</a><button onClick={() => void logout()} className="casa-button-quiet" type="button">Sign out</button></div>
             </div>
           </section>
         </div>
@@ -1365,206 +1324,10 @@ export function RegistryClient({
                   }
                 />
 
-                <div className="mt-7 border-t border-black pt-5">
-                  <div className="flex items-end justify-between gap-4">
-                    <div>
-                      <p className="casa-kicker">
-                        Guardians
-                      </p>
-                      <p className="mt-2 text-sm text-black/55">
-                        {studentDetail?.guardians.length ??
-                          0}{" "}
-                        linked record(s). One guardian at a time receives the paid arrival and departure SMS.
-                      </p>
-                    </div>
-                  </div>
-
-                  {studentDetail &&
-                  studentDetail.guardians.length >
-                    0 ? (
-                    <div className="mt-4 border-t border-black/25">
-                      {studentDetail.guardians.map(
-                        (
-                          guardian,
-                        ) => (
-                          <div
-                            key={
-                              guardian.linkId
-                            }
-                            className="grid gap-2 border-b border-black/20 py-3 sm:grid-cols-[1fr_auto]"
-                          >
-                            <div>
-                              <p className="text-sm font-semibold">
-                                {guardian.fullName}
-                              </p>
-                              <p className="mt-1 text-xs text-black/50">
-                                {guardian.relationshipLabel}
-                                {guardian.isPrimary
-                                  ? " · Primary"
-                                  : ""}
-                              </p>
-                            </div>
-
-                            <div className="flex flex-wrap gap-1 sm:justify-end">
-                              {guardian.receivesNotifications ? (
-                                <span className="casa-status">
-                                  Attendance SMS
-                                </span>
-                              ) : guardian.phone ? (
-                                <button
-                                  type="button"
-                                  className="casa-button-secondary"
-                                  disabled={busy}
-                                  onClick={() =>
-                                    void setAttendanceSmsRecipient(
-                                      guardian.linkId,
-                                    )
-                                  }
-                                >
-                                  Send attendance SMS here
-                                </button>
-                              ) : (
-                                <span className="text-xs text-black/45">
-                                  Add phone for SMS
-                                </span>
-                              )}
-                              {guardian.pickupAuthorized ? (
-                                <span className="casa-status">
-                                  Pickup
-                                </span>
-                              ) : null}
-                              {guardian.isEmergencyContact ? (
-                                <span className="casa-status casa-status-warning">
-                                  Emergency
-                                </span>
-                              ) : null}
-                            </div>
-                          </div>
-                        ),
-                      )}
-                    </div>
-                  ) : (
-                    <p className="mt-4 text-sm text-black/50">
-                      No guardian linked yet.
-                    </p>
-                  )}
-
-                  <form
-                    className="mt-5 grid gap-3"
-                    onSubmit={
-                      linkGuardian
-                    }
-                  >
-                    <label className="casa-label">
-                      <span>
-                        Existing guardian
-                      </span>
-                      <select
-                        required
-                        name="guardianId"
-                        defaultValue=""
-                        className="casa-field"
-                      >
-                        <option
-                          value=""
-                          disabled
-                        >
-                          Select guardian
-                        </option>
-                        {guardians.map(
-                          (guardian) => (
-                            <option
-                              key={
-                                guardian.id
-                              }
-                              value={
-                                guardian.id
-                              }
-                            >
-                              {guardian.fullName}
-                            </option>
-                          ),
-                        )}
-                      </select>
-                    </label>
-
-                    <label className="casa-label">
-                      <span>
-                        Relationship
-                      </span>
-                      <input
-                        required
-                        name="relationshipLabel"
-                        placeholder="e.g. Mother"
-                        className="casa-field"
-                      />
-                    </label>
-
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                      {[
-                        [
-                          "isPrimary",
-                          "Primary",
-                          false,
-                        ],
-                        [
-                          "isEmergencyContact",
-                          "Emergency",
-                          false,
-                        ],
-                        [
-                          "pickupAuthorized",
-                          "Pickup authorized",
-                          false,
-                        ],
-                        [
-                          "receivesNotifications",
-                          "Attendance SMS recipient",
-                          false,
-                        ],
-                      ].map(
-                        ([
-                          name,
-                          label,
-                          checked,
-                        ]) => (
-                          <label
-                            className="flex items-center gap-2 border border-black/25 p-2"
-                            key={
-                              String(name)
-                            }
-                          >
-                            <input
-                              type="checkbox"
-                              name={
-                                String(name)
-                              }
-                              defaultChecked={
-                                Boolean(
-                                  checked,
-                                )
-                              }
-                            />
-                            {label}
-                          </label>
-                        ),
-                      )}
-                    </div>
-
-                    <button
-                      disabled={
-                        busy ||
-                        guardians.length ===
-                          0
-                      }
-                      className="casa-button-secondary"
-                      type="submit"
-                    >
-                      Link guardian
-                    </button>
-                  </form>
-                </div>
-
+                <RegistryM34AOperations
+                  schoolSlug={school.slug}
+                  studentId={selectedStudent.id}
+                />
                 <div className="mt-7 border-t border-black pt-5">
                   <p className="casa-kicker">
                     Enrollment
@@ -1679,6 +1442,25 @@ export function RegistryClient({
                               </option>
                             ),
                           )}
+                        </select>
+                      </label>
+
+                      <label className="casa-label">
+                        <span>
+                          Arrival method
+                        </span>
+                        <select
+                          name="arrivalMethod"
+                          defaultValue="INDEPENDENT"
+                          className="casa-field"
+                          required
+                        >
+                          <option value="INDEPENDENT">
+                            Independent arrival
+                          </option>
+                          <option value="SCHOOL_BUS">
+                            School bus
+                          </option>
                         </select>
                       </label>
 
@@ -1834,67 +1616,19 @@ export function RegistryClient({
                     className="casa-field"
                   />
                 </label>
-                <label className="casa-label sm:col-span-2">
+                <div className="casa-label sm:col-span-2">
                   <span>
                     Campus
                   </span>
-                  <select
-                    className="casa-field"
-                    key={academicOptions.branches
-                      .map(
-                        (branch) =>
-                          branch.id,
-                      )
-                      .join("|")}
-                    name="branchId"
-                    defaultValue={
-                      academicOptions.branches.length ===
-                      1
-                        ? academicOptions.branches[0]
-                            ?.id
-                        : ""
-                    }
-                    required={
-                      academicOptions.branches.length >
-                      1
-                    }
-                  >
-                    <option
-                      value=""
-                      disabled={
-                        academicOptions.branches.length >
-                        1
-                      }
-                    >
-                      {academicOptions.branches.length ===
-                      1
-                        ? "Main campus selected automatically"
-                        : "Select campus"}
-                    </option>
-                    {academicOptions.branches.map(
-                      (
-                        branch,
-                      ) => (
-                        <option
-                          key={
-                            branch.id
-                          }
-                          value={
-                            branch.id
-                          }
-                        >
-                          {branch.name}
-                          {branch.isHeadquarters
-                            ? " · HQ"
-                            : ""}
-                        </option>
-                      ),
-                    )}
-                  </select>
+                  <div className="casa-field flex min-h-11 items-center bg-black/[0.035]">
+                    {registrationCampus
+                      ? `${registrationCampus.name}${registrationCampus.isHeadquarters ? " · HQ" : ""}`
+                      : "Campus scope unavailable"}
+                  </div>
                   <span className="mt-1 text-[10px] leading-4 text-black/45">
-                    One-campus schools use their only campus automatically. Multi-campus schools require a campus before registration.
+                    CASA assigns the campus from the signed-in administrator&apos;s operating scope. It cannot be changed during student registration.
                   </span>
-                </label>
+                </div>
 
                 <label className="casa-label sm:col-span-2">
                   <span>
@@ -1908,7 +1642,10 @@ export function RegistryClient({
                   />
                 </label>
                 <button
-                  disabled={busy}
+                  disabled={
+                    busy ||
+                    !registrationCampus
+                  }
                   className="casa-button sm:col-span-2"
                   type="submit"
                 >

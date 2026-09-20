@@ -24,6 +24,9 @@ import {
 import {
   enrollmentCreateSchema,
 } from "@/server/registry/validation";
+import {
+  ensureFirstStudentCardForEnrollment,
+} from "@/server/card-production/m38-lifecycle";
 
 export const dynamic = "force-dynamic";
 
@@ -204,10 +207,47 @@ export async function POST(
           studentEnrollments.status,
       });
 
+    let cardProvisioning:
+      Awaited<
+        ReturnType<
+          typeof ensureFirstStudentCardForEnrollment
+        >
+      >;
+
+    try {
+      cardProvisioning =
+        await ensureFirstStudentCardForEnrollment({
+          access,
+          studentId,
+          enrollmentId:
+            inserted[0].id,
+          origin:
+            request.nextUrl.origin,
+        });
+    } catch (cardError) {
+      console.error(
+        "Automatic first-card provisioning failed after enrollment",
+        {
+          schoolId:
+            access.school.id,
+          studentId,
+          enrollmentId:
+            inserted[0].id,
+          cardError,
+        },
+      );
+
+      cardProvisioning = {
+        status:
+          "STATE_CHANGED",
+      };
+    }
+
     return NextResponse.json(
       {
         enrollment:
           inserted[0],
+        cardProvisioning,
       },
       {
         status: 201,

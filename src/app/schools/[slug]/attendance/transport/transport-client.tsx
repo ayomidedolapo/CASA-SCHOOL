@@ -637,6 +637,12 @@ export default function TransportClient({
             />
           </label>
 
+          {!currentPolicy ? (
+            <p className="border border-black/20 p-3 text-sm leading-5 text-black/55">
+              No attendance schedule exists yet. Create the first attendance schedule on the Attendance page; then return here to set School Bus and Independent grace minutes.
+            </p>
+          ) : null}
+
           <button
             className="border border-black bg-black px-5 py-4 text-left font-mono text-[10px] uppercase tracking-[0.18em] text-[#f2f2ef] disabled:opacity-40"
             disabled={

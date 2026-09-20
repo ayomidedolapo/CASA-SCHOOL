@@ -1,3 +1,56 @@
-import { NextResponse } from "next/server";import { sql } from "drizzle-orm";import { getDb } from "@/db";import { requireCasaSuperAdmin } from "@/server/internal/authorization";import { casaInternalAuthErrorResponse,casaInternalNoStoreHeaders } from "@/server/internal/http";import { writeCasaInternalAudit } from "@/server/internal/onboarding";
-function rowsOf<T>(r:unknown):T[]{if(Array.isArray(r))return r as T[];if(r&&typeof r==="object"&&"rows" in r&&Array.isArray((r as {rows?:unknown}).rows))return (r as {rows:T[]}).rows;return []}
-export async function POST(_request:Request,{params}:{params:Promise<{schoolId:string;studentId:string;cardId:string}>}){try{const access=await requireCasaSuperAdmin();const {schoolId,studentId,cardId}=await params;const db=getDb();const r=await db.execute(sql`with activated as(update student_identity_cards set status='ACTIVE'::student_identity_card_status,updated_at=now() where id=${cardId}::uuid and school_id=${schoolId}::uuid and student_id=${studentId}::uuid and status='READY_FOR_ACTIVATION'::student_identity_card_status returning id),event as(insert into student_identity_card_events(school_id,student_id,card_id,actor_kind,actor_membership_id,event_type,reason) select ${schoolId}::uuid,${studentId}::uuid,id,'CASA_INTERNAL',null,'ACTIVATED'::student_identity_card_event_type,'Activated by CASA Super Admin on behalf of school' from activated returning id) select id from activated where exists(select 1 from event)`);if(rowsOf(r).length!==1)return NextResponse.json({message:"Card is not awaiting activation or does not belong to this school/student."},{status:409,headers:casaInternalNoStoreHeaders});await writeCasaInternalAudit({access,schoolId,action:"STUDENT_CARD_ACTIVATED_BY_CASA",subjectType:"STUDENT_CARD",subjectId:cardId,metadata:{studentId}});return NextResponse.json({activated:true},{headers:casaInternalNoStoreHeaders})}catch(e){const x=casaInternalAuthErrorResponse(e);if(x)return x;console.error(e);return NextResponse.json({message:"CASA card activation failed."},{status:500,headers:casaInternalNoStoreHeaders})}}
+import {
+  NextResponse,
+} from "next/server";
+
+import {
+  requireCasaSuperAdmin,
+} from "@/server/internal/authorization";
+import {
+  casaInternalAuthErrorResponse,
+  casaInternalNoStoreHeaders,
+} from "@/server/internal/http";
+
+export const dynamic =
+  "force-dynamic";
+
+export async function POST(
+  _request: Request,
+  {
+    params,
+  }: {
+    params:
+      Promise<{
+        schoolId: string;
+        studentId: string;
+        cardId: string;
+      }>;
+  },
+) {
+  try {
+    await requireCasaSuperAdmin();
+    await params;
+
+    return NextResponse.json(
+      {
+        message:
+          "CASA production may preview, export and print cards, but only the School/Branch Admin may confirm physical handover and activate a student card.",
+        code:
+          "SCHOOL_CARD_ACTIVATION_REQUIRED",
+      },
+      {
+        status: 403,
+        headers:
+          casaInternalNoStoreHeaders,
+      },
+    );
+  } catch (error) {
+    const response =
+      casaInternalAuthErrorResponse(
+        error,
+      );
+    if (response) {
+      return response;
+    }
+    throw error;
+  }
+}

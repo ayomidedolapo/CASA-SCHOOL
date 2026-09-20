@@ -4,6 +4,10 @@ import sharp from "sharp";
 import type {
   StudentCardRenderSnapshot,
 } from "@/db/schema";
+import {
+  defaultCardTextMaxWidth,
+  fitCardTextNormalized,
+} from "@/lib/card-text-fit";
 
 import {
   getPrivateCardObject,
@@ -14,33 +18,6 @@ import {
   type CardTemplateLayout,
   type CardTextSource,
 } from "./template-layout";
-
-function escapeXml(
-  value:
-    string,
-): string {
-  return value
-    .replaceAll(
-      "&",
-      "&amp;",
-    )
-    .replaceAll(
-      "<",
-      "&lt;",
-    )
-    .replaceAll(
-      ">",
-      "&gt;",
-    )
-    .replaceAll(
-      '"',
-      "&quot;",
-    )
-    .replaceAll(
-      "'",
-      "&apos;",
-    );
-}
 
 function resolveText(
   snapshot:
@@ -100,295 +77,34 @@ function truncate(
   )}…`;
 }
 
-function textAnchor(
-  align:
-    "LEFT" |
-    "CENTER" |
-    "RIGHT",
-): "start" |
-  "middle" |
-  "end" {
-  if (
-    align ===
-    "CENTER"
-  ) {
-    return "middle";
-  }
-
-  if (
-    align ===
-    "RIGHT"
-  ) {
-    return "end";
-  }
-
-  return "start";
-}
-
-function estimatedGlyphFactor(
-  character: string,
-): number {
-  if (/\s/.test(character)) {
-    return 0.32;
-  }
-
-  if (/[ilI1.,'`|!:;]/.test(character)) {
-    return 0.3;
-  }
-
-  if (/[MW@#%&]/.test(character)) {
-    return 0.88;
-  }
-
-  if (/[A-Z0-9]/.test(character)) {
-    return 0.62;
-  }
-
-  return 0.54;
-}
-
-function estimateLineWidth(
+function escapeXml(
   value: string,
-  fontSize: number,
-): number {
-  return Array.from(value)
-    .reduce(
-      (total, character) =>
-        total +
-        estimatedGlyphFactor(
-          character,
-        ) *
-          fontSize,
-      0,
+): string {
+  return value
+    .replaceAll(
+      "&",
+      "&amp;",
+    )
+    .replaceAll(
+      "<",
+      "&lt;",
+    )
+    .replaceAll(
+      ">",
+      "&gt;",
+    )
+    .replaceAll(
+      '"',
+      "&quot;",
+    )
+    .replaceAll(
+      "'",
+      "&apos;",
     );
 }
 
-function defaultMaxWidth(
-  input: {
-    width: number;
-    x: number;
-    align:
-      | "LEFT"
-      | "CENTER"
-      | "RIGHT";
-  },
-): number {
-  const gutter =
-    input.width * 0.025;
-
-  if (
-    input.align ===
-    "LEFT"
-  ) {
-    return Math.max(
-      input.width * 0.08,
-      input.width -
-        input.x -
-        gutter,
-    );
-  }
-
-  if (
-    input.align ===
-    "RIGHT"
-  ) {
-    return Math.max(
-      input.width * 0.08,
-      input.x -
-        gutter,
-    );
-  }
-
-  return Math.max(
-    input.width * 0.08,
-    2 *
-      Math.min(
-        input.x -
-          gutter,
-        input.width -
-          input.x -
-          gutter,
-      ),
-  );
-}
-
-function splitLongWord(
-  word: string,
-  maxWidth: number,
-  fontSize: number,
-): string[] {
-  const pieces: string[] = [];
-  let current = "";
-
-  for (const character of Array.from(word)) {
-    const candidate =
-      `${current}${character}`;
-
-    if (
-      current &&
-      estimateLineWidth(
-        candidate,
-        fontSize,
-      ) > maxWidth
-    ) {
-      pieces.push(current);
-      current = character;
-    } else {
-      current = candidate;
-    }
-  }
-
-  if (current) {
-    pieces.push(current);
-  }
-
-  return pieces;
-}
-
-function wrapText(
-  value: string,
-  maxWidth: number,
-  fontSize: number,
-): string[] {
-  const words = value
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .flatMap((word) =>
-      estimateLineWidth(
-        word,
-        fontSize,
-      ) <= maxWidth
-        ? [word]
-        : splitLongWord(
-            word,
-            maxWidth,
-            fontSize,
-          ),
-    );
-
-  if (words.length === 0) {
-    return [""];
-  }
-
-  const lines: string[] = [];
-  let current = "";
-
-  for (const word of words) {
-    const candidate = current
-      ? `${current} ${word}`
-      : word;
-
-    if (
-      current &&
-      estimateLineWidth(
-        candidate,
-        fontSize,
-      ) > maxWidth
-    ) {
-      lines.push(current);
-      current = word;
-    } else {
-      current = candidate;
-    }
-  }
-
-  if (current) {
-    lines.push(current);
-  }
-
-  return lines;
-}
-
-function fitText(
-  input: {
-    value: string;
-    fontSize: number;
-    minFontSize: number;
-    maxWidth: number;
-    maxLines: number;
-  },
-) {
-  let fontSize =
-    input.fontSize;
-
-  while (
-    fontSize >
-      input.minFontSize
-  ) {
-    const lines =
-      wrapText(
-        input.value,
-        input.maxWidth,
-        fontSize,
-      );
-
-    if (
-      lines.length <=
-      input.maxLines
-    ) {
-      return {
-        fontSize,
-        lines,
-      };
-    }
-
-    fontSize =
-      Math.max(
-        input.minFontSize,
-        fontSize - 1,
-      );
-  }
-
-  const lines =
-    wrapText(
-      input.value,
-      input.maxWidth,
-      fontSize,
-    );
-
-  if (
-    lines.length <=
-    input.maxLines
-  ) {
-    return {
-      fontSize,
-      lines,
-    };
-  }
-
-  const kept = lines.slice(
-    0,
-    input.maxLines,
-  );
-  let finalLine =
-    kept[
-      kept.length - 1
-    ] ?? "";
-
-  while (
-    finalLine.length > 1 &&
-    estimateLineWidth(
-      `${finalLine}…`,
-      fontSize,
-    ) > input.maxWidth
-  ) {
-    finalLine =
-      finalLine.slice(
-        0,
-        -1,
-      );
-  }
-
-  kept[
-    kept.length - 1
-  ] = `${finalLine.trimEnd()}…`;
-
-  return {
-    fontSize,
-    lines: kept,
-  };
-}
+const CARD_TEXT_FONT_FAMILY =
+  "Arial, 'Liberation Sans', Helvetica, sans-serif";
 
 function textSvg(
   input: {
@@ -436,65 +152,41 @@ function textSvg(
             return "";
           }
 
-          const x =
-            Math.round(
-              item.x *
-                input.width,
-            );
-          const y =
-            Math.round(
-              item.y *
-                input.height,
-            );
           const requestedFontSize =
             Math.max(
-              8,
-              Math.round(
-                item.fontSize *
-                  input.width,
-              ),
+              0.008,
+              item.fontSize,
             );
           const minimumFontSize =
-            Math.max(
-              7,
-              Math.min(
-                requestedFontSize,
-                Math.round(
-                  (item.minFontSize ??
-                    Math.max(
-                      item.fontSize *
-                        0.58,
-                      0.006,
-                    )) *
-                    input.width,
-                ),
+            Math.min(
+              requestedFontSize,
+              Math.max(
+                0.006,
+                item.minFontSize ??
+                  Math.max(
+                    requestedFontSize *
+                      0.58,
+                    0.006,
+                  ),
               ),
             );
           const maxWidth =
-            Math.max(
-              24,
-              item.maxWidth
-                ? item.maxWidth *
-                  input.width
-                : defaultMaxWidth({
-                    width:
-                      input.width,
-                    x,
-                    align:
-                      item.align,
-                  }),
-            );
+            item.maxWidth ??
+            defaultCardTextMaxWidth({
+              x:
+                item.x,
+              align:
+                item.align,
+            });
           const defaultLines =
             item.source ===
               "STUDENT_NAME" ||
             item.source ===
-              "SCHOOL_NAME" ||
-            item.source ===
-              "CLASS"
+              "SCHOOL_NAME"
               ? 2
               : 1;
           const fitted =
-            fitText({
+            fitCardTextNormalized({
               value,
               fontSize:
                 requestedFontSize,
@@ -505,31 +197,65 @@ function textSvg(
                 item.maxLines ??
                 defaultLines,
             });
+
+          const x =
+            item.x *
+            input.width;
+          const centerY =
+            item.y *
+            input.height;
+          const fontSize =
+            fitted.fontSize *
+            input.width;
           const lineHeight =
             Math.max(
-              fitted.fontSize + 1,
-              Math.round(
-                fitted.fontSize *
-                  1.08,
-              ),
+              1,
+              fontSize *
+                1.08,
             );
-          const tspans =
-            fitted.lines
-              .map(
-                (line, index) =>
-                  `<tspan x="${x}" dy="${
-                    index === 0
-                      ? 0
-                      : lineHeight
-                  }">${escapeXml(
-                    line,
-                  )}</tspan>`,
-              )
-              .join("");
+          const anchor =
+            item.align ===
+              "CENTER"
+              ? "middle"
+              : item.align ===
+                  "RIGHT"
+                ? "end"
+                : "start";
 
-          return `<text x="${x}" y="${y}" text-anchor="${textAnchor(
-            item.align,
-          )}" font-family="Arial, Helvetica, sans-serif" font-size="${fitted.fontSize}" font-weight="${item.weight}" fill="${item.color}">${tspans}</text>`;
+          return fitted.lines
+            .map(
+              (
+                line,
+                index,
+              ) => {
+                const offset =
+                  (
+                    index -
+                    (
+                      fitted.lines.length -
+                      1
+                    ) /
+                      2
+                  ) *
+                  lineHeight;
+                const y =
+                  centerY +
+                  offset;
+
+                return `<text x="${x.toFixed(
+                  2,
+                )}" y="${y.toFixed(
+                  2,
+                )}" fill="${item.color}" font-family="${CARD_TEXT_FONT_FAMILY}" font-size="${fontSize.toFixed(
+                  2,
+                )}" font-weight="${Number(
+                  item.weight,
+                )}" text-anchor="${anchor}" dominant-baseline="middle" text-rendering="geometricPrecision">${escapeXml(
+                  line,
+                )}</text>`;
+              },
+            )
+            .join("");
         },
       )
       .join("");
@@ -793,6 +519,8 @@ export async function renderAndStoreStudentCard(
     };
     snapshot:
       StudentCardRenderSnapshot;
+    artifactRevision?:
+      string | null;
   },
 ) {
   const layout =
@@ -859,8 +587,21 @@ export async function renderAndStoreStudentCard(
       back,
     );
 
+  const revision =
+    input.artifactRevision
+      ?.replace(
+        /[^A-Za-z0-9_-]/g,
+        "",
+      )
+      .slice(
+        0,
+        80,
+      ) ||
+    null;
   const prefix =
-    `card-production/jobs/${input.jobId}`;
+    revision
+      ? `card-production/jobs/${input.jobId}/revisions/${revision}`
+      : `card-production/jobs/${input.jobId}`;
 
   const keys = {
     front:
@@ -899,4 +640,28 @@ export async function renderAndStoreStudentCard(
   });
 
   return keys;
+}
+
+export async function renderStudentCardTemplatePreviewSide(input: {
+  side: "FRONT" | "BACK";
+  template: {
+    frontSourceKey: string;
+    backSourceKey: string;
+    layout: unknown;
+  };
+  snapshot: StudentCardRenderSnapshot;
+  qrPayload?: string;
+}) {
+  const layout = parseCardTemplateLayout(input.template.layout);
+  const source = await getPrivateCardObject(
+    input.side === "BACK" ? input.template.backSourceKey : input.template.frontSourceKey,
+  );
+  if (!source) throw new Error("CARD_TEMPLATE_SOURCE_MISSING");
+  return renderSide({
+    source,
+    side: input.side,
+    layout,
+    snapshot: input.snapshot,
+    qrPayload: input.qrPayload ?? "CASA:SAMPLE:PREVIEW",
+  });
 }

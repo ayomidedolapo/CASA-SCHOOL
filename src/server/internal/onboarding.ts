@@ -134,6 +134,8 @@ export async function searchCasaOnboardingStudents(
     query: string;
     page: number;
     pageSize: number;
+    branchId:
+      string | null;
     section:
       CasaOnboardingSectionFilter;
     face:
@@ -172,6 +174,9 @@ export async function searchCasaOnboardingStudents(
             as status,
           student.admission_date::text
             as admission_date,
+          student.home_branch_id,
+          home_branch.name
+            as home_branch_name,
           enrollment.id
             as enrollment_id,
           arm.id
@@ -215,6 +220,12 @@ export async function searchCasaOnboardingStudents(
             as lock_holder_name
         from students
           student
+        left join school_branches
+          home_branch
+          on home_branch.school_id =
+             student.school_id
+         and home_branch.id =
+             student.home_branch_id
         left join lateral (
           select
             active.id,
@@ -353,6 +364,11 @@ export async function searchCasaOnboardingStudents(
             ${input.access.school.id}::uuid
           and student.status <>
             'ARCHIVED'::student_status
+          and (
+            ${input.branchId}::uuid is null
+            or student.home_branch_id =
+              ${input.branchId}::uuid
+          )
       ),
       filtered as (
         select *

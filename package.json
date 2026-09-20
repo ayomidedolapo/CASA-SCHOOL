@@ -25,7 +25,9 @@
     "technician-operations:selftest": "tsx scripts/technician-operations-selftest.ts",
     "card-production:selftest": "tsx scripts/card-production-selftest.ts",
     "attendance-readiness:selftest": "tsx scripts/attendance-readiness-selftest.ts",
-    "attendance-policy-result-shape:selftest": "tsx scripts/attendance-policy-result-shape-selftest.ts"
+    "attendance-policy-result-shape:selftest": "tsx scripts/attendance-policy-result-shape-selftest.ts",
+    "m36:selftest": "tsx scripts/m36-post-m34-selftest.ts",
+    "m38:selftest": "tsx scripts/m38-card-lifecycle-selftest.ts"
   },
   "dependencies": {
     "@aws-amplify/ui-react": "^6.15.6",
@@ -41,6 +43,7 @@
     "aws-amplify": "^6.20.0",
     "drizzle-orm": "^1.0.0-rc.4",
     "exceljs": "^4.4.0",
+    "firebase": "^12.19.0",
     "next": "16.3.3",
     "qr-scanner": "^1.4.2",
     "qrcode": "^1.5.4",

@@ -222,7 +222,7 @@ export function BulkCardActivation({
                 confirmPhysicalHandover:
                   true,
                 reason:
-                  "Campus onboarding batch handover confirmed",
+                  "Campus card handover confirmed",
               }),
           },
         );
@@ -280,13 +280,13 @@ export function BulkCardActivation({
       <div className="grid gap-5 border-b border-black p-5 lg:grid-cols-[1fr_auto] lg:items-end">
         <div>
           <p className="casa-kicker text-black/45">
-            Card activation batches
+            Card activation
           </p>
           <h3 className="mt-2 text-xl font-semibold tracking-[-0.03em]">
-            Activate a campus in one Passkey ceremony
+            Activate ready cards in one Passkey ceremony
           </h3>
           <p className="mt-2 max-w-3xl text-xs leading-5 text-black/55">
-            CASA activates only first cards that are PRINTED, have an ACTIVE face profile and belong to an active student enrollment in that campus. Replacement cases stay manual. Branch Admins see only assigned campuses; School Owner/Admin can act across the school.
+            The school activates only cards that have been printed and whose student has completed face registration. Branch Admins activate their own campus; HQ Admins activate HQ only. CASA Team can print and audit cards but cannot activate them.
           </p>
         </div>
         <p className="font-mono text-[9px] uppercase tracking-[0.1em] text-black/40">
@@ -351,19 +351,19 @@ export function BulkCardActivation({
                     <div className="mt-4 grid grid-cols-2 gap-px border border-black/20 bg-black/20 sm:grid-cols-4">
                       {[
                         [
-                          "Ready now",
+                          "Ready to activate",
                           readiness.eligibleCount,
                         ],
                         [
-                          "Awaiting print",
+                          "Waiting for printing",
                           readiness.awaitingPrintCount,
                         ],
                         [
-                          "Awaiting face",
+                          "Waiting for face",
                           readiness.awaitingFaceCount,
                         ],
                         [
-                          "Manual review",
+                          "Needs attention",
                           readiness.manualReviewCount,
                         ],
                       ].map(

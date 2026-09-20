@@ -1,0 +1,13 @@
+import fs from "node:fs";import assert from "node:assert/strict";
+const read=(p:string)=>fs.readFileSync(p,"utf8");
+const bulk=read("src/app/schools/[slug]/registry/bulk-card-activation.tsx");assert.match(bulk,/Ready to activate/);assert.match(bulk,/Waiting for face/);assert.doesNotMatch(bulk,/CASA activates only first cards/);
+const attendance=read("src/app/schools/[slug]/attendance/attendance-client.tsx");assert.doesNotMatch(attendance,/href=\{`\/schools\/\$\{encodeURIComponent\(slug\)\}\/messaging`\}/);assert.match(attendance,/Summer/);
+const summer=read("src/server/summer/programmes.ts");assert.doesNotMatch(summer,/\/terminal\/|\/scanner\/|student-card|card-face/i);assert.match(summer,/SUMMER_PRESENT/);assert.match(summer,/guardian_push_outbox/);
+const preview=read("src/app/api/internal/operations/card-production/jobs/[jobId]/preview/route.ts");assert.match(preview,/requireCasaCapability\("CARD_PRODUCTION_ADMIN"\)/);
+const schoolCards=read("src/app/schools/[slug]/registry/student-cards.tsx");assert.match(schoolCards,/card\.status\s*===\s*"ACTIVE"/);assert.match(schoolCards,/card\.status\s*===\s*"READY_FOR_ACTIVATION"/);assert.match(schoolCards,/pendingProduction\?\.status\s*!==\s*"PRINTED"/);assert.match(schoolCards,/if\s*\(\s*!faceReady\s*\)/);
+const academic=read("src/app/api/schools/[slug]/academic/setup/route.ts");assert.match(academic,/listVisibleBranches|requireBranchAccess/);
+const migration=read("drizzle/20260917173000_post_m34_uat_product_corrections/migration.sql");assert.match(migration,/summer_programmes/);assert.match(migration,/summer_attendance/);const capture=read("src/server/internal/onboarding.ts");assert.match(capture,/home_branch_id/);assert.match(capture,/input\.branchId/);
+const captureUi=read("src/app/internal/onboarding/onboarding-client.tsx");assert.match(captureUi,/Campus \/ HQ/);assert.match(captureUi,/Onboarding complete means guardian/);
+const production=read("src/server/card-production/production.ts");assert.match(production,/renderSnapshot[\s\S]*branchId/);
+const designer=read("src/app/internal/templates/template-designer.tsx");assert.match(designer,/Delete field/);assert.match(designer,/Ctrl\+Z|Ctrl Z/);assert.match(designer,/setPointerCapture/);
+console.log("CASA M36 post-M34 product corrections self-test passed.");

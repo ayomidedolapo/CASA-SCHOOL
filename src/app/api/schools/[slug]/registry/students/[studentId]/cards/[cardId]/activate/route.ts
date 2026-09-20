@@ -5,6 +5,10 @@ import {
 import { z } from "zod";
 
 import {
+  consumePasskeyStepUpGrantWithId,
+} from "@/server/auth/passkey-step-up";
+
+import {
   requireSchoolAccess,
 } from "@/server/auth/authorization";
 import {
@@ -80,6 +84,38 @@ export async function POST(
         },
         {
           status: 400,
+          headers:
+            schoolOperationsNoStoreHeaders,
+        },
+      );
+    }
+
+    const grantToken =
+      request.headers.get(
+        "x-casa-passkey-step-up",
+      );
+    const grantId =
+      grantToken
+        ? await consumePasskeyStepUpGrantWithId({
+            token:
+              grantToken,
+            access:
+              authority.access,
+            action:
+              "CARD_BULK_ACTIVATE",
+          })
+        : null;
+
+    if (!grantId) {
+      return NextResponse.json(
+        {
+          message:
+            "Confirm card handover with your Passkey before activation.",
+          code:
+            "PASSKEY_STEP_UP_REQUIRED",
+        },
+        {
+          status: 401,
           headers:
             schoolOperationsNoStoreHeaders,
         },

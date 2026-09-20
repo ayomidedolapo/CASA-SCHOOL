@@ -84,6 +84,10 @@ export async function GET(
           "ALL",
         page,
         pageSize,
+        date:
+          search.get(
+            "date",
+          ),
       });
 
     return NextResponse.json(

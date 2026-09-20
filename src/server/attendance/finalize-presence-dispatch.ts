@@ -21,6 +21,9 @@ import {
 import type {
   TerminalAccess,
 } from "./terminal-auth";
+import {
+  consumeLateStayAuthorizationForAttempt,
+} from "./branch-session";
 
 export async function finalizeVerifiedPresence(
   access:
@@ -88,9 +91,18 @@ export async function finalizeVerifiedPresence(
     );
   }
 
-  return finalizeStandardVerifiedPresence(
+  const result = await finalizeStandardVerifiedPresence(
     access,
     attemptId,
     assertion,
   );
+
+  if (result.ok && result.operation === "CHECK_OUT") {
+    await consumeLateStayAuthorizationForAttempt({
+      schoolId: access.school.id,
+      attemptId,
+    });
+  }
+
+  return result;
 }
