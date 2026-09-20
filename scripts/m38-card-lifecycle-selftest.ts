@@ -130,8 +130,8 @@ assert.doesNotMatch(
 for (
   const marker of [
     "CARD_TEXT_FONT_FAMILY",
-    "Arial",
-    "Liberation Sans",
+    '"sans-serif"',
+    "probeCardTextRuntime",
     "fitCardTextNormalized",
     "artifactRevision",
     "dominant-baseline=\"middle\"",

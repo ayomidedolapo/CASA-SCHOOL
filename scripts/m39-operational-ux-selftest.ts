@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import { execFileSync } from "node:child_process";
 
 const root = process.cwd();
 let passed = 0;
@@ -164,10 +165,51 @@ assert(fs.existsSync(favicon), "CASA favicon is missing");
 const faviconHash = crypto.createHash("sha256").update(fs.readFileSync(favicon)).digest("hex");
 assert(faviconHash === "9324e5bb28f6ad76ac5314e9b7955d42dc0262495b8f6718f4f333bc920a42d6", "CASA favicon bytes drifted from the M39 artifact");
 
-const migration38 = path.join(root, "drizzle/20260918134000_m38_card_lifecycle_template_scope/migration.sql");
+const migration38Relative = "drizzle/20260918134000_m38_card_lifecycle_template_scope/migration.sql";
+const migration38 = path.join(root, migration38Relative);
 assert(fs.existsSync(migration38), "M38 migration authority is missing");
-const migration38Hash = crypto.createHash("sha256").update(fs.readFileSync(migration38)).digest("hex");
-assert(migration38Hash === "dd3e8e86d50d71b7f199a8e1386c3d10fa4e1b60baa59a55eac20bec39283d15", "M38 migration authority drifted");
+
+const migration38WorkingTreeDiff = execFileSync(
+  "git",
+  [
+    "diff",
+    "--name-only",
+    "HEAD",
+    "--",
+    migration38Relative,
+  ],
+  {
+    cwd: root,
+    encoding: "utf8",
+  },
+).trim();
+
+assert(
+  migration38WorkingTreeDiff === "",
+  "M38 migration has a Git-visible working-tree drift",
+);
+
+const migration38CommittedBytes = execFileSync(
+  "git",
+  [
+    "show",
+    `HEAD:${migration38Relative}`,
+  ],
+  {
+    cwd: root,
+    maxBuffer: 10 * 1024 * 1024,
+  },
+);
+
+const migration38Hash = crypto
+  .createHash("sha256")
+  .update(migration38CommittedBytes)
+  .digest("hex");
+
+assert(
+  migration38Hash === "dd3e8e86d50d71b7f199a8e1386c3d10fa4e1b60baa59a55eac20bec39283d15",
+  "M38 committed migration authority drifted",
+);
 
 console.log(`CASA M39 Operational UX Closure self-test GREEN (${passed} assertions).`);
 console.log("M38 authority remains byte-for-byte locked. No database mutation was performed by this self-test.");

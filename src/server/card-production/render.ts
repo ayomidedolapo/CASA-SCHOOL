@@ -104,7 +104,7 @@ function escapeXml(
 }
 
 const CARD_TEXT_FONT_FAMILY =
-  "Arial, 'Liberation Sans', Helvetica, sans-serif";
+  "sans-serif";
 
 function textSvg(
   input: {
@@ -264,6 +264,56 @@ function textSvg(
     `<svg width="${input.width}" height="${input.height}" xmlns="http://www.w3.org/2000/svg">${text}</svg>`,
     "utf8",
   );
+}
+
+export async function probeCardTextRuntime(): Promise<{
+  healthy: boolean;
+  sampleABytes: number;
+  sampleBBytes: number;
+}> {
+  const renderProbe =
+    async (
+      value:
+        string,
+    ) =>
+      sharp(
+        Buffer.from(
+          `<svg width="360" height="100" xmlns="http://www.w3.org/2000/svg"><text x="180" y="50" fill="#000000" font-family="${CARD_TEXT_FONT_FAMILY}" font-size="44" font-weight="700" text-anchor="middle" dominant-baseline="middle">${escapeXml(
+            value,
+          )}</text></svg>`,
+          "utf8",
+        ),
+      )
+        .png()
+        .toBuffer();
+
+  const [
+    sampleA,
+    sampleB,
+  ] =
+    await Promise.all([
+      renderProbe(
+        "CASA",
+      ),
+      renderProbe(
+        "MIND",
+      ),
+    ]);
+
+  return {
+    healthy:
+      sampleA.length >
+        300 &&
+      sampleB.length >
+        300 &&
+      !sampleA.equals(
+        sampleB,
+      ),
+    sampleABytes:
+      sampleA.length,
+    sampleBBytes:
+      sampleB.length,
+  };
 }
 
 async function renderSide(

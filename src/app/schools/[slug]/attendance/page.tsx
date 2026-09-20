@@ -50,6 +50,13 @@ export default async function AttendancePage(
   const canManage =
     visibility.organizationAdmin ||
     (!isTechnician && visibility.branches.length > 0);
+  const canManageLifecycle =
+    visibility.access.roles.includes(
+      "OWNER",
+    ) ||
+    visibility.access.roles.includes(
+      "ADMIN",
+    );
   // Ordinary attendance is always campus-bound. HQ operates HQ only;
   // a Branch Admin operates only the explicitly assigned campus.
   const canViewOrganization = false;
@@ -94,6 +101,9 @@ export default async function AttendancePage(
           visibility.access.school.name
         }
         canManage={canManage}
+        canManageLifecycle={
+          canManageLifecycle
+        }
         canViewOrganization={
           canViewOrganization
         }

@@ -95,6 +95,129 @@ export default function CardProductionClient({ schools, branches, templates }: {
     } catch (caught) { setError(caught instanceof Error ? caught.message : "Card production action failed."); } finally { setBusy(false); }
   }
 
+  async function refreshUnprintedCards() {
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+
+    try {
+      const healthResponse =
+        await fetch(
+          "/api/internal/operations/card-production/render-health",
+          {
+            cache:
+              "no-store",
+            credentials:
+              "same-origin",
+          },
+        );
+
+      const health =
+        await healthResponse
+          .json()
+          .catch(
+            () =>
+              null,
+          ) as {
+            healthy?:
+              boolean;
+            message?:
+              string;
+          } | null;
+
+      if (
+        !healthResponse.ok ||
+        !health?.healthy
+      ) {
+        throw new Error(
+          health?.message ??
+            "The deployed card text renderer is not healthy. No card artifacts were refreshed.",
+        );
+      }
+
+      const response =
+        await fetch(
+          "/api/internal/operations/card-production/refresh-unprinted",
+          {
+            method:
+              "POST",
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+            credentials:
+              "same-origin",
+            body:
+              JSON.stringify({
+                schoolId:
+                  schoolId ||
+                  null,
+              }),
+          },
+        );
+
+      const body =
+        await response
+          .json()
+          .catch(
+            () =>
+              null,
+          ) as {
+            message?:
+              string;
+            total?:
+              number;
+            refreshed?:
+              number;
+            requeuedFromExported?:
+              number;
+            skipped?:
+              number;
+            failed?:
+              number;
+          } | null;
+
+      if (
+        !response.ok
+      ) {
+        throw new Error(
+          body?.message ??
+            "Unprinted card artwork refresh failed.",
+        );
+      }
+
+      const failed =
+        body?.failed ??
+        0;
+      const summary =
+        `Renderer healthy. Card artwork refresh: ${body?.refreshed ?? 0} refreshed, ${body?.requeuedFromExported ?? 0} exported card(s) requeued, ${body?.skipped ?? 0} skipped, ${failed} failed.`;
+
+      if (
+        failed >
+        0
+      ) {
+        setError(
+          summary,
+        );
+      } else {
+        setMessage(
+          summary,
+        );
+      }
+
+      await load();
+    } catch (caught) {
+      setError(
+        caught instanceof
+          Error
+          ? caught.message
+          : "Unprinted card artwork refresh failed.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function exportManifest() {
     setBusy(true); setError(null); setMessage(null);
     try {
@@ -115,11 +238,12 @@ export default function CardProductionClient({ schools, branches, templates }: {
   return <div className="px-5 py-6 sm:px-8 lg:px-10 lg:py-8">
     <section className="grid border border-black bg-white sm:grid-cols-3">{[["Ready to print", counts.ready], ["Printing / exported", counts.exported], ["Printed", counts.printed]].map(([label, value]) => <div key={String(label)} className="border-b border-black/15 p-5 sm:border-r sm:border-b-0 sm:last:border-r-0"><p className="casa-kicker text-black/40">{label}</p><p className="mt-7 text-4xl font-semibold tracking-[-0.06em]">{value}</p></div>)}</section>
     <section className="mt-8 border border-black bg-white">
-      <div className="grid gap-3 border-b border-black p-4 lg:grid-cols-[1fr_1fr_1fr_auto_auto]">
+      <div className="grid gap-3 border-b border-black p-4 lg:grid-cols-[1fr_1fr_1fr_auto_auto_auto]">
         <select value={schoolId} onChange={(event) => { setSchoolId(event.target.value); setBranchId(""); }} className="h-12 border border-black/20 bg-white px-3"><option value="">All organizations</option>{schools.map((school) => <option key={school.id} value={school.id}>{school.name}</option>)}</select>
         <select value={branchId} onChange={(event) => setBranchId(event.target.value)} className="h-12 border border-black/20 bg-white px-3"><option value="">All branches</option>{availableBranches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}{schoolId ? "" : ` · ${schools.find((school) => school.id === branch.school_id)?.name ?? ""}`}</option>)}</select>
         <select value={status} onChange={(event) => setStatus(event.target.value)} className="h-12 border border-black/20 bg-white px-3"><option value="">All statuses</option><option>READY</option><option>EXPORTED</option><option>PRINTED</option></select>
         <button type="button" onClick={() => void load().catch((caught) => setError(caught instanceof Error ? caught.message : "Reload failed."))} className="border border-black px-4 py-3 text-sm">Reload</button>
+        <button type="button" disabled={busy || templates.length === 0} onClick={() => void refreshUnprintedCards()} className="border border-black px-4 py-3 text-sm disabled:opacity-40">Refresh unprinted cards</button>
         <button type="button" disabled={busy || jobs.length === 0} onClick={() => void exportManifest()} className="casa-button-primary disabled:opacity-40">Export XLSX</button>
       </div>
       {(error || message) && <div className={`border-b border-black/15 px-5 py-4 text-sm ${error ? "text-red-700" : "text-black/60"}`}>{error ?? message}</div>}

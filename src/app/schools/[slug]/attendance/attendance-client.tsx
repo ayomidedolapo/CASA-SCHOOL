@@ -48,6 +48,14 @@ interface TodayStudent {
     string | null;
   earlyDeparturePreauthorized:
     boolean;
+  firstCardPendingHandover:
+    boolean;
+  cardReplacement:
+    | {
+        reportedLostOn: string;
+        replacementRequested: boolean;
+      }
+    | null;
 }
 
 interface TodayData {
@@ -135,6 +143,27 @@ interface StudentAttendanceHistory {
   }>;
 }
 
+interface AttendanceLifecycle {
+  id: string | null;
+  status:
+    | "SETUP"
+    | "READY"
+    | "ACTIVE"
+    | "PAUSED";
+  effectiveStartDate:
+    string | null;
+  readyAt:
+    string | null;
+  activatedAt:
+    string | null;
+  pausedAt:
+    string | null;
+  scheduledResumeAt:
+    string | null;
+  scheduledResumeReason:
+    string | null;
+}
+
 interface Policy {
   id: string;
   name: string;
@@ -159,6 +188,10 @@ interface Policy {
 type PendingAttendanceConfirm =
   | {
       kind: "FIRST_CARD";
+      student: TodayStudent;
+    }
+  | {
+      kind: "CARD_REPLACEMENT";
       student: TodayStudent;
     };
 
@@ -269,6 +302,7 @@ export default function AttendanceClient(
     slug,
     schoolName,
     canManage,
+    canManageLifecycle,
     canViewOrganization,
     canSuperviseAttendance,
     branches,
@@ -276,6 +310,7 @@ export default function AttendanceClient(
     slug: string;
     schoolName: string;
     canManage: boolean;
+    canManageLifecycle: boolean;
     canViewOrganization: boolean;
     canSuperviseAttendance: boolean;
     branches: Array<{
@@ -301,6 +336,14 @@ export default function AttendanceClient(
     useState<
       Policy[]
     >([]);
+
+  const [
+    lifecycle,
+    setLifecycle,
+  ] =
+    useState<
+      AttendanceLifecycle | null
+    >(null);
 
   const [
     selectedBranchId,
@@ -557,6 +600,42 @@ export default function AttendanceClient(
       ],
     );
 
+  const refreshLifecycle =
+    useCallback(
+      async () => {
+        const response =
+          await fetch(
+            `/api/schools/${encodeURIComponent(
+              slug,
+            )}/attendance/lifecycle`,
+            {
+              cache:
+                "no-store",
+              credentials:
+                "same-origin",
+            },
+          );
+
+        if (!response.ok) {
+          return;
+        }
+
+        const body =
+          await response.json() as {
+            lifecycle?:
+              AttendanceLifecycle;
+          };
+
+        setLifecycle(
+          body.lifecycle ??
+          null,
+        );
+      },
+      [
+        slug,
+      ],
+    );
+
   const refreshPolicies =
     useCallback(
       async () => {
@@ -705,6 +784,7 @@ export default function AttendanceClient(
         window.setTimeout(
           () => {
             void refreshToday();
+            void refreshLifecycle();
             if (canManage && selectedBranchId) {
               void refreshPolicies();
             }
@@ -718,6 +798,7 @@ export default function AttendanceClient(
             void refreshToday(
               true,
             );
+            void refreshLifecycle();
           },
           15_000,
         );
@@ -734,6 +815,7 @@ export default function AttendanceClient(
     },
     [
       refreshToday,
+      refreshLifecycle,
       refreshPolicies,
       canManage,
       selectedBranchId,
@@ -753,6 +835,209 @@ export default function AttendanceClient(
         policies,
       ],
     );
+
+  function attendanceActionErrorMessage(
+    code:
+      string | undefined,
+    message:
+      string | undefined,
+  ): string {
+    if (
+      code ===
+      "ATTENDANCE_NOT_ACTIVE"
+    ) {
+      return "Attendance has not been activated for this school yet. Complete Attendance setup, mark it READY, then activate it before preparing a session.";
+    }
+
+    if (
+      code ===
+      "ATTENDANCE_PAUSED"
+    ) {
+      return "Attendance is currently paused. Resume Attendance before preparing or opening a session.";
+    }
+
+    if (
+      code ===
+      "ATTENDANCE_EFFECTIVE_DATE_NOT_REACHED"
+    ) {
+      return "Attendance is activated, but its effective start date has not arrived yet.";
+    }
+
+    if (
+      code ===
+      "NON_INSTRUCTIONAL_DAY"
+    ) {
+      return "Today is not an instructional day for this campus. Check the active default policy weekdays and Calendar & holidays.";
+    }
+
+    if (
+      code ===
+      "ATTENDANCE_POLICY_REQUIRED"
+    ) {
+      return "This campus needs an active default Attendance policy that is valid for today and includes today's weekday.";
+    }
+
+    return (
+      message ??
+      code ??
+      "Attendance action failed."
+    );
+  }
+
+  async function mutateLifecycle(
+    action:
+      | "MARK_READY"
+      | "ACTIVATE_TODAY"
+      | "ACTIVATE_NEXT"
+      | "RESUME",
+  ) {
+    if (
+      !canManageLifecycle
+    ) {
+      setError(
+        "Only the School Owner or Admin can change the school Attendance lifecycle.",
+      );
+      return;
+    }
+
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const today =
+        data?.todayDate ??
+        null;
+
+      const payload =
+        action ===
+          "MARK_READY"
+          ? {
+              action:
+                "MARK_READY",
+              reason:
+                "Attendance setup completed from Attendance workspace.",
+            }
+          : action ===
+              "ACTIVATE_TODAY"
+            ? {
+                action:
+                  "ACTIVATE",
+                effectiveDate:
+                  today,
+                confirmStartToday:
+                  true,
+                reason:
+                  "Attendance activated for today from Attendance workspace.",
+              }
+            : action ===
+                "ACTIVATE_NEXT"
+              ? {
+                  action:
+                    "ACTIVATE",
+                  effectiveDate:
+                    null,
+                  confirmStartToday:
+                    false,
+                  reason:
+                    "Attendance scheduled from next instructional date.",
+                }
+              : {
+                  action:
+                    "RESUME",
+                  reason:
+                    "Attendance resumed from Attendance workspace.",
+                };
+
+      if (
+        action ===
+          "ACTIVATE_TODAY" &&
+        !today
+      ) {
+        throw new Error(
+          "CASA could not resolve the school's current date.",
+        );
+      }
+
+      const response =
+        await fetch(
+          `/api/schools/${encodeURIComponent(
+            slug,
+          )}/attendance/lifecycle`,
+          {
+            method:
+              "POST",
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+            credentials:
+              "same-origin",
+            cache:
+              "no-store",
+            body:
+              JSON.stringify(
+                payload,
+              ),
+          },
+        );
+
+      const body =
+        await response
+          .json()
+          .catch(
+            () => ({}),
+          ) as {
+            lifecycle?:
+              AttendanceLifecycle;
+            message?:
+              string;
+            code?:
+              string;
+          };
+
+      if (!response.ok) {
+        throw new Error(
+          attendanceActionErrorMessage(
+            body.code,
+            body.message,
+          ),
+        );
+      }
+
+      setLifecycle(
+        body.lifecycle ??
+        null,
+      );
+
+      setNotice(
+        action ===
+          "MARK_READY"
+          ? "Attendance setup is READY. Activate it for today or the next instructional day."
+          : action ===
+              "ACTIVATE_TODAY"
+            ? "Attendance is ACTIVE from today. You can now prepare today's campus session."
+            : action ===
+                "ACTIVATE_NEXT"
+              ? `Attendance is ACTIVE from ${body.lifecycle?.effectiveStartDate ?? "the next instructional day"}.`
+              : "Attendance has resumed and is ACTIVE.",
+      );
+
+      await Promise.all([
+        refreshLifecycle(),
+        refreshToday(),
+      ]);
+    } catch (caught) {
+      setError(
+        caught instanceof
+          Error
+          ? caught.message
+          : "Attendance lifecycle action failed.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function recordFirstCardException(
     student: TodayStudent,
@@ -804,6 +1089,83 @@ export default function AttendanceClient(
         caught instanceof Error
           ? caught.message
           : "First-card attendance exception failed.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function recordCardReplacementException(
+    student: TodayStudent,
+  ) {
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const response =
+        await fetch(
+          `/api/schools/${encodeURIComponent(
+            slug,
+          )}/attendance/card-exceptions/${encodeURIComponent(
+            student.studentId,
+          )}`,
+          {
+            method:
+              "POST",
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+            credentials:
+              "same-origin",
+            cache:
+              "no-store",
+            body:
+              JSON.stringify({
+                verificationMethod:
+                  "FACE_EXISTING_PROFILE",
+              }),
+          },
+        );
+
+      const body =
+        await response
+          .json() as {
+            message?:
+              string;
+            code?:
+              string;
+            graceDayNumber?:
+              number |
+              null;
+            replacementRequested?:
+              boolean;
+          };
+
+      if (
+        !response.ok
+      ) {
+        throw new Error(
+          body.message ??
+          body.code ??
+          "Lost-card attendance exception failed.",
+        );
+      }
+
+      setNotice(
+        body.replacementRequested
+          ? "Lost-card attendance recorded with face confirmation. The formal replacement request remains authoritative."
+          : `Lost-card attendance recorded with face confirmation${body.graceDayNumber ? ` on instructional grace day ${body.graceDayNumber} of 3` : ""}.`,
+      );
+
+      await refreshToday();
+    } catch (caught) {
+      setError(
+        caught instanceof
+          Error
+          ? caught.message
+          : "Lost-card attendance exception failed.",
       );
     } finally {
       setBusy(false);
@@ -982,9 +1344,10 @@ export default function AttendanceClient(
 
       if (!response.ok) {
         throw new Error(
-          body.code ??
-            body.message ??
-            "Attendance session action failed.",
+          attendanceActionErrorMessage(
+            body.code,
+            body.message,
+          ),
         );
       }
 
@@ -1693,6 +2056,119 @@ export default function AttendanceClient(
           styles.statusLine
         }
       >
+        <span className="casa-status">
+          Attendance lifecycle:{" "}
+          {
+            lifecycle?.status ??
+            "LOADING"
+          }
+        </span>
+
+        {lifecycle?.effectiveStartDate && (
+          <span className={styles.muted}>
+            Effective:{" "}
+            {
+              lifecycle.effectiveStartDate
+            }
+          </span>
+        )}
+
+        {canManageLifecycle &&
+          lifecycle?.status ===
+            "SETUP" && (
+          <button
+            type="button"
+            className={styles.secondaryButton}
+            disabled={
+              busy ||
+              !defaultPolicy
+            }
+            onClick={() =>
+              void mutateLifecycle(
+                "MARK_READY",
+              )
+            }
+          >
+            Mark Attendance ready
+          </button>
+        )}
+
+        {canManageLifecycle &&
+          lifecycle?.status ===
+            "READY" && (
+          <div className={styles.actions}>
+            <button
+              type="button"
+              className={styles.button}
+              disabled={
+                busy ||
+                !defaultPolicy
+              }
+              onClick={() =>
+                void mutateLifecycle(
+                  "ACTIVATE_TODAY",
+                )
+              }
+            >
+              Activate Attendance today
+            </button>
+            <button
+              type="button"
+              className={styles.secondaryButton}
+              disabled={
+                busy ||
+                !defaultPolicy
+              }
+              onClick={() =>
+                void mutateLifecycle(
+                  "ACTIVATE_NEXT",
+                )
+              }
+            >
+              Activate next instructional day
+            </button>
+          </div>
+        )}
+
+        {canManageLifecycle &&
+          lifecycle?.status ===
+            "PAUSED" && (
+          <button
+            type="button"
+            className={styles.button}
+            disabled={busy}
+            onClick={() =>
+              void mutateLifecycle(
+                "RESUME",
+              )
+            }
+          >
+            Resume Attendance
+          </button>
+        )}
+
+        {lifecycle?.status ===
+          "SETUP" &&
+          !defaultPolicy && (
+          <span className={styles.muted}>
+            Create an active default campus policy before marking Attendance ready.
+          </span>
+        )}
+
+        {lifecycle?.status ===
+          "READY" && (
+          <span className={styles.muted}>
+            Attendance is configured but not active yet.
+          </span>
+        )}
+
+        {lifecycle?.status ===
+          "PAUSED" && (
+          <span className={styles.muted}>
+            Attendance is paused; campus sessions cannot be prepared or opened.
+          </span>
+        )}
+
         <span
           className={
             styles.status
@@ -1702,6 +2178,12 @@ export default function AttendanceClient(
             ?.status ??
             "NO SESSION"}
         </span>
+
+        {!data?.session && !data?.readOnly && (
+          <span className={styles.muted}>
+            No attendance session has been prepared for this campus/date. Prepare and open attendance before recording arrivals or supervised card exceptions.
+          </span>
+        )}
 
         <span
           className={
@@ -1714,7 +2196,7 @@ export default function AttendanceClient(
         </span>
 
         <label className={styles.actions}>
-          <span className={styles.muted}>Day</span>
+          <span className={styles.muted}>Attendance date</span>
           <input
             className={styles.input}
             type="date"
@@ -1779,7 +2261,18 @@ export default function AttendanceClient(
                   <button
                     type="button"
                     className={styles.button}
-                    disabled={busy || !selectedBranchId}
+                    disabled={
+                      busy ||
+                      !selectedBranchId ||
+                      lifecycle?.status !==
+                        "ACTIVE" ||
+                      Boolean(
+                        lifecycle?.effectiveStartDate &&
+                        data?.todayDate &&
+                        lifecycle.effectiveStartDate >
+                          data.todayDate,
+                      )
+                    }
                     onClick={() => void mutateSession("PREPARE", null, "INSTRUCTIONAL")}
                   >
                     Prepare attendance
@@ -1789,7 +2282,18 @@ export default function AttendanceClient(
                   <button
                     type="button"
                     className={styles.secondaryButton}
-                    disabled={busy || !selectedBranchId}
+                    disabled={
+                      busy ||
+                      !selectedBranchId ||
+                      lifecycle?.status !==
+                        "ACTIVE" ||
+                      Boolean(
+                        lifecycle?.effectiveStartDate &&
+                        data?.todayDate &&
+                        lifecycle.effectiveStartDate >
+                          data.todayDate,
+                      )
+                    }
                     onClick={() => void mutateSession("PREPARE", null, "PRESENCE_ONLY")}
                   >
                     Prepare presence-only
@@ -2510,14 +3014,28 @@ export default function AttendanceClient(
                               data?.session?.status === "OPEN" &&
                               (student.presenceStatus === "NOT_ARRIVED" || student.presenceStatus === "ABSENT") && (
                                 <>
-                                  <button
-                                    type="button"
-                                    className={styles.secondaryButton}
-                                    disabled={busy}
-                                    onClick={() => setPendingConfirm({ kind: "FIRST_CARD", student })}
-                                  >
-                                    First-card face
-                                  </button>
+                                  {student.firstCardPendingHandover && (
+                                    <button
+                                      type="button"
+                                      className={styles.secondaryButton}
+                                      disabled={busy}
+                                      onClick={() => setPendingConfirm({ kind: "FIRST_CARD", student })}
+                                    >
+                                      First-card face
+                                    </button>
+                                  )}
+                                  {student.cardReplacement && (
+                                    <button
+                                      type="button"
+                                      className={styles.secondaryButton}
+                                      disabled={busy}
+                                      onClick={() => setPendingConfirm({ kind: "CARD_REPLACEMENT", student })}
+                                    >
+                                      {student.cardReplacement.replacementRequested
+                                        ? "Lost-card face - replacement pending"
+                                        : "Lost-card face - 3-day grace"}
+                                    </button>
+                                  )}
                                   <button
                                     type="button"
                                     className={styles.secondaryButton}
@@ -3072,17 +3590,34 @@ export default function AttendanceClient(
       )}
 
       <CasaConfirmDialog
-        open={pendingConfirm?.kind === "FIRST_CARD"}
-        title="Record first-card attendance?"
-        message={pendingConfirm?.kind === "FIRST_CARD" ? `Confirm that ${studentName(pendingConfirm.student)} is physically present and their face matches the existing enrolled biometric profile.` : ""}
+        open={pendingConfirm !== null}
+        title={
+          pendingConfirm?.kind === "CARD_REPLACEMENT"
+            ? "Record lost-card attendance?"
+            : "Record first-card attendance?"
+        }
+        message={
+          pendingConfirm?.kind === "CARD_REPLACEMENT"
+            ? `Confirm that ${studentName(pendingConfirm.student)} is physically present and their face matches the existing enrolled biometric profile. CASA will enforce the three-instructional-day grace rule unless a formal replacement request already exists.`
+            : pendingConfirm?.kind === "FIRST_CARD"
+              ? `Confirm that ${studentName(pendingConfirm.student)} is physically present and their face matches the existing enrolled biometric profile.`
+              : ""
+        }
         confirmLabel="Record attendance"
         busy={busy}
         onCancel={() => setPendingConfirm(null)}
         onConfirm={() => {
-          if (pendingConfirm?.kind === "FIRST_CARD") {
-            const student = pendingConfirm.student;
-            setPendingConfirm(null);
-            void recordFirstCardException(student);
+          const pending = pendingConfirm;
+          setPendingConfirm(null);
+
+          if (pending?.kind === "FIRST_CARD") {
+            void recordFirstCardException(
+              pending.student,
+            );
+          } else if (pending?.kind === "CARD_REPLACEMENT") {
+            void recordCardReplacementException(
+              pending.student,
+            );
           }
         }}
       />

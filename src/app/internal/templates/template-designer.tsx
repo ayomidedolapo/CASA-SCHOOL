@@ -604,21 +604,29 @@ export default function TemplateDesigner({ schools, templates }: { schools: Arra
       <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
         <div>
           <p className="casa-kicker text-black/40">Live fit preview</p>
-          <h2 className="mt-2 text-3xl font-semibold tracking-[-0.05em]">Check short, typical and long student names before saving.</h2>
+          <h2 className="mt-2 text-3xl font-semibold tracking-[-0.05em]">Check short, typical and long identities on both card sides before saving.</h2>
         </div>
-        <p className="max-w-xl text-sm leading-6 text-black/45">These samples use the same normalized fit rules as the server renderer. Move or resize a field above and these three cards update immediately. Arial is the design font.</p>
+        <p className="max-w-xl text-sm leading-6 text-black/45">These six samples cover short, typical and long student identities on FRONT and BACK. Move or resize a field above and every affected preview updates immediately.</p>
       </div>
-      <div className="mt-6 grid gap-5 xl:grid-cols-3">
-        {SAMPLE_PROFILES.map((profile) => (
-          <article key={profile.label} className="border border-black bg-white p-4">
-            <p className="casa-kicker text-black/40">{profile.label}</p>
-            <p className="mt-1 text-xs text-black/45">{profile.values.STUDENT_NAME}</p>
-            <div className="relative mt-3 aspect-[1.586/1] overflow-hidden border border-black bg-white" style={{ containerType: "inline-size" }}>
-              {frontUrl ? <img src={frontUrl} alt={`${profile.label} card preview`} className="h-full w-full object-contain" /> : <div className="grid h-full place-items-center text-sm text-black/35">Upload front artwork</div>}
-              {overlay("FRONT", { ...profile.values, SCHOOL_NAME: selectedSchool?.name ?? profile.values.SCHOOL_NAME }, false)}
-            </div>
-          </article>
-        ))}
+      <div className="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+        {SAMPLE_PROFILES.flatMap((profile) =>
+          (["FRONT", "BACK"] as Side[]).map((side) => {
+            const url = side === "FRONT" ? frontUrl : backUrl;
+            return (
+              <article key={`${profile.label}-${side}`} className="border border-black bg-white p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="casa-kicker text-black/40">{profile.label}</p>
+                  <span className="font-mono text-[9px] uppercase tracking-[0.1em] text-black/40">{side}</span>
+                </div>
+                <p className="mt-1 text-xs text-black/45">{profile.values.STUDENT_NAME}</p>
+                <div className="relative mt-3 aspect-[1.586/1] overflow-hidden border border-black bg-white" style={{ containerType: "inline-size" }}>
+                  {url ? <img src={url} alt={`${profile.label} ${side.toLowerCase()} card preview`} className="h-full w-full object-contain" /> : <div className="grid h-full place-items-center text-sm text-black/35">Upload {side.toLowerCase()} artwork</div>}
+                  {overlay(side, { ...profile.values, SCHOOL_NAME: selectedSchool?.name ?? profile.values.SCHOOL_NAME }, false)}
+                </div>
+              </article>
+            );
+          }),
+        )}
       </div>
     </section>
 

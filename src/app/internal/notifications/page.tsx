@@ -36,10 +36,21 @@ export default function InternalNotificationsPage() {
   }, [router]);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
+    const initialTimer = window.setTimeout(() => {
       void refresh();
     }, 0);
-    return () => window.clearTimeout(timer);
+    const refreshTimer = window.setInterval(() => {
+      void refresh();
+    }, 30_000);
+
+    return () => {
+      window.clearTimeout(
+        initialTimer,
+      );
+      window.clearInterval(
+        refreshTimer,
+      );
+    };
   }, [refresh]);
 
   async function markAll() {

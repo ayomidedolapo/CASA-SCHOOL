@@ -299,7 +299,15 @@ export async function getTodayAttendanceOperations(
           excuse.id
             as excuse_id,
           excuse.reason
-            as excuse_reason
+            as excuse_reason,
+          card_state.card_count,
+          card_state.pending_count,
+          replacement.id
+            as card_replacement_case_id,
+          replacement.reported_lost_on::text
+            as card_replacement_reported_lost_on,
+          replacement.replacement_requested_at
+            as card_replacement_requested_at
         from student_enrollments
           enrollment
         join students student
@@ -389,6 +397,45 @@ export async function getTodayAttendanceOperations(
             approved.created_at asc
           limit 1
         ) excuse
+          on true
+        left join lateral (
+          select
+            count(*)::int
+              as card_count,
+            count(*) filter (
+              where
+                card.status =
+                  'READY_FOR_ACTIVATION'::student_identity_card_status
+            )::int
+              as pending_count
+          from student_identity_cards
+            card
+          where
+            card.school_id =
+              enrollment.school_id
+            and card.student_id =
+              enrollment.student_id
+        ) card_state
+          on true
+        left join lateral (
+          select
+            replacement_case.id,
+            replacement_case.reported_lost_on,
+            replacement_case.replacement_requested_at
+          from student_card_replacement_cases
+            replacement_case
+          where
+            replacement_case.school_id =
+              enrollment.school_id
+            and replacement_case.student_id =
+              enrollment.student_id
+            and replacement_case.status =
+              'CARD_REPLACEMENT_PENDING'::student_card_replacement_case_status
+          order by
+            replacement_case.created_at
+              desc
+          limit 1
+        ) replacement
           on true
         where
           enrollment.school_id =
@@ -674,6 +721,16 @@ export async function getTodayAttendanceOperations(
         string | null;
       excuse_reason:
         string | null;
+      card_count:
+        number;
+      pending_count:
+        number;
+      card_replacement_case_id:
+        string | null;
+      card_replacement_reported_lost_on:
+        string | null;
+      card_replacement_requested_at:
+        Date | string | null;
     }>(
       stateResult,
     );
@@ -764,6 +821,28 @@ export async function getTodayAttendanceOperations(
             student.checked_out_at,
           earlyDeparturePreauthorized:
             student.early_departure_preauthorized,
+          firstCardPendingHandover:
+            Number(
+              student.card_count ??
+                0,
+            ) === 1 &&
+            Number(
+              student.pending_count ??
+                0,
+            ) === 1 &&
+            !student.card_replacement_case_id,
+          cardReplacement:
+            student.card_replacement_case_id
+              ? {
+                  reportedLostOn:
+                    student.card_replacement_reported_lost_on ??
+                    "",
+                  replacementRequested:
+                    Boolean(
+                      student.card_replacement_requested_at,
+                    ),
+                }
+              : null,
           departureResult:
             student.departure_result,
           attendanceExclusion,
