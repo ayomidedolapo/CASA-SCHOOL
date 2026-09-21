@@ -557,6 +557,95 @@ export async function indexAwsStudentFace(
   };
 }
 
+export async function searchAwsFaceCandidates(
+  input: {
+    schoolId: string;
+    referenceImage:
+      Uint8Array;
+    thresholdBps: number;
+  },
+): Promise<
+  Array<{
+    faceId: string;
+    externalImageId:
+      string | null;
+    similarityBps:
+      number;
+  }>
+> {
+  const {
+    config,
+    rekognition,
+  } =
+    getClients();
+
+  const collectionId =
+    await ensureCollection(
+      input.schoolId,
+    );
+
+  let response;
+
+  try {
+    response =
+      await rekognition.send(
+        new SearchFacesByImageCommand({
+          CollectionId:
+            collectionId,
+          Image: {
+            Bytes:
+              input.referenceImage,
+          },
+          FaceMatchThreshold:
+            input.thresholdBps /
+            100,
+          MaxFaces: 20,
+          QualityFilter:
+            config.qualityFilter,
+        }),
+      );
+  } catch {
+    throw new AwsBiometricUnavailableError(
+      "Unable to search the school face collection.",
+    );
+  }
+
+  return (
+    response.FaceMatches ??
+    []
+  ).flatMap(
+    (match) => {
+      const faceId =
+        match.Face
+          ?.FaceId;
+      const similarity =
+        match.Similarity;
+
+      if (
+        !faceId ||
+        typeof similarity !==
+          "number"
+      ) {
+        return [];
+      }
+
+      return [
+        {
+          faceId,
+          externalImageId:
+            match.Face
+              ?.ExternalImageId ??
+            null,
+          similarityBps:
+            percentToBasisPoints(
+              similarity,
+            ),
+        },
+      ];
+    },
+  );
+}
+
 export async function searchAwsExpectedFace(
   input: {
     schoolId: string;

@@ -90,6 +90,12 @@ export default async function AttendancePage(
               >
                 Calendar & holidays
               </Link>
+              <Link
+                className="border-b border-black"
+                href={`/schools/${encodeURIComponent(slug)}/audit`}
+              >
+                Audit trail
+              </Link>
             </nav>
           </div>
         </div>

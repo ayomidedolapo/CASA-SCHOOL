@@ -59,6 +59,7 @@ export const studentProgressionDecisionEnum =
   pgEnum("student_progression_decision", [
     "PENDING",
     "PROMOTED",
+    "TRANSITIONED",
     "RETAINED",
     "TRANSFERRED",
     "GRADUATED",

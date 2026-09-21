@@ -83,7 +83,10 @@ export async function POST(
       return NextResponse.json(
         {
           message:
-            "Face enrollment liveness could not be completed.",
+            result.code ===
+              "FACE_ALREADY_ENROLLED_TO_ANOTHER_STUDENT"
+              ? "This face is already enrolled to another student in this school. Confirm the student's identity before trying again."
+              : "Face enrollment liveness could not be completed.",
           code:
             result.code,
         },

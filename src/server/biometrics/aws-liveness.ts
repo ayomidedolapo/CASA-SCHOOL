@@ -2,8 +2,10 @@ import {
   and,
   eq,
   gt,
+  inArray,
   lte,
   isNull,
+  ne,
   sql,
 } from "drizzle-orm";
 import {
@@ -46,6 +48,7 @@ import {
   indexAwsStudentFace,
   issueAwsLivenessStreamingCredentials,
   searchAwsExpectedFace,
+  searchAwsFaceCandidates,
 } from "./aws-rekognition";
 import {
   getBiometricThresholdPolicy,
@@ -752,6 +755,99 @@ export async function completeAwsEnrollmentLiveness(
       code:
         "BIOMETRIC_PROFILE_STATE_CHANGED",
     };
+  }
+
+  const faceCandidates =
+    await searchAwsFaceCandidates({
+      schoolId:
+        input.access.school.id,
+      referenceImage:
+        result.referenceImage,
+      thresholdBps:
+        policy.faceMinConfidenceBps,
+    });
+
+  const candidateFaceIds =
+    [
+      ...new Set(
+        faceCandidates
+          .filter(
+            (candidate) =>
+              candidate.similarityBps >=
+              policy.faceMinConfidenceBps,
+          )
+          .map(
+            (candidate) =>
+              candidate.faceId,
+          ),
+      ),
+    ];
+
+  if (
+    candidateFaceIds.length >
+      0
+  ) {
+    const duplicateProfiles =
+      await db
+        .select({
+          id:
+            studentBiometricProfiles.id,
+          studentId:
+            studentBiometricProfiles.studentId,
+        })
+        .from(
+          studentBiometricProfiles,
+        )
+        .where(
+          and(
+            eq(
+              studentBiometricProfiles.schoolId,
+              input.access.school.id,
+            ),
+            eq(
+              studentBiometricProfiles.provider,
+              AWS_REKOGNITION_PROVIDER,
+            ),
+            eq(
+              studentBiometricProfiles.status,
+              "ACTIVE",
+            ),
+            ne(
+              studentBiometricProfiles.studentId,
+              input.studentId,
+            ),
+            inArray(
+              studentBiometricProfiles.providerSubjectRef,
+              candidateFaceIds,
+            ),
+          ),
+        )
+        .limit(1);
+
+    if (
+      duplicateProfiles.length >
+        0
+    ) {
+      await markLivenessSession({
+        schoolId:
+          input.access.school.id,
+        id:
+          session.id,
+        status:
+          "FAILED",
+        livenessConfidenceBps:
+          result.confidenceBps,
+        failureCode:
+          "FACE_ALREADY_ENROLLED_TO_ANOTHER_STUDENT",
+      });
+
+      return {
+        ok: false as const,
+        status: 409 as const,
+        code:
+          "FACE_ALREADY_ENROLLED_TO_ANOTHER_STUDENT",
+      };
+    }
   }
 
   const indexed =

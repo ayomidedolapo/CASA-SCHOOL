@@ -38,6 +38,7 @@ const updateSchema =
       z.enum([
         "PENDING",
         "PROMOTED",
+        "TRANSITIONED",
         "RETAINED",
         "TRANSFERRED",
         "GRADUATED",

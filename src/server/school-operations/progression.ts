@@ -74,6 +74,7 @@ function localDate(
 type ProgressionDecision =
   | "PENDING"
   | "PROMOTED"
+  | "TRANSITIONED"
   | "RETAINED"
   | "TRANSFERRED"
   | "GRADUATED"
@@ -882,6 +883,8 @@ export async function updateProgressionDecision(
     input.decision ===
       "PROMOTED" ||
     input.decision ===
+      "TRANSITIONED" ||
+    input.decision ===
       "RETAINED" ||
     input.decision ===
       "TRANSFERRED";
@@ -1015,6 +1018,22 @@ export async function updateProgressionDecision(
 
     if (
       input.decision ===
+        "TRANSITIONED"
+    ) {
+      if (
+        target.section_sort_order <=
+          current.source_section_sort_order
+      ) {
+        throw new SchoolOperationsError(
+          "A section transition must move the student to a later school section, for example Primary to Secondary.",
+          400,
+          "INVALID_SECTION_TRANSITION_TARGET",
+        );
+      }
+    }
+
+    if (
+      input.decision ===
         "RETAINED" &&
       target.class_level_id !==
         current.source_class_level_id
@@ -1031,18 +1050,14 @@ export async function updateProgressionDecision(
       "PROMOTED"
     ) {
       const movesForward =
-        target.section_sort_order >
-          current.source_section_sort_order ||
-        (
-          target.section_sort_order ===
-            current.source_section_sort_order &&
-          target.class_level_sort_order >
-            current.source_class_level_sort_order
-        );
+        target.section_sort_order ===
+          current.source_section_sort_order &&
+        target.class_level_sort_order >
+          current.source_class_level_sort_order;
 
       if (!movesForward) {
         throw new SchoolOperationsError(
-          "A promoted student must move forward to a later academic level.",
+          "A promoted student must move forward within the same school section. Use TRANSITIONED for Primary-to-Secondary or another section change.",
           400,
           "INVALID_PROMOTION_TARGET",
         );
@@ -1191,6 +1206,7 @@ export async function confirmProgressionBatch(
         count(*) filter (
           where decision in (
             'PROMOTED'::student_progression_decision,
+            'TRANSITIONED'::student_progression_decision,
             'RETAINED'::student_progression_decision,
             'TRANSFERRED'::student_progression_decision
           )
@@ -1422,6 +1438,7 @@ export async function confirmProgressionBatch(
           where
             reviewed.decision in (
               'PROMOTED'::student_progression_decision,
+              'TRANSITIONED'::student_progression_decision,
               'RETAINED'::student_progression_decision,
               'TRANSFERRED'::student_progression_decision
             )
@@ -1489,6 +1506,7 @@ export async function confirmProgressionBatch(
               from reviewed
               where decision in (
                 'PROMOTED'::student_progression_decision,
+                'TRANSITIONED'::student_progression_decision,
                 'RETAINED'::student_progression_decision,
                 'TRANSFERRED'::student_progression_decision
               )

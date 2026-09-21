@@ -210,6 +210,8 @@ export async function searchCasaOnboardingStudents(
           (
             guardian.guardian_count > 0
             and enrollment.id is not null
+            and enrollment.branch_id is not null
+            and enrollment.arrival_method is not null
             and biometric.active_count > 0
           ) as onboarding_complete,
           lock.membership_id
@@ -229,9 +231,42 @@ export async function searchCasaOnboardingStudents(
         left join lateral (
           select
             active.id,
-            active.class_arm_id
+            active.class_arm_id,
+            branch_arm.branch_id,
+            arrival.arrival_method
           from student_enrollments
             active
+          left join school_branch_class_arms
+            branch_arm
+            on branch_arm.school_id =
+               active.school_id
+           and branch_arm.class_arm_id =
+               active.class_arm_id
+          left join lateral (
+            select
+              assignment.arrival_method
+            from student_arrival_method_assignments
+              assignment
+            where
+              assignment.school_id =
+                active.school_id
+              and assignment.student_id =
+                active.student_id
+              and assignment.effective_from <=
+                coalesce(
+                  active.ends_on,
+                  current_date
+                )
+              and (
+                assignment.effective_to is null
+                or assignment.effective_to >=
+                   active.starts_on
+              )
+            order by
+              assignment.effective_from desc
+            limit 1
+          ) arrival
+            on true
           where
             active.school_id =
               student.school_id
