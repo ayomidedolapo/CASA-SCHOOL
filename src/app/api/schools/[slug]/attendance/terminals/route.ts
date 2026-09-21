@@ -36,6 +36,42 @@ interface RouteContext {
   }>;
 }
 
+function rowsOf<T>(
+  result:
+    unknown,
+): T[] {
+  if (
+    Array.isArray(
+      result,
+    )
+  ) {
+    return result as T[];
+  }
+
+  if (
+    result &&
+    typeof result ===
+      "object" &&
+    "rows" in
+      result &&
+    Array.isArray(
+      (
+        result as {
+          rows?: unknown;
+        }
+      ).rows,
+    )
+  ) {
+    return (
+      result as {
+        rows: T[];
+      }
+    ).rows;
+  }
+
+  return [];
+}
+
 export async function GET(
   _request: NextRequest,
   context: RouteContext,
@@ -52,39 +88,57 @@ export async function GET(
     const db = getDb();
 
     const terminals =
-      await db
-        .select({
-          id:
-            attendanceTerminals.id,
-          name:
-            attendanceTerminals.name,
-          terminalCode:
-            attendanceTerminals.terminalCode,
-          status:
-            attendanceTerminals.status,
-          credentialVersion:
-            attendanceTerminals.credentialVersion,
-          lastSeenAt:
-            attendanceTerminals.lastSeenAt,
-          createdAt:
-            attendanceTerminals.createdAt,
-          updatedAt:
-            attendanceTerminals.updatedAt,
-        })
-        .from(
-          attendanceTerminals,
-        )
-        .where(
-          eq(
-            attendanceTerminals.schoolId,
-            access.school.id,
-          ),
-        )
-        .orderBy(
-          desc(
-            attendanceTerminals.createdAt,
-          ),
-        );
+      rowsOf<{
+        id: string;
+        name: string;
+        terminalCode: string;
+        status:
+          | "ACTIVE"
+          | "SUSPENDED"
+          | "REVOKED";
+        credentialVersion:
+          number;
+        lastSeenAt:
+          string | Date | null;
+        createdAt:
+          string | Date;
+        updatedAt:
+          string | Date;
+        branchId:
+          string | null;
+        branchName:
+          string | null;
+      }>(
+        await db.execute(sql`
+          select
+            t.id::text as "id",
+            t.name as "name",
+            t.terminal_code as "terminalCode",
+            t.status::text as "status",
+            t.credential_version as "credentialVersion",
+            t.last_seen_at as "lastSeenAt",
+            t.created_at as "createdAt",
+            t.updated_at as "updatedAt",
+            b.id::text as "branchId",
+            b.name as "branchName"
+          from attendance_terminals t
+          left join school_branch_terminals mapping
+            on mapping.school_id =
+               t.school_id
+           and mapping.terminal_id =
+               t.id
+          left join school_branches b
+            on b.school_id =
+               mapping.school_id
+           and b.id =
+               mapping.branch_id
+          where
+            t.school_id =
+              ${access.school.id}::uuid
+          order by
+            t.created_at desc
+        `),
+      );
 
     return NextResponse.json(
       {

@@ -1109,7 +1109,7 @@ export default function ScannerClient() {
               "LOCKED",
             );
             setMessage(
-              "This scanner credential is suspended, revoked, rotated, or otherwise unavailable. Ask the School Technician.",
+              "This saved scanner credential is no longer accepted. If the School Technician rotated it, choose Replace credential below and paste the new one.",
             );
             return null;
           }
@@ -2172,6 +2172,36 @@ export default function ScannerClient() {
       ],
     );
 
+  const replaceCredential =
+    async () => {
+      await clearTerminalCredential();
+
+      setToken(
+        null,
+      );
+      setTerminalSession(
+        null,
+      );
+      setCurrentAttempt(
+        null,
+      );
+      setLiveness(
+        null,
+      );
+      setFinalResult(
+        null,
+      );
+      setProvisionValue(
+        "",
+      );
+      setPhase(
+        "UNPROVISIONED",
+      );
+      setMessage(
+        "Paste the replacement scanner credential issued by the School Technician.",
+      );
+    };
+
   const forgetDevice =
     async () => {
       const confirmation =
@@ -2220,13 +2250,41 @@ export default function ScannerClient() {
       );
     };
 
+  const waitingTitle =
+    terminalSession
+      ?.readiness
+      ?.code ===
+        "TERMINAL_BRANCH_UNASSIGNED"
+      ? "Campus not assigned."
+      : terminalSession
+          ?.readiness
+          ?.code ===
+            "ATTENDANCE_BRANCH_SESSION_NOT_PREPARED"
+        ? "Attendance not prepared."
+        : terminalSession
+            ?.readiness
+            ?.code ===
+              "ATTENDANCE_BRANCH_NOT_OPEN"
+          ? "Attendance not opened."
+          : terminalSession
+              ?.readiness
+              ?.code ===
+                "ATTENDANCE_POLICY_DAY_MISSING"
+            ? "Policy timetable missing."
+            : terminalSession
+                ?.readiness
+                ?.code ===
+                  "BRANCH_INACTIVE"
+              ? "Campus inactive."
+              : "Scanner waiting.";
+
   const title =
     phase ===
       "UNPROVISIONED"
       ? "Provision scanner."
       : phase ===
           "WAITING"
-        ? "Scanner waiting."
+        ? waitingTitle
         : phase ===
             "READY"
           ? "Scan student card."
@@ -2416,6 +2474,62 @@ export default function ScannerClient() {
               }
             >
               The terminal credential stays in this device&apos;s private browser storage and is never placed in the URL. When this browser offers CASA as an installable app, the native install action appears automatically.
+            </p>
+          </div>
+        )}
+
+        {phase ===
+          "WAITING" &&
+          terminalSession && (
+          <div
+            className={
+              styles.student
+            }
+          >
+            <p
+              className={
+                styles.studentName
+              }
+            >
+              {
+                terminalSession
+                  .branch
+                  ?.name ??
+                "No campus assigned"
+              }
+            </p>
+            <p
+              className={
+                styles.message
+              }
+            >
+              Date:{" "}
+              {
+                terminalSession
+                  .clock
+                  ?.date ??
+                "Unknown"
+              }
+              {" · Session: "}
+              {
+                terminalSession
+                  .session
+                  ?.status ??
+                "NONE"
+              }
+            </p>
+            <p
+              className={
+                styles.studentId
+              }
+            >
+              Reason:{" "}
+              {
+                terminalSession
+                  .readiness
+                  ?.code ??
+                "NO_ACTIVE_SESSION"
+              }
             </p>
           </div>
         )}
@@ -2675,20 +2789,54 @@ export default function ScannerClient() {
               styles.actions
             }
           >
-            <button
-              className={
-                styles.button
-              }
-              type="button"
-              onClick={
-                () =>
-                  void refreshTerminal(
-                    token,
-                  )
-              }
-            >
-              Check again
-            </button>
+            {phase ===
+              "LOCKED" ? (
+              <button
+                className={
+                  styles.button
+                }
+                type="button"
+                onClick={
+                  () =>
+                    void replaceCredential()
+                }
+              >
+                Replace credential
+              </button>
+            ) : (
+              <button
+                className={
+                  styles.button
+                }
+                type="button"
+                onClick={
+                  () =>
+                    void refreshTerminal(
+                      token,
+                    )
+                }
+              >
+                Check again
+              </button>
+            )}
+
+            {phase ===
+              "LOCKED" && (
+              <button
+                className={
+                  styles.secondaryButton
+                }
+                type="button"
+                onClick={
+                  () =>
+                    void refreshTerminal(
+                      token,
+                    )
+                }
+              >
+                Retry old credential
+              </button>
+            )}
 
             {phase ===
               "ERROR" && (

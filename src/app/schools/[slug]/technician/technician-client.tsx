@@ -154,6 +154,10 @@ interface Terminal {
     | "SUSPENDED"
     | "REVOKED";
   credentialVersion: number;
+  branchId:
+    string | null;
+  branchName:
+    string | null;
   lastSeenAt:
     string | null;
   createdAt: string;
@@ -2075,6 +2079,12 @@ export default function TechnicianClient(
                           {" · credential v"}
                           {
                             terminal.credentialVersion
+                          }
+                          <br />
+                          Campus:{" "}
+                          {
+                            terminal.branchName ??
+                            "Unassigned"
                           }
                         </div>
                       </div>

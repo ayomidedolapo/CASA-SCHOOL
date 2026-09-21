@@ -189,6 +189,59 @@ assert(
   "Fast READY-state refreshes must use a stable QR decoded callback.",
 );
 
+const scannerOperationalUxSource =
+  fs.readFileSync(
+    "src/app/scanner/scanner-client.tsx",
+    "utf8",
+  );
+
+const terminalListRouteSource =
+  fs.readFileSync(
+    "src/app/api/schools/[slug]/attendance/terminals/route.ts",
+    "utf8",
+  );
+
+const technicianSource =
+  fs.readFileSync(
+    "src/app/schools/[slug]/technician/technician-client.tsx",
+    "utf8",
+  );
+
+for (
+  const marker of [
+    "Replace credential",
+    "Paste the replacement scanner credential",
+    "Attendance not prepared.",
+    "Attendance not opened.",
+    "Policy timetable missing.",
+    "Reason:",
+  ]
+) {
+  assert(
+    scannerOperationalUxSource.includes(
+      marker,
+    ),
+    `Scanner operational UX missing ${marker}`,
+  );
+}
+
+assert(
+  terminalListRouteSource.includes(
+    'b.name as "branchName"',
+  ),
+  "Terminal management must return the assigned campus.",
+);
+
+assert(
+  technicianSource.includes(
+    "Campus:",
+  ) &&
+  technicianSource.includes(
+    "terminal.branchName",
+  ),
+  "Technician workbench must show each scanner campus.",
+);
+
 console.log(
   "CASA School Scanner PWA contract self-test passed.",
 );
