@@ -197,11 +197,9 @@ export async function GET(
         name:
           row.school_name,
         logoUrl:
-          row.logo_object_key
-            ? `/api/public/schools/${encodeURIComponent(
-                row.school_id,
-              )}/notification-logo`
-            : null,
+          `/api/public/schools/${encodeURIComponent(
+            row.school_id,
+          )}/notification-logo`,
       },
       branch: {
         id:

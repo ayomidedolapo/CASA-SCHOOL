@@ -72,7 +72,7 @@ export const students = pgTable(
       .notNull(),
     admissionDate: date(
       "admission_date",
-    ).notNull(),
+    ),
     exitDate: date("exit_date"),
     createdAt: timestamp("created_at", {
       withTimezone: true,
@@ -141,7 +141,7 @@ export const students = pgTable(
     ),
     check(
       "students_exit_after_admission_check",
-      sql`${table.exitDate} is null or ${table.exitDate} >= ${table.admissionDate}`,
+      sql`${table.admissionDate} is null or ${table.exitDate} is null or ${table.exitDate} >= ${table.admissionDate}`,
     ),
   ],
 );

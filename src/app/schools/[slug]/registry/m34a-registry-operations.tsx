@@ -136,6 +136,18 @@ export function RegistryM34AOperations({
     useState("");
   const [inviteUrl, setInviteUrl] =
     useState("");
+  const [inviteShareText, setInviteShareText] =
+    useState("");
+  const [inviteWhatsappUrl, setInviteWhatsappUrl] =
+    useState<string | null>(null);
+  const [inviteEmailStatus, setInviteEmailStatus] =
+    useState<
+      | "SENT"
+      | "NO_EMAIL"
+      | "NOT_CONFIGURED"
+      | "FAILED"
+      | ""
+    >("");
   const [busy, setBusy] =
     useState(false);
   const [notice, setNotice] =
@@ -224,6 +236,9 @@ export function RegistryM34AOperations({
         }
 
         setInviteUrl("");
+        setInviteShareText("");
+        setInviteWhatsappUrl(null);
+        setInviteEmailStatus("");
         setNotice("");
         setError("");
 
@@ -526,6 +541,13 @@ export function RegistryM34AOperations({
         await request<{
           oneTimeUrl: string;
           expiresAt: string;
+          shareText: string;
+          whatsappUrl: string | null;
+          emailDelivery:
+            | "SENT"
+            | "NO_EMAIL"
+            | "NOT_CONFIGURED"
+            | "FAILED";
         }>(
           `/students/${studentId}/guardians/${guardian.linkId}/push-invite`,
           {
@@ -544,6 +566,15 @@ export function RegistryM34AOperations({
       setInviteUrl(
         body.oneTimeUrl,
       );
+      setInviteShareText(
+        body.shareText,
+      );
+      setInviteWhatsappUrl(
+        body.whatsappUrl,
+      );
+      setInviteEmailStatus(
+        body.emailDelivery,
+      );
 
       if (
         typeof navigator !== "undefined" &&
@@ -551,7 +582,7 @@ export function RegistryM34AOperations({
       ) {
         await navigator.clipboard
           .writeText(
-            body.oneTimeUrl,
+            body.shareText,
           )
           .catch(
             () =>
@@ -559,10 +590,25 @@ export function RegistryM34AOperations({
           );
       }
 
+      const deliveryNote =
+        body.emailDelivery ===
+          "SENT"
+          ? " A branded school email was sent to the guardian."
+          : body.emailDelivery ===
+              "NO_EMAIL"
+            ? " No email was provided; use the copy/WhatsApp option below."
+            : body.emailDelivery ===
+                "NOT_CONFIGURED"
+              ? " Email delivery is not configured yet; the link is still ready for manual sharing."
+              : " Email delivery did not complete; the link is still ready for manual sharing.";
+
       setNotice(
-        needsPasskey
-          ? "Notification setup reset with Passkey. The new private link is valid for 48 hours; any previous unused link is now invalid. Existing enabled devices remain connected."
-          : "Private guardian notification link created. It is valid for 48 hours.",
+        (
+          needsPasskey
+            ? "Notification setup reset with Passkey. The new private link is valid for 48 hours; any previous unused link is now invalid. Existing enabled devices remain connected."
+            : "Private guardian notification link created. It is valid for 48 hours."
+        ) +
+          deliveryNote,
       );
       await load();
     });
@@ -838,9 +884,52 @@ export function RegistryM34AOperations({
               {inviteUrl}
             </p>
             <p className="mt-2 text-xs text-black/45">
-              Private one-time setup link. Valid for 48 hours; creating a new link immediately replaces the previous unused link.
+              The raw link stays visible for manual fallback. The trusted share message includes the school name, purpose and safety context so the guardian does not receive an unexplained link.
             </p>
-
+            {inviteEmailStatus ? (
+              <p className="mt-2 text-xs font-semibold">
+                Email: {inviteEmailStatus.replaceAll("_", " ")}
+              </p>
+            ) : null}
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="casa-button-secondary"
+                onClick={() => {
+                  if (
+                    inviteShareText &&
+                    typeof navigator !== "undefined" &&
+                    navigator.clipboard
+                  ) {
+                    void navigator.clipboard.writeText(
+                      inviteShareText,
+                    );
+                  }
+                }}
+              >
+                Copy message + link
+              </button>
+              {inviteWhatsappUrl ? (
+                <a
+                  className="casa-button-secondary"
+                  href={inviteWhatsappUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Open WhatsApp
+                </a>
+              ) : null}
+            </div>
+            {inviteShareText ? (
+              <details className="mt-3">
+                <summary className="cursor-pointer text-xs font-semibold">
+                  Preview share message
+                </summary>
+                <pre className="mt-2 whitespace-pre-wrap text-xs leading-5 text-black/60">
+                  {inviteShareText}
+                </pre>
+              </details>
+            ) : null}
           </div>
         ) : null}
 

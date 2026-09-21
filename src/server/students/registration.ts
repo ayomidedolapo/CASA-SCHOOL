@@ -29,7 +29,9 @@ export interface StudentRegistrationInput {
     | null;
   dateOfBirth: string;
   sex: StudentSex;
-  admissionDate: string;
+  admissionDate?:
+    | string
+    | null;
 }
 
 export interface RegisteredStudent {
@@ -286,7 +288,7 @@ export async function registerStudentOnce(
           ${input.dateOfBirth}::date,
           ${input.sex}::student_sex,
           'ACTIVE'::student_status,
-          ${input.admissionDate}::date,
+          ${input.admissionDate ?? null}::date,
           now(),
           now()
         where not exists (

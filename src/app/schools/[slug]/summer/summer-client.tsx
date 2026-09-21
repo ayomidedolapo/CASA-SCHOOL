@@ -210,6 +210,32 @@ export default function SummerClient({
         </div>
       )}
 
+      <section className="mb-6 border border-black bg-white p-5 sm:p-6">
+        <p className="casa-kicker text-black/40">
+          How Summer registration works
+        </p>
+        <div className="mt-4 grid gap-4 md:grid-cols-3">
+          <div>
+            <strong className="text-sm">1 Â· Create the programme</strong>
+            <p className="mt-1 text-xs leading-5 text-black/50">
+              Choose the campus, Summer dates, operating days and attendance times.
+            </p>
+          </div>
+          <div>
+            <strong className="text-sm">2 Â· Register participants</strong>
+            <p className="mt-1 text-xs leading-5 text-black/50">
+              Add existing CASA students or Summer-only guests. Summer registration does not change a normal class enrollment or issue a new ID card.
+            </p>
+          </div>
+          <div>
+            <strong className="text-sm">3 Â· Run Summer attendance</strong>
+            <p className="mt-1 text-xs leading-5 text-black/50">
+              Authorized campus staff mark attendance for the selected programme. Card scanning remains optional.
+            </p>
+          </div>
+        </div>
+      </section>
+
       <div className="grid gap-6 xl:grid-cols-[420px_1fr]">
         <aside className="space-y-5">
           <section className="border border-black bg-white p-5">
@@ -355,7 +381,7 @@ export default function SummerClient({
 
               <div className="grid gap-4 border-b border-black/15 p-5 lg:grid-cols-2">
                 <div className="border border-black/15 p-4">
-                  <p className="casa-kicker text-black/40">Add existing student</p>
+                  <p className="casa-kicker text-black/40">Register school student</p>
                   <div className="mt-3 flex gap-2">
                     <select className="casa-field" value={studentId} onChange={(event) => setStudentId(event.target.value)}>
                       <option value="">Choose student</option>
@@ -369,11 +395,14 @@ export default function SummerClient({
                       Add
                     </button>
                   </div>
-                  <p className="mt-2 text-xs text-black/45">Only active students currently enrolled in this campus are listed.</p>
+                  <p className="mt-2 text-xs leading-5 text-black/45">Only active students currently enrolled in this campus are listed. Adding them here registers them for this Summer programme only; their normal class/session enrollment and permanent ID card are unchanged.</p>
                 </div>
 
                 <form onSubmit={addGuest} className="border border-black/15 p-4">
-                  <p className="casa-kicker text-black/40">Guest student</p>
+                  <p className="casa-kicker text-black/40">Register Summer-only guest</p>
+                  <p className="mt-2 text-xs leading-5 text-black/45">
+                    Use this for a child attending Summer who is not in the school registry. This does not create a normal academic enrollment or ID card.
+                  </p>
                   <div className="mt-3 grid gap-2 sm:grid-cols-2">
                     <input className="casa-field sm:col-span-2" name="guestFullName" placeholder="Student full name" required />
                     <select className="casa-field" name="guestSex" defaultValue=""><option value="">Sex (optional)</option><option value="F">Female</option><option value="M">Male</option></select>

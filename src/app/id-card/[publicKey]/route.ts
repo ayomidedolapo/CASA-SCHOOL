@@ -7,14 +7,16 @@ import {
   NextResponse,
 } from "next/server";
 
-import { getDb } from "@/db";
 import {
-  studentIdentityCards,
+  getDb,
+} from "@/db";
+import {
   studentCardProductionJobs,
+  studentIdentityCards,
 } from "@/db/schema";
 import {
-  getPrivateCardObject,
-} from "@/server/card-production/storage";
+  getCurrentCardProductionPreview,
+} from "@/server/card-production/live-preview";
 
 export const dynamic =
   "force-dynamic";
@@ -23,6 +25,26 @@ interface RouteContext {
   params: Promise<{
     publicKey: string;
   }>;
+}
+
+function notFound(
+  state:
+    string,
+) {
+  return new NextResponse(
+    "Not found",
+    {
+      status: 404,
+      headers: {
+        "Cache-Control":
+          "private, no-store",
+        "X-Robots-Tag":
+          "noindex, nofollow, noarchive",
+        "X-CASA-Card-State":
+          state,
+      },
+    },
+  );
 }
 
 export async function GET(
@@ -41,26 +63,15 @@ export async function GET(
       publicKey,
     )
   ) {
-    return new NextResponse(
-      "Not found",
-      {
-        status: 404,
-        headers: {
-          "Cache-Control":
-            "private, no-store",
-          "X-Robots-Tag":
-            "noindex, nofollow, noarchive",
-        },
-      },
+    return notFound(
+      "INVALID_PUBLIC_KEY",
     );
   }
 
-  const db = getDb();
-
-  const lifecycleRows =
-    await db
+  const rows =
+    await getDb()
       .select({
-        id:
+        jobId:
           studentCardProductionJobs.id,
       })
       .from(
@@ -93,80 +104,29 @@ export async function GET(
       )
       .limit(1);
 
-  if (!lifecycleRows[0]) {
-    return new NextResponse(
-      "Not found",
-      {
-        status: 404,
-        headers: {
-          "Cache-Control":
-            "no-store",
-          "X-CASA-Card-State":
-            "CARD_PUBLIC_ARTIFACT_INACTIVE",
-        },
-      },
-    );
-  }
-
-
-  const rows =
-    await db
-      .select({
-        previewArtifactKey:
-          studentCardProductionJobs.previewArtifactKey,
-      })
-      .from(
-        studentCardProductionJobs,
-      )
-      .where(
-        eq(
-          studentCardProductionJobs.publicAccessKey,
-          publicKey,
-        ),
-      )
-      .limit(1);
-
   const job =
     rows[0];
 
   if (!job) {
-    return new NextResponse(
-      "Not found",
-      {
-        status: 404,
-        headers: {
-          "Cache-Control":
-            "private, no-store",
-          "X-Robots-Tag":
-            "noindex, nofollow, noarchive",
-        },
-      },
+    return notFound(
+      "CARD_PUBLIC_ARTIFACT_INACTIVE",
     );
   }
 
-  const artifact =
-    await getPrivateCardObject(
-      job.previewArtifactKey,
+  const preview =
+    await getCurrentCardProductionPreview(
+      job.jobId,
     );
 
-  if (!artifact) {
-    return new NextResponse(
-      "Not found",
-      {
-        status: 404,
-        headers: {
-          "Cache-Control":
-            "private, no-store",
-          "X-Robots-Tag":
-            "noindex, nofollow, noarchive",
-        },
-      },
+  if (!preview) {
+    return notFound(
+      "CARD_PREVIEW_UNAVAILABLE",
     );
   }
 
   return new NextResponse(
     new Uint8Array(
-      artifact,
+      preview,
     ),
     {
       status: 200,
@@ -181,6 +141,8 @@ export async function GET(
           "noindex, nofollow, noarchive",
         "Referrer-Policy":
           "no-referrer",
+        "X-CASA-Card-Preview":
+          "LIVE_RENDER_WITH_PRESERVED_QR",
       },
     },
   );

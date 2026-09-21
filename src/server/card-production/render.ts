@@ -327,8 +327,10 @@ async function renderSide(
       CardTemplateLayout;
     snapshot:
       StudentCardRenderSnapshot;
-    qrPayload:
+    qrPayload?:
       string;
+    qrImage?:
+      Buffer | null;
   },
 ): Promise<Buffer> {
   const image =
@@ -394,18 +396,38 @@ async function renderSide(
       );
 
     const qr =
-      await QRCode.toBuffer(
-        input.qrPayload,
-        {
-          type:
-            "png",
-          width:
-            qrSize,
-          margin: 1,
-          errorCorrectionLevel:
-            "M",
-        },
-      );
+      input.qrImage
+        ? await sharp(
+            input.qrImage,
+          )
+            .resize(
+              qrSize,
+              qrSize,
+              {
+                fit:
+                  "fill",
+              },
+            )
+            .png()
+            .toBuffer()
+        : input.qrPayload
+          ? await QRCode.toBuffer(
+              input.qrPayload,
+              {
+                type:
+                  "png",
+                width:
+                  qrSize,
+                margin: 1,
+                errorCorrectionLevel:
+                  "M",
+              },
+            )
+          : (() => {
+              throw new Error(
+                "CARD_QR_SOURCE_UNAVAILABLE",
+              );
+            })();
 
     composites.push({
       input:
@@ -553,6 +575,151 @@ async function previewBuffer(
     ])
     .png()
     .toBuffer();
+}
+
+export async function renderExistingStudentCardPreview(
+  input: {
+    frontSource:
+      Buffer;
+    backSource:
+      Buffer;
+    frontArtifact:
+      Buffer;
+    backArtifact:
+      Buffer;
+    layout:
+      unknown;
+    snapshot:
+      StudentCardRenderSnapshot;
+  },
+): Promise<Buffer> {
+  const layout =
+    parseCardTemplateLayout(
+      input.layout,
+    );
+
+  const qrArtifact =
+    layout.qr.side ===
+      "FRONT"
+      ? input.frontArtifact
+      : input.backArtifact;
+
+  const qrMeta =
+    await sharp(
+      qrArtifact,
+    ).metadata();
+
+  if (
+    !qrMeta.width ||
+    !qrMeta.height
+  ) {
+    throw new Error(
+      "CARD_EXISTING_QR_DIMENSIONS_UNAVAILABLE",
+    );
+  }
+
+  const intendedSize =
+    Math.max(
+      64,
+      Math.round(
+        layout.qr.size *
+          qrMeta.width,
+      ),
+    );
+  const left =
+    Math.max(
+      0,
+      Math.min(
+        qrMeta.width - 1,
+        Math.round(
+          layout.qr.x *
+            qrMeta.width,
+        ),
+      ),
+    );
+  const top =
+    Math.max(
+      0,
+      Math.min(
+        qrMeta.height - 1,
+        Math.round(
+          layout.qr.y *
+            qrMeta.height,
+        ),
+      ),
+    );
+  const cropSize =
+    Math.min(
+      intendedSize,
+      qrMeta.width -
+        left,
+      qrMeta.height -
+        top,
+    );
+
+  if (
+    cropSize <
+      24
+  ) {
+    throw new Error(
+      "CARD_EXISTING_QR_CROP_UNAVAILABLE",
+    );
+  }
+
+  const preservedQr =
+    await sharp(
+      qrArtifact,
+    )
+      .extract({
+        left,
+        top,
+        width:
+          cropSize,
+        height:
+          cropSize,
+      })
+      .png()
+      .toBuffer();
+
+  const [
+    front,
+    back,
+  ] =
+    await Promise.all([
+      renderSide({
+        source:
+          input.frontSource,
+        side:
+          "FRONT",
+        layout,
+        snapshot:
+          input.snapshot,
+        qrImage:
+          layout.qr.side ===
+            "FRONT"
+            ? preservedQr
+            : null,
+      }),
+      renderSide({
+        source:
+          input.backSource,
+        side:
+          "BACK",
+        layout,
+        snapshot:
+          input.snapshot,
+        qrImage:
+          layout.qr.side ===
+            "BACK"
+            ? preservedQr
+            : null,
+      }),
+    ]);
+
+  return previewBuffer(
+    front,
+    back,
+  );
 }
 
 export async function renderAndStoreStudentCard(

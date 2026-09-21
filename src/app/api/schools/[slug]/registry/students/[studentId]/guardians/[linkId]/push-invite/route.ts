@@ -14,13 +14,19 @@ import {
   getDb,
 } from "@/db";
 import {
+  consumePasskeyStepUpGrantWithId,
+} from "@/server/auth/passkey-step-up";
+import {
+  buildTrustedSchoolLinkMessage,
+} from "@/server/links/trusted-share";
+import {
+  sendGuardianInviteEmail,
+} from "@/server/messaging/guardian-invite-email";
+import {
   registryAuthErrorResponse,
   registryNoStoreHeaders,
   requireRegistryAdmin,
 } from "@/server/registry/http";
-import {
-  consumePasskeyStepUpGrantWithId,
-} from "@/server/auth/passkey-step-up";
 
 export const dynamic =
   "force-dynamic";
@@ -60,7 +66,8 @@ function rowsOf<T>(
 }
 
 export async function POST(
-  request: NextRequest,
+  request:
+    NextRequest,
   context: {
     params:
       Promise<{
@@ -88,12 +95,40 @@ export async function POST(
     const relation =
       rowsOf<{
         id: string;
+        guardian_id: string;
+        guardian_name: string;
+        guardian_email:
+          string | null;
+        guardian_phone:
+          string | null;
+        home_branch_id:
+          string | null;
+        student_name:
+          string;
         has_prior_invite:
           boolean;
       }>(
         await db.execute(sql`
           select
             link.id,
+            guardian.id
+              as guardian_id,
+            guardian.full_name
+              as guardian_name,
+            guardian.email
+              as guardian_email,
+            guardian.phone
+              as guardian_phone,
+            student.home_branch_id,
+            concat_ws(
+              ' ',
+              student.first_name,
+              nullif(
+                student.middle_name,
+                ''
+              ),
+              student.last_name
+            ) as student_name,
             exists (
               select 1
               from guardian_push_enrollment_links invite
@@ -111,6 +146,11 @@ export async function POST(
                link.guardian_id
            and guardian.status =
                'ACTIVE'::guardian_status
+          join students student
+            on student.school_id =
+               link.school_id
+           and student.id =
+               link.student_id
           where
             link.school_id =
               ${access.school.id}::uuid
@@ -189,37 +229,14 @@ export async function POST(
           "hex",
         );
 
-    const result =
-      await db
-        .execute(sql`
-          with relation as (
-            select
-              link.id,
-              link.guardian_id,
-              student.home_branch_id
-            from student_guardians link
-            join students student
-              on student.school_id =
-                 link.school_id
-             and student.id =
-                 link.student_id
-            join guardians guardian
-              on guardian.school_id =
-                 link.school_id
-             and guardian.id =
-                 link.guardian_id
-             and guardian.status =
-                 'ACTIVE'::guardian_status
-            where
-              link.school_id =
-                ${access.school.id}::uuid
-              and link.student_id =
-                ${studentId}::uuid
-              and link.id =
-                ${linkId}::uuid
-            limit 1
-          ),
-          old_link as (
+    const created =
+      rowsOf<{
+        id: string;
+        expires_at:
+          string;
+      }>(
+        await db.execute(sql`
+          with old_link as (
             update guardian_push_enrollment_links
             set
               revoked_at =
@@ -244,56 +261,101 @@ export async function POST(
             expires_at,
             created_at
           )
-          select
+          values (
             ${access.school.id}::uuid,
-            relation.home_branch_id,
+            ${relation.home_branch_id}::uuid,
             ${studentId}::uuid,
-            relation.guardian_id,
-            relation.id,
+            ${relation.guardian_id}::uuid,
+            ${relation.id}::uuid,
             ${tokenHash},
             ${access.membership.id}::uuid,
             now() + interval '48 hours',
             now()
-          from relation
-          returning id, expires_at
-        `);
+          )
+          returning
+            id,
+            expires_at
+        `),
+      )[0];
 
-    if (
-      rowsOf<{
-        id: string;
-        expires_at: string;
-      }>(
-        result,
-      ).length !==
-      1
-    ) {
+    if (!created) {
       return NextResponse.json(
         {
           message:
-            "Student guardian relationship not found.",
+            "Guardian notification setup link could not be created.",
         },
         {
-          status: 404,
+          status: 500,
           headers:
             registryNoStoreHeaders,
         },
       );
     }
 
-    const created =
-      rowsOf<{
-        id: string;
-        expires_at: string;
-      }>(result)[0];
+    const oneTimeUrl =
+      `${request.nextUrl.origin}/guardian-notifications/${encodeURIComponent(
+        token,
+      )}`;
+
+    const shareText =
+      buildTrustedSchoolLinkMessage({
+        schoolName:
+          access.school.name,
+        recipientName:
+          relation.guardian_name,
+        studentName:
+          relation.student_name,
+        purpose:
+          "Please use this private link to enable trusted school notifications, including check-in, check-out and approved early-departure alerts.",
+        expiresLabel:
+          "48 hours",
+        url:
+          oneTimeUrl,
+      });
+
+    const phoneDigits =
+      relation.guardian_phone
+        ?.replace(
+          /\D/g,
+          "",
+        ) ??
+      "";
+
+    const whatsappUrl =
+      phoneDigits
+        ? `https://wa.me/${phoneDigits}?text=${encodeURIComponent(
+            shareText,
+          )}`
+        : null;
+
+    const emailDelivery =
+      await sendGuardianInviteEmail({
+        email:
+          relation.guardian_email,
+        guardianName:
+          relation.guardian_name,
+        schoolName:
+          access.school.name,
+        schoolId:
+          access.school.id,
+        studentName:
+          relation.student_name,
+        inviteUrl:
+          oneTimeUrl,
+        origin:
+          request.nextUrl.origin,
+        expiresAt:
+          created.expires_at,
+      });
 
     return NextResponse.json(
       {
-        oneTimeUrl:
-          `${request.nextUrl.origin}/guardian-notifications/${encodeURIComponent(
-            token,
-          )}`,
+        oneTimeUrl,
         expiresAt:
           created.expires_at,
+        shareText,
+        whatsappUrl,
+        emailDelivery,
       },
       {
         status: 201,

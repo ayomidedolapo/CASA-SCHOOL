@@ -49,7 +49,9 @@ export const studentCreateSchema =
     ]),
     admissionDate: z
       .string()
-      .regex(dateOnly),
+      .regex(dateOnly)
+      .nullable()
+      .optional(),
   });
 
 export const studentUpdateSchema =
@@ -84,6 +86,11 @@ export const studentUpdateSchema =
         "FEMALE",
         "UNSPECIFIED",
       ])
+      .optional(),
+    admissionDate: z
+      .string()
+      .regex(dateOnly)
+      .nullable()
       .optional(),
     homeBranchId: z
       .string()

@@ -42,7 +42,8 @@ interface StudentRow {
     | "FEMALE"
     | "UNSPECIFIED";
   status: string;
-  admissionDate: string;
+  admissionDate:
+    string | null;
   homeBranchId: string | null;
   homeBranchName: string | null;
   classArmName: string | null;
@@ -506,7 +507,7 @@ export function RegistryClient({
             admissionDate:
               form.get(
                 "admissionDate",
-              ),
+              ) || null,
           }),
         },
       );
@@ -719,6 +720,9 @@ export function RegistryClient({
               form.get("lastName"),
             preferredName:
               form.get("preferredName") ||
+              null,
+            admissionDate:
+              form.get("admissionDate") ||
               null,
             sex:
               form.get("sex"),
@@ -1249,6 +1253,24 @@ export function RegistryClient({
 
                     <label className="casa-label">
                       <span>
+                        Admission date / optional
+                      </span>
+                      <input
+                        className="casa-field"
+                        defaultValue={
+                          selectedStudent.admissionDate ??
+                          ""
+                        }
+                        name="admissionDate"
+                        type="date"
+                      />
+                      <span className="mt-1 text-[10px] leading-4 text-black/45">
+                        When this student originally joined the school. Leave blank if unknown and update it later.
+                      </span>
+                    </label>
+
+                    <label className="casa-label">
+                      <span>
                         Status
                       </span>
                       <select
@@ -1466,7 +1488,7 @@ export function RegistryClient({
 
                       <label className="casa-label">
                         <span>
-                          Starts on
+                          Enrollment starts on
                         </span>
                         <input
                           required
@@ -1474,6 +1496,9 @@ export function RegistryClient({
                           name="startsOn"
                           className="casa-field"
                         />
+                        <span className="mt-1 text-[10px] leading-4 text-black/45">
+                          The date this student starts this class/session. This is separate from the school admission date.
+                        </span>
                       </label>
 
                       <button
@@ -1632,14 +1657,16 @@ export function RegistryClient({
 
                 <label className="casa-label sm:col-span-2">
                   <span>
-                    Admission date
+                    Admission date / optional
                   </span>
                   <input
-                    required
                     type="date"
                     name="admissionDate"
                     className="casa-field"
                   />
+                  <span className="mt-1 text-[10px] leading-4 text-black/45">
+                    Leave blank if the exact date the student joined the school is not known. It can be added later.
+                  </span>
                 </label>
                 <button
                   disabled={
@@ -1661,7 +1688,10 @@ export function RegistryClient({
 
               <p className="mt-3 text-xs leading-5 text-black/50">
                 Guardian records can be created before portal access is
-                provisioned, then linked to one or more students.
+                provisioned, then linked to one or more students. Email is
+                optional. When an email is provided CASA can send the private
+                setup link automatically; otherwise staff can copy the trusted
+                message and send it manually by WhatsApp.
               </p>
 
               <form
