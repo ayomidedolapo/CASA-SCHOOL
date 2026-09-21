@@ -117,6 +117,96 @@ async function studentPresenceRecord(
   );
 }
 
+function displayPolicyClock(
+  value:
+    string,
+): string {
+  const parts =
+    value
+      .split(":")
+      .map(
+        (part) =>
+          Number(part),
+      );
+
+  const hour =
+    parts[0] ?? 0;
+  const minute =
+    parts[1] ?? 0;
+  const suffix =
+    hour >= 12
+      ? "PM"
+      : "AM";
+  const displayHour =
+    hour % 12 ||
+    12;
+
+  return `${displayHour}:${String(
+    minute,
+  ).padStart(
+    2,
+    "0",
+  )} ${suffix}`;
+}
+
+function terminalAttemptMessage(
+  attempt:
+    AttemptResult,
+  policyDay:
+    | {
+        checkInOpensAt:
+          string;
+        onTimeUntil:
+          string;
+        checkInClosesAt:
+          string;
+        normalDismissalAt:
+          string;
+        checkOutClosesAt:
+          string;
+      }
+    | null,
+): string | null {
+  if (
+    !policyDay
+  ) {
+    return null;
+  }
+
+  if (
+    attempt.reasonCode ===
+      "CHECK_IN_WINDOW_CLOSED"
+  ) {
+    return `This card is being processed as CHECK-IN because the student is not currently recorded as on campus. Today's check-in window closed at ${displayPolicyClock(
+      policyDay.checkInClosesAt,
+    )}. Normal dismissal at ${displayPolicyClock(
+      policyDay.normalDismissalAt,
+    )} applies to CHECK-OUT only after a successful check-in. If the student actually arrived after check-in closed, use Supervised late arrival on Attendance.`;
+  }
+
+  if (
+    attempt.reasonCode ===
+      "CHECK_IN_NOT_OPEN"
+  ) {
+    return `This card is being processed as CHECK-IN. Today's check-in window opens at ${displayPolicyClock(
+      policyDay.checkInOpensAt,
+    )}.`;
+  }
+
+  if (
+    attempt.reasonCode ===
+      "CHECK_OUT_WINDOW_CLOSED"
+  ) {
+    return `This card is being processed as CHECK-OUT. Normal dismissal is ${displayPolicyClock(
+      policyDay.normalDismissalAt,
+    )} and normal checkout closes at ${displayPolicyClock(
+      policyDay.checkOutClosesAt,
+    )}.`;
+  }
+
+  return null;
+}
+
 function attemptResponse(
   attempt: AttemptResult,
   options?: {
@@ -135,6 +225,7 @@ function attemptResponse(
     requiresBiometric?: boolean;
     requiresStaffAuthorization?: boolean;
     classification?: string | null;
+    message?: string | null;
   },
 ) {
   return {
@@ -167,6 +258,9 @@ function attemptResponse(
       false,
     classification:
       options?.classification ??
+      null,
+    message:
+      options?.message ??
       null,
   };
 }
@@ -384,6 +478,11 @@ export async function POST(
           requiresBiometric:
             existingAttempt.outcome ===
             "PENDING",
+          message:
+            terminalAttemptMessage(
+              existingAttempt,
+              active.policyDay,
+            ),
         },
       ),
       {
@@ -1203,6 +1302,11 @@ export async function POST(
           "PENDING",
         requiresStaffAuthorization,
         classification,
+        message:
+          terminalAttemptMessage(
+            attempt,
+            active.policyDay,
+          ),
       },
     ),
     {

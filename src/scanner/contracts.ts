@@ -50,6 +50,8 @@ export interface ScannerTerminalSession {
         message: string;
       }
     | null;
+  lateStayOnly:
+    boolean;
 }
 
 export interface ScannerStudent {
@@ -85,6 +87,8 @@ export interface ScannerAttemptResponse {
   requiresStaffAuthorization:
     boolean;
   classification:
+    string | null;
+  message?:
     string | null;
 }
 
@@ -258,8 +262,8 @@ export function scannerReasonMessage(
   }
 
   return (
-    reasonMessages[code] ??
     serverMessage ??
+    reasonMessages[code] ??
     `The attendance check could not be completed (${code}).`
   );
 }

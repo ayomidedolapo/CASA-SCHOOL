@@ -727,6 +727,42 @@ export function getTerminalAttendanceReadiness(
   return null;
 }
 
+export async function hasActiveLateStayAuthorizationForBranchSession(
+  input: {
+    schoolId: string;
+    sessionId: string;
+    branchId: string;
+  },
+) {
+  const db = getDb();
+
+  const row =
+    rowsOf<{
+      id: string;
+    }>(
+      await db.execute(sql`
+        select id::text
+        from attendance_late_stay_authorizations
+        where
+          school_id =
+            ${input.schoolId}::uuid
+          and session_id =
+            ${input.sessionId}::uuid
+          and branch_id =
+            ${input.branchId}::uuid
+          and revoked_at is null
+          and consumed_at is null
+          and consumed_attempt_id is null
+          and allowed_until >= now()
+        limit 1
+      `),
+    )[0];
+
+  return Boolean(
+    row,
+  );
+}
+
 export async function findActiveLateStayAuthorization(input: {
   schoolId: string;
   sessionId: string;

@@ -1150,8 +1150,8 @@ export default function ScannerClient() {
             (
               data.session?.status ===
                 "OPEN" ||
-              data.session?.status ===
-                "CLOSED"
+              data.lateStayOnly ===
+                true
             );
 
           if (
@@ -1175,11 +1175,10 @@ export default function ScannerClient() {
               "READY",
             );
             setMessage(
-              data.session?.status ===
-                "CLOSED"
+              data.lateStayOnly
                 ? data.branch
-                  ? `Attendance is closed at ${data.branch.name}. The scanner is available only for an authorized late-stay checkout.`
-                  : "Attendance is closed. The scanner is available only for an authorized late-stay checkout."
+                  ? `Attendance is closed at ${data.branch.name}. A late-stay checkout is authorized, so the scanner is temporarily available only for that checkout.`
+                  : "Attendance is closed. A late-stay checkout is authorized, so the scanner is temporarily available only for that checkout."
                 : data.branch
                   ? `Ready at ${data.branch.name}. Hold the CASA student card QR inside the frame.`
                   : "Hold your CASA student card in front of the camera.",
@@ -1913,6 +1912,8 @@ export default function ScannerClient() {
               scannerReasonMessage(
                 data.attempt
                   .reasonCode,
+                data.message ??
+                  null,
               ),
             );
             return;

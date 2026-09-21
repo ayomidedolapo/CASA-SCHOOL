@@ -168,12 +168,19 @@ assert(
 
 assert(
   scannerClientSource.includes(
-    'data.session?.status ===\n                "CLOSED"',
-  ) ||
-  /data\.session\?\.status\s*===\s*"CLOSED"/.test(
+    "data.lateStayOnly ===",
+  ) &&
+  scannerClientSource.includes(
+    "true",
+  ),
+  "Scanner must remain available after close only for the explicit lateStayOnly path.",
+);
+
+assert(
+  !/scannerCanAcceptCard[\s\S]{0,450}data\.session\?\.status\s*===\s*"CLOSED"/.test(
     scannerClientSource,
   ),
-  "Scanner must remain available for the closed-session late-stay path.",
+  "A CLOSED attendance session by itself must not keep the scanner camera live.",
 );
 
 assert(
@@ -328,6 +335,62 @@ for (
     `Technician terminal campus UX missing ${marker}`,
   );
 }
+
+const terminalScanRouteSource =
+  fs.readFileSync(
+    "src/app/api/terminal/scan/route.ts",
+    "utf8",
+  );
+
+for (
+  const marker of [
+    "hasActiveLateStayAuthorizationForBranchSession",
+    "lateStayOnly",
+  ]
+) {
+  assert(
+    terminalSessionRouteSource.includes(
+      marker,
+    ),
+    `Terminal session late-stay gating missing ${marker}`,
+  );
+}
+
+assert(
+  scannerClientSource.includes(
+    'data.lateStayOnly ==='
+  ) &&
+  !/data\.session\?\.status\s*===\s*"CLOSED"[\s\S]{0,120}scannerCanAcceptCard/.test(
+    scannerClientSource,
+  ),
+  "Closed attendance must not keep the camera live merely because status is CLOSED.",
+);
+
+for (
+  const marker of [
+    "This card is being processed as CHECK-IN",
+    "Normal dismissal at",
+    "Supervised late arrival",
+    "CHECK_OUT_WINDOW_CLOSED",
+    "terminalAttemptMessage",
+  ]
+) {
+  assert(
+    terminalScanRouteSource.includes(
+      marker,
+    ),
+    `Scanner window explanation missing ${marker}`,
+  );
+}
+
+assert(
+  scannerReasonMessage(
+    "CHECK_IN_WINDOW_CLOSED",
+    "Exact effective policy explanation.",
+  ) ===
+    "Exact effective policy explanation.",
+  "Scanner must prefer an exact server-side policy-window explanation.",
+);
 
 console.log(
   "CASA School Scanner PWA contract self-test passed.",

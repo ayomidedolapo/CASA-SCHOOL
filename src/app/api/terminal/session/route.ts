@@ -13,6 +13,7 @@ import {
 import {
   getTerminalAttendanceReadiness,
   getTerminalBranchAttendanceContext,
+  hasActiveLateStayAuthorizationForBranchSession,
 } from "@/server/attendance/branch-session";
 
 export const dynamic =
@@ -40,15 +41,33 @@ export async function GET(
         access.school.timezone,
     });
 
+  const lateStayOnly =
+    Boolean(
+      resolved.branch &&
+      resolved.session
+        ?.branchSessionId &&
+      resolved.session
+        .status ===
+        "CLOSED" &&
+      await hasActiveLateStayAuthorizationForBranchSession({
+        schoolId:
+          access.school.id,
+        sessionId:
+          resolved.session.id,
+        branchId:
+          resolved.branch.id,
+      }),
+    );
+
   const readiness =
     getTerminalAttendanceReadiness(
       resolved,
       {
-        // A closed campus session may still accept an explicitly
-        // authorized late-stay checkout. The scan endpoint performs
-        // the student-specific authorization check.
+        // Closed attendance normally turns the scanner off. It remains
+        // available only while a real, unexpired late-stay authorization
+        // exists for this campus session.
         allowClosedForLateStay:
-          true,
+          lateStayOnly,
       },
     );
 
@@ -85,6 +104,7 @@ export async function GET(
             }
           : null,
       readiness,
+      lateStayOnly,
     },
     {
       headers:
