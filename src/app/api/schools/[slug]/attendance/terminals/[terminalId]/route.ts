@@ -27,6 +27,10 @@ import {
 import {
   terminalLifecycleSchema,
 } from "@/server/attendance/validation";
+import {
+  assignTerminalToBranch,
+  listVisibleBranches,
+} from "@/server/school-operations/operations";
 
 export const dynamic =
   "force-dynamic";
@@ -159,6 +163,8 @@ export async function PATCH(
     > = {
       ROTATE_CREDENTIAL:
         "TERMINAL_ROTATE",
+      ASSIGN_CAMPUS:
+        "TERMINAL_PROVISION",
       SUSPEND:
         "TERMINAL_SUSPEND",
       REACTIVATE:
@@ -184,6 +190,87 @@ export async function PATCH(
 
     const now =
       new Date().toISOString();
+
+    if (
+      parsed.data.action ===
+      "ASSIGN_CAMPUS"
+    ) {
+      // Capture the discriminated-union field before entering callbacks.
+      // TypeScript does not retain parsed.data narrowing across the
+      // Array.find closure even though this branch has already proven
+      // action === ASSIGN_CAMPUS.
+      const requestedBranchId =
+        parsed.data.branchId;
+
+      const visibility =
+        await listVisibleBranches(
+          slug,
+        );
+
+      const selectedBranch =
+        visibility.branches.find(
+          (branch) =>
+            String(
+              (
+                branch as {
+                  id: unknown;
+                }
+              ).id,
+            ) ===
+            requestedBranchId,
+        ) ??
+        null;
+
+      if (!selectedBranch) {
+        return NextResponse.json(
+          {
+            message:
+              "That campus is not available to this operator.",
+            code:
+              "TERMINAL_CAMPUS_SCOPE_DENIED",
+          },
+          {
+            status: 403,
+            headers:
+              attendanceNoStoreHeaders,
+          },
+        );
+      }
+
+      await assignTerminalToBranch({
+        access,
+        branchId:
+          requestedBranchId,
+        terminalId,
+      });
+
+      return NextResponse.json(
+        {
+          terminal: {
+            id:
+              terminalId,
+            status:
+              current.status,
+            credentialVersion:
+              current.credentialVersion,
+            branchId:
+              requestedBranchId,
+            branchName:
+              String(
+                (
+                  selectedBranch as {
+                    name: unknown;
+                  }
+                ).name,
+              ),
+          },
+        },
+        {
+          headers:
+            attendanceNoStoreHeaders,
+        },
+      );
+    }
 
     if (
       parsed.data.action ===

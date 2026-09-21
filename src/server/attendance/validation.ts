@@ -7,6 +7,11 @@ export const terminalProvisionSchema =
       .trim()
       .min(1)
       .max(120),
+    branchId: z
+      .string()
+      .uuid()
+      .optional()
+      .nullable(),
   });
 
 export const terminalLifecycleSchema =
@@ -56,6 +61,15 @@ export const terminalLifecycleSchema =
           .max(240)
           .optional()
           .nullable(),
+      }),
+      z.object({
+        action:
+          z.literal(
+            "ASSIGN_CAMPUS",
+          ),
+        branchId: z
+          .string()
+          .uuid(),
       }),
     ],
   );

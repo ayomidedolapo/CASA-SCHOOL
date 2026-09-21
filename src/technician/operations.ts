@@ -4,11 +4,13 @@ export type BiometricEnrollmentAction =
 
 export type TerminalLifecycleAction =
   | "ROTATE_CREDENTIAL"
+  | "ASSIGN_CAMPUS"
   | "SUSPEND"
   | "REACTIVATE"
   | "REVOKE";
 
 export type TerminalPasskeyAction =
+  | "TERMINAL_PROVISION"
   | "TERMINAL_ROTATE"
   | "TERMINAL_SUSPEND"
   | "TERMINAL_REACTIVATE"
@@ -33,6 +35,8 @@ export function terminalPasskeyAction(
     > = {
       ROTATE_CREDENTIAL:
         "TERMINAL_ROTATE",
+      ASSIGN_CAMPUS:
+        "TERMINAL_PROVISION",
       SUSPEND:
         "TERMINAL_SUSPEND",
       REACTIVATE:

@@ -242,6 +242,93 @@ assert(
   "Technician workbench must show each scanner campus.",
 );
 
+const terminalLifecycleRouteSource =
+  fs.readFileSync(
+    "src/app/api/schools/[slug]/attendance/terminals/[terminalId]/route.ts",
+    "utf8",
+  );
+
+const terminalValidationSource =
+  fs.readFileSync(
+    "src/server/attendance/validation.ts",
+    "utf8",
+  );
+
+const technicianOperationsSource =
+  fs.readFileSync(
+    "src/technician/operations.ts",
+    "utf8",
+  );
+
+for (
+  const marker of [
+    "TERMINAL_CAMPUS_REQUIRED",
+    "school_branch_terminals",
+    "selectedBranchId",
+    "selectedBranchName",
+  ]
+) {
+  assert(
+    terminalListRouteSource.includes(
+      marker,
+    ),
+    `New terminal provisioning must bind campus: ${marker}`,
+  );
+}
+
+for (
+  const marker of [
+    "ASSIGN_CAMPUS",
+    "assignTerminalToBranch",
+    "listVisibleBranches",
+    "TERMINAL_CAMPUS_SCOPE_DENIED",
+  ]
+) {
+  assert(
+    terminalLifecycleRouteSource.includes(
+      marker,
+    ),
+    `Existing terminal campus repair missing ${marker}`,
+  );
+}
+
+assert(
+  terminalValidationSource.includes(
+    '"ASSIGN_CAMPUS"',
+  ) &&
+  terminalValidationSource.includes(
+    "branchId",
+  ),
+  "Terminal validation must carry campus assignment.",
+);
+
+assert(
+  technicianOperationsSource.includes(
+    "ASSIGN_CAMPUS:"
+  ) &&
+  technicianOperationsSource.includes(
+    '"TERMINAL_PROVISION"',
+  ),
+  "Campus assignment must retain Passkey provisioning authority.",
+);
+
+for (
+  const marker of [
+    "Select campus",
+    "Assign campus",
+    "Change campus",
+    "Legacy scanner: assign a campus",
+    "newTerminalBranchId",
+  ]
+) {
+  assert(
+    technicianSource.includes(
+      marker,
+    ),
+    `Technician terminal campus UX missing ${marker}`,
+  );
+}
+
 console.log(
   "CASA School Scanner PWA contract self-test passed.",
 );

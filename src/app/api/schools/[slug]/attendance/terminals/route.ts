@@ -26,6 +26,9 @@ import {
 import {
   terminalProvisionSchema,
 } from "@/server/attendance/validation";
+import {
+  listVisibleBranches,
+} from "@/server/school-operations/operations";
 
 export const dynamic =
   "force-dynamic";
@@ -214,6 +217,73 @@ export async function POST(
       );
     }
 
+    const visibility =
+      await listVisibleBranches(
+        slug,
+      );
+
+    const requestedBranchId =
+      parsed.data.branchId ??
+      null;
+
+    const selectedBranch =
+      requestedBranchId
+        ? visibility.branches.find(
+            (branch) =>
+              String(
+                (
+                  branch as {
+                    id: unknown;
+                  }
+                ).id,
+              ) ===
+              requestedBranchId,
+          ) ??
+          null
+        : visibility.branches.length ===
+            1
+          ? visibility.branches[0]
+          : null;
+
+    if (!selectedBranch) {
+      return NextResponse.json(
+        {
+          message:
+            visibility.branches.length >
+            1
+              ? "Select the campus this scanner belongs to before provisioning it."
+              : "No active campus is available for this scanner.",
+          code:
+            visibility.branches.length >
+            1
+              ? "TERMINAL_CAMPUS_REQUIRED"
+              : "TERMINAL_CAMPUS_UNAVAILABLE",
+        },
+        {
+          status: 400,
+          headers:
+            attendanceNoStoreHeaders,
+        },
+      );
+    }
+
+    const selectedBranchId =
+      String(
+        (
+          selectedBranch as {
+            id: unknown;
+          }
+        ).id,
+      );
+    const selectedBranchName =
+      String(
+        (
+          selectedBranch as {
+            name: unknown;
+          }
+        ).name,
+      );
+
     await requirePasskeyStepUpGrant({
       token:
         request.headers.get(
@@ -262,23 +332,44 @@ export async function POST(
           id,
           school_id,
           credential_version
+      ),
+      inserted_event as (
+        insert into attendance_terminal_events (
+          school_id,
+          terminal_id,
+          actor_membership_id,
+          event_type,
+          credential_version,
+          created_at
+        )
+        select
+          inserted_terminal.school_id,
+          inserted_terminal.id,
+          ${access.membership.id}::uuid,
+          'PROVISIONED'::attendance_terminal_event_type,
+          inserted_terminal.credential_version,
+          ${now}::timestamptz
+        from inserted_terminal
+        returning
+          terminal_id
       )
-      insert into attendance_terminal_events (
+      insert into school_branch_terminals (
+        id,
         school_id,
+        branch_id,
         terminal_id,
-        actor_membership_id,
-        event_type,
-        credential_version,
         created_at
       )
       select
+        gen_random_uuid(),
         inserted_terminal.school_id,
+        ${selectedBranchId}::uuid,
         inserted_terminal.id,
-        ${access.membership.id}::uuid,
-        'PROVISIONED'::attendance_terminal_event_type,
-        inserted_terminal.credential_version,
         ${now}::timestamptz
       from inserted_terminal
+      join inserted_event
+        on inserted_event.terminal_id =
+           inserted_terminal.id
     `);
 
     return NextResponse.json(
@@ -293,6 +384,10 @@ export async function POST(
           status:
             "ACTIVE",
           credentialVersion: 1,
+          branchId:
+            selectedBranchId,
+          branchName:
+            selectedBranchName,
         },
         credential: {
           token:

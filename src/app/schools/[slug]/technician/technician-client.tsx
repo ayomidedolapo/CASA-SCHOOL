@@ -145,6 +145,14 @@ interface FaceCompletionResponse {
   code?: string;
 }
 
+interface BranchOption {
+  id: string;
+  name: string;
+  code: string;
+  is_headquarters?:
+    boolean;
+}
+
 interface Terminal {
   id: string;
   name: string;
@@ -322,6 +330,31 @@ export default function TechnicianClient(
     useState("");
 
   const [
+    branches,
+    setBranches,
+  ] =
+    useState<
+      BranchOption[]
+    >([]);
+
+  const [
+    newTerminalBranchId,
+    setNewTerminalBranchId,
+  ] =
+    useState("");
+
+  const [
+    terminalBranchSelections,
+    setTerminalBranchSelections,
+  ] =
+    useState<
+      Record<
+        string,
+        string
+      >
+    >({});
+
+  const [
     terminalReasons,
     setTerminalReasons,
   ] =
@@ -482,6 +515,59 @@ export default function TechnicianClient(
       ],
     );
 
+  const loadBranches =
+    useCallback(
+      async () => {
+        const response =
+          await fetch(
+            `/api/schools/${encodeURIComponent(
+              slug,
+            )}/branches`,
+            {
+              credentials:
+                "same-origin",
+              cache:
+                "no-store",
+            },
+          );
+
+        const body:
+          unknown =
+            await response.json();
+
+        if (!response.ok) {
+          throw new Error(
+            messageFromUnknown(
+              body,
+              "Campuses could not be loaded.",
+            ),
+          );
+        }
+
+        const data =
+          body as {
+            branches:
+              BranchOption[];
+          };
+
+        setBranches(
+          data.branches,
+        );
+
+        if (
+          data.branches.length ===
+            1
+        ) {
+          setNewTerminalBranchId(
+            data.branches[0].id,
+          );
+        }
+      },
+      [
+        slug,
+      ],
+    );
+
   const loadSelectedOperations =
     useCallback(
       async (
@@ -575,6 +661,7 @@ export default function TechnicianClient(
                 "",
               ),
               loadTerminals(),
+              loadBranches(),
             ]).catch(
               (
                 caught,
@@ -616,6 +703,7 @@ export default function TechnicianClient(
     [
       loadStudents,
       loadTerminals,
+      loadBranches,
     ],
   );
 
@@ -1041,9 +1129,25 @@ export default function TechnicianClient(
     const name =
       terminalName.trim();
 
+    const branchId =
+      newTerminalBranchId ||
+      (
+        branches.length ===
+          1
+          ? branches[0].id
+          : ""
+      );
+
     if (!name) {
       setError(
         "Enter a clear scanner name.",
+      );
+      return;
+    }
+
+    if (!branchId) {
+      setError(
+        "Select the campus this scanner belongs to.",
       );
       return;
     }
@@ -1091,6 +1195,7 @@ export default function TechnicianClient(
             body:
               JSON.stringify({
                 name,
+                branchId,
               }),
           },
         );
@@ -1114,6 +1219,10 @@ export default function TechnicianClient(
             id:
               string;
             name:
+              string;
+            branchId:
+              string;
+            branchName:
               string;
           };
           credential: {
@@ -1150,8 +1259,14 @@ export default function TechnicianClient(
       setTerminalName(
         "",
       );
+      setNewTerminalBranchId(
+        branches.length ===
+          1
+          ? branches[0].id
+          : "",
+      );
       setNotice(
-        "Scanner provisioned. Transfer the one-time credential directly to that device.",
+        `Scanner provisioned and assigned to ${data.terminal.branchName}. Transfer the one-time credential directly to that device.`,
       );
 
       await loadTerminals();
@@ -1174,12 +1289,25 @@ export default function TechnicianClient(
       Terminal,
     action:
       TerminalLifecycleAction,
+    branchId?:
+      string,
   ) {
     const reason =
       terminalReasons[
         terminal.id
       ]?.trim() ??
       "";
+
+    if (
+      action ===
+        "ASSIGN_CAMPUS" &&
+      !branchId
+    ) {
+      setError(
+        "Select a campus before assigning this scanner.",
+      );
+      return;
+    }
 
     if (
       terminalActionNeedsReason(
@@ -1238,12 +1366,20 @@ export default function TechnicianClient(
             cache:
               "no-store",
             body:
-              JSON.stringify({
-                action,
-                reason:
-                  reason ||
-                  null,
-              }),
+              JSON.stringify(
+                action ===
+                  "ASSIGN_CAMPUS"
+                  ? {
+                      action,
+                      branchId,
+                    }
+                  : {
+                      action,
+                      reason:
+                        reason ||
+                        null,
+                    },
+              ),
           },
         );
 
@@ -1255,7 +1391,10 @@ export default function TechnicianClient(
         throw new Error(
           messageFromUnknown(
             body,
-            "Scanner lifecycle action failed.",
+            action ===
+              "ASSIGN_CAMPUS"
+              ? "Scanner campus assignment failed."
+              : "Scanner lifecycle action failed.",
           ),
         );
       }
@@ -1266,6 +1405,10 @@ export default function TechnicianClient(
             id:
               string;
             status:
+              string;
+            branchId?:
+              string;
+            branchName?:
               string;
           };
           credential?: {
@@ -1308,10 +1451,13 @@ export default function TechnicianClient(
         action ===
           "ROTATE_CREDENTIAL"
           ? "Scanner credential rotated. The old credential no longer authenticates."
-          : `Scanner ${action.toLowerCase().replace(
-              "_",
-              " ",
-            )} completed.`,
+          : action ===
+              "ASSIGN_CAMPUS"
+            ? `Scanner assigned to ${data.terminal.branchName ?? "the selected campus"}.`
+            : `Scanner ${action.toLowerCase().replace(
+                "_",
+                " ",
+              )} completed.`,
       );
 
       await loadTerminals();
@@ -1320,7 +1466,10 @@ export default function TechnicianClient(
         caught instanceof
           Error
           ? caught.message
-          : "Scanner lifecycle action failed.",
+          : action ===
+              "ASSIGN_CAMPUS"
+            ? "Scanner campus assignment failed."
+            : "Scanner lifecycle action failed.",
       );
     } finally {
       setBusy(
@@ -1954,13 +2103,65 @@ export default function TechnicianClient(
                 }
               />
 
+              <select
+                className={
+                  styles.input
+                }
+                value={
+                  newTerminalBranchId ||
+                  (
+                    branches.length ===
+                      1
+                      ? branches[0].id
+                      : ""
+                  )
+                }
+                onChange={
+                  (
+                    event,
+                  ) =>
+                    setNewTerminalBranchId(
+                      event.target.value,
+                    )
+                }
+              >
+                <option value="">
+                  Select campus
+                </option>
+                {branches.map(
+                  (branch) => (
+                    <option
+                      key={
+                        branch.id
+                      }
+                      value={
+                        branch.id
+                      }
+                    >
+                      {
+                        branch.name
+                      }
+                    </option>
+                  ),
+                )}
+              </select>
+
               <button
                 type="button"
                 className={
                   styles.button
                 }
                 disabled={
-                  busy
+                  busy ||
+                  !(
+                    newTerminalBranchId ||
+                    (
+                      branches.length ===
+                        1
+                        ? branches[0].id
+                        : ""
+                    )
+                  )
                 }
                 onClick={
                   () =>
@@ -2105,6 +2306,119 @@ export default function TechnicianClient(
                     {terminal.status !==
                       "REVOKED" && (
                       <>
+                        <div
+                          className={
+                            styles.search
+                          }
+                        >
+                          <select
+                            className={
+                              styles.input
+                            }
+                            value={
+                              terminalBranchSelections[
+                                terminal.id
+                              ] ??
+                              terminal.branchId ??
+                              (
+                                branches.length ===
+                                  1
+                                  ? branches[0].id
+                                  : ""
+                              )
+                            }
+                            onChange={
+                              (
+                                event,
+                              ) =>
+                                setTerminalBranchSelections(
+                                  (
+                                    current,
+                                  ) => ({
+                                    ...current,
+                                    [terminal.id]:
+                                      event.target.value,
+                                  }),
+                                )
+                            }
+                          >
+                            <option value="">
+                              Select campus
+                            </option>
+                            {branches.map(
+                              (branch) => (
+                                <option
+                                  key={
+                                    branch.id
+                                  }
+                                  value={
+                                    branch.id
+                                  }
+                                >
+                                  {
+                                    branch.name
+                                  }
+                                </option>
+                              ),
+                            )}
+                          </select>
+
+                          <button
+                            type="button"
+                            className={
+                              styles.secondary
+                            }
+                            disabled={
+                              busy ||
+                              !(
+                                terminalBranchSelections[
+                                  terminal.id
+                                ] ??
+                                terminal.branchId ??
+                                (
+                                  branches.length ===
+                                    1
+                                    ? branches[0].id
+                                    : ""
+                                )
+                              )
+                            }
+                            onClick={
+                              () =>
+                                void mutateTerminal(
+                                  terminal,
+                                  "ASSIGN_CAMPUS",
+                                  terminalBranchSelections[
+                                    terminal.id
+                                  ] ??
+                                  terminal.branchId ??
+                                  (
+                                    branches.length ===
+                                      1
+                                      ? branches[0].id
+                                      : ""
+                                  ),
+                                )
+                            }
+                          >
+                            {
+                              terminal.branchId
+                                ? "Change campus"
+                                : "Assign campus"
+                            }
+                          </button>
+                        </div>
+
+                        {!terminal.branchId && (
+                          <p
+                            className={
+                              styles.small
+                            }
+                          >
+                            Legacy scanner: assign a campus before using it for Attendance.
+                          </p>
+                        )}
+
                         <input
                           className={
                             `${styles.input} ${styles.reason}`
