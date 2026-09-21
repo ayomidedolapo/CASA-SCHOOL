@@ -541,18 +541,190 @@ export async function getTerminalBranchAttendanceContext(input: {
   now?: Date;
 }) {
   const db = getDb();
-  const terminalBranch = rowsOf<{ branch_id: string; branch_name: string; branch_status: string }>(await db.execute(sql`
-    select b.id::text as branch_id, b.name as branch_name, b.status::text as branch_status
-    from school_branch_terminals m
-    join school_branches b on b.school_id = m.school_id and b.id = m.branch_id
-    where m.school_id = ${input.schoolId}::uuid and m.terminal_id = ${input.terminalId}::uuid
-    limit 1
-  `))[0];
-  if (!terminalBranch || terminalBranch.branch_status !== "ACTIVE") {
-    return { branch: null, ...(await getBranchAttendanceContext({ schoolId: input.schoolId, branchId: "00000000-0000-0000-0000-000000000000", timezone: input.timezone, now: input.now })) };
+  const clock =
+    getSchoolClock(
+      input.now ??
+        new Date(),
+      input.timezone,
+    );
+
+  const terminalBranch =
+    rowsOf<{
+      branch_id:
+        string;
+      branch_name:
+        string;
+      branch_status:
+        string;
+    }>(
+      await db.execute(sql`
+        select
+          b.id::text as branch_id,
+          b.name as branch_name,
+          b.status::text as branch_status
+        from school_branch_terminals m
+        join school_branches b
+          on b.school_id =
+             m.school_id
+         and b.id =
+             m.branch_id
+        where
+          m.school_id =
+            ${input.schoolId}::uuid
+          and m.terminal_id =
+            ${input.terminalId}::uuid
+        limit 1
+      `),
+    )[0];
+
+  if (!terminalBranch) {
+    return {
+      branch:
+        null,
+      clock,
+      session:
+        null,
+      policyDay:
+        null,
+    };
   }
-  const context = await getBranchAttendanceContext({ schoolId: input.schoolId, branchId: terminalBranch.branch_id, timezone: input.timezone, now: input.now });
-  return { branch: { id: terminalBranch.branch_id, name: terminalBranch.branch_name }, ...context };
+
+  const context =
+    await getBranchAttendanceContext({
+      schoolId:
+        input.schoolId,
+      branchId:
+        terminalBranch.branch_id,
+      timezone:
+        input.timezone,
+      now:
+        input.now,
+    });
+
+  return {
+    branch: {
+      id:
+        terminalBranch.branch_id,
+      name:
+        terminalBranch.branch_name,
+      status:
+        terminalBranch.branch_status,
+    },
+    ...context,
+  };
+}
+
+export type TerminalAttendanceReadinessCode =
+  | "TERMINAL_BRANCH_UNASSIGNED"
+  | "BRANCH_INACTIVE"
+  | "ATTENDANCE_BRANCH_SESSION_NOT_PREPARED"
+  | "ATTENDANCE_BRANCH_NOT_OPEN"
+  | "ATTENDANCE_BRANCH_CLOSED"
+  | "ATTENDANCE_POLICY_DAY_MISSING";
+
+export function getTerminalAttendanceReadiness(
+  context:
+    Awaited<
+      ReturnType<
+        typeof getTerminalBranchAttendanceContext
+      >
+    >,
+  options: {
+    allowClosedForLateStay?:
+      boolean;
+  } = {},
+): {
+  code:
+    TerminalAttendanceReadinessCode;
+  message:
+    string;
+} | null {
+  if (!context.branch) {
+    return {
+      code:
+        "TERMINAL_BRANCH_UNASSIGNED",
+      message:
+        "This scanner is not assigned to a campus. Ask the School Technician to assign it to the correct campus.",
+    };
+  }
+
+  if (
+    context.branch.status !==
+      "ACTIVE"
+  ) {
+    return {
+      code:
+        "BRANCH_INACTIVE",
+      message:
+        `${context.branch.name} is not an active campus, so this scanner cannot record attendance there.`,
+    };
+  }
+
+  if (
+    !context.session ||
+    !context.session
+      .branchSessionId
+  ) {
+    return {
+      code:
+        "ATTENDANCE_BRANCH_SESSION_NOT_PREPARED",
+      message:
+        `Attendance has not been prepared for ${context.branch.name} today.`,
+    };
+  }
+
+  if (
+    context.session.status ===
+      "PLANNED"
+  ) {
+    return {
+      code:
+        "ATTENDANCE_BRANCH_NOT_OPEN",
+      message:
+        `Attendance is prepared for ${context.branch.name}, but it has not been opened yet. Use Open today on the Attendance page.`,
+    };
+  }
+
+  if (
+    context.session.status ===
+      "CANCELLED" ||
+    (
+      context.session.status ===
+        "CLOSED" &&
+      options.allowClosedForLateStay !==
+        true
+    ) ||
+    context.session.status ===
+      null
+  ) {
+    return {
+      code:
+        "ATTENDANCE_BRANCH_CLOSED",
+      message:
+        `Attendance for ${context.branch.name} is closed right now.`,
+    };
+  }
+
+  if (
+    context.session.mode !==
+      "PRESENCE_ONLY" &&
+    !context.policyDay &&
+    !(
+      context.session.status ===
+        "CLOSED" &&
+      options.allowClosedForLateStay ===
+        true
+    )
+  ) {
+    return {
+      code:
+        "ATTENDANCE_POLICY_DAY_MISSING",
+      message:
+        `Attendance is open for ${context.branch.name}, but today's timetable is missing from the policy bound to this session. On Attendance, use Use current policy and try again.`,
+    };
+  }
+
+  return null;
 }
 
 export async function findActiveLateStayAuthorization(input: {

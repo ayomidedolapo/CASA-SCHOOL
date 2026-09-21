@@ -1,3 +1,5 @@
+import fs from "node:fs";
+
 import {
   createScannerRequestId,
   isTerminalCredentialShape,
@@ -82,6 +84,109 @@ assert(
       "staff",
     ),
   "Early departure must surface staff authorization.",
+);
+
+for (
+  const [
+    code,
+    expected,
+  ] of [
+    [
+      "TERMINAL_BRANCH_UNASSIGNED",
+      "campus",
+    ],
+    [
+      "ATTENDANCE_BRANCH_NOT_OPEN",
+      "opened",
+    ],
+    [
+      "ATTENDANCE_POLICY_DAY_MISSING",
+      "policy",
+    ],
+    [
+      "TERMINAL_BRANCH_MISMATCH",
+      "different campus",
+    ],
+    [
+      "NON_INSTRUCTIONAL_DAY",
+      "non-instructional",
+    ],
+  ] as const
+) {
+  assert(
+    scannerReasonMessage(
+      code,
+    )
+      .toLowerCase()
+      .includes(
+        expected,
+      ),
+    `Scanner reason ${code} must explain ${expected}.`,
+  );
+}
+
+assert(
+  scannerReasonMessage(
+    "UNMAPPED_SERVER_CODE",
+    "Exact server diagnosis.",
+  ) ===
+    "Exact server diagnosis.",
+  "Unknown scanner codes must retain the exact server diagnosis.",
+);
+
+const scannerClientSource =
+  fs.readFileSync(
+    "src/app/scanner/scanner-client.tsx",
+    "utf8",
+  );
+
+const terminalSessionRouteSource =
+  fs.readFileSync(
+    "src/app/api/terminal/session/route.ts",
+    "utf8",
+  );
+
+const branchSessionSource =
+  fs.readFileSync(
+    "src/server/attendance/branch-session.ts",
+    "utf8",
+  );
+
+assert(
+  /context\.session\.status\s*===\s*"CLOSED"[\s\S]*options\.allowClosedForLateStay\s*===\s*true/.test(
+    branchSessionSource,
+  ),
+  "Authorized late-stay checkout must not require a policy-day row after the campus session closes.",
+);
+
+assert(
+  terminalSessionRouteSource.includes(
+    "allowClosedForLateStay",
+  ),
+  "Terminal session readiness must preserve authorized late-stay checkout after close.",
+);
+
+assert(
+  scannerClientSource.includes(
+    'data.session?.status ===\n                "CLOSED"',
+  ) ||
+  /data\.session\?\.status\s*===\s*"CLOSED"/.test(
+    scannerClientSource,
+  ),
+  "Scanner must remain available for the closed-session late-stay path.",
+);
+
+assert(
+  scannerClientSource.includes(
+    "const handleDecoded =",
+  ) &&
+  scannerClientSource.includes(
+    "onDecoded={",
+  ) &&
+  scannerClientSource.includes(
+    "handleDecoded",
+  ),
+  "Fast READY-state refreshes must use a stable QR decoded callback.",
 );
 
 console.log(

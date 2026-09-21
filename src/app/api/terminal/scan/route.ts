@@ -36,6 +36,7 @@ import {
 } from "@/server/attendance/terminal-auth";
 import {
   findActiveLateStayAuthorization,
+  getTerminalAttendanceReadiness,
   getTerminalBranchAttendanceContext,
   reserveLateStayAuthorization,
 } from "@/server/attendance/branch-session";
@@ -68,6 +69,53 @@ type AttemptResult = {
 function rowsOf<T>(r:unknown):T[]{if(Array.isArray(r))return r as T[];if(r&&typeof r==="object"&&"rows" in r&&Array.isArray((r as {rows?:unknown}).rows))return (r as {rows:T[]}).rows;return []}
 
 async function studentDisplayDetail(db:ReturnType<typeof getDb>,schoolId:string,studentId:string){return rowsOf<{schoolName:string;branchName:string|null;className:string|null;sex:string|null}>(await db.execute(sql`select sc.name as "schoolName",b.name as "branchName",concat_ws(' ',cl.name,ca.name) as "className",s.sex::text as sex from students s join schools sc on sc.id=s.school_id left join lateral(select e.class_arm_id from student_enrollments e where e.school_id=s.school_id and e.student_id=s.id and e.status='ACTIVE' order by e.created_at desc limit 1) e on true left join class_arms ca on ca.school_id=s.school_id and ca.id=e.class_arm_id left join class_levels cl on cl.school_id=ca.school_id and cl.id=ca.class_level_id left join school_branch_class_arms ba on ba.school_id=s.school_id and ba.class_arm_id=ca.id left join school_branches b on b.school_id=s.school_id and b.id=ba.branch_id where s.school_id=${schoolId}::uuid and s.id=${studentId}::uuid limit 1`))[0]??null}
+
+async function studentPresenceRecord(
+  db:
+    ReturnType<
+      typeof getDb
+    >,
+  schoolId:
+    string,
+  sessionId:
+    string,
+  studentId:
+    string,
+) {
+  const rows =
+    await db
+      .select({
+        id:
+          studentAttendanceRecords.id,
+        presenceState:
+          studentAttendanceRecords.presenceState,
+      })
+      .from(
+        studentAttendanceRecords,
+      )
+      .where(
+        and(
+          eq(
+            studentAttendanceRecords.schoolId,
+            schoolId,
+          ),
+          eq(
+            studentAttendanceRecords.sessionId,
+            sessionId,
+          ),
+          eq(
+            studentAttendanceRecords.studentId,
+            studentId,
+          ),
+        ),
+      )
+      .limit(1);
+
+  return (
+    rows[0] ??
+    null
+  );
+}
 
 function attemptResponse(
   attempt: AttemptResult,
@@ -199,24 +247,38 @@ export async function POST(
       timezone: access.school.timezone,
     });
 
+  const readinessRejection =
+    getTerminalAttendanceReadiness(
+      active,
+      {
+        // Closed sessions still reach the existing late-stay checkout
+        // authority below. Normal scans are rejected there.
+        allowClosedForLateStay:
+          true,
+      },
+    );
+
   if (
-    !active.branch ||
-    !active.session ||
-    !active.session.branchSessionId ||
-    (!active.policyDay && active.session.mode !== "PRESENCE_ONLY")
+    readinessRejection
   ) {
     return NextResponse.json(
-      {
-        message:
-          "No active attendance session is available for this terminal.",
-        code:
-          "NO_ACTIVE_SESSION",
-      },
+      readinessRejection,
       {
         status: 409,
         headers:
           attendanceNoStoreHeaders,
       },
+    );
+  }
+
+  if (
+    !active.branch ||
+    !active.session ||
+    !active.session
+      .branchSessionId
+  ) {
+    throw new Error(
+      "TERMINAL_ATTENDANCE_READINESS_INVARIANT",
     );
   }
 
@@ -472,21 +534,50 @@ export async function POST(
       reasonCode =
         "STUDENT_NOT_ACTIVE";
     }
-  }  if (
+  }  let prefetchedStudentDetail:
+    | Awaited<
+        ReturnType<
+          typeof studentDisplayDetail
+        >
+      >
+    | null =
+      null;
+
+  if (
     card &&
     outcome === "PENDING"
   ) {
-    const operationalScope =
-      await resolveAttendanceOperationalScope({
-        schoolId:
+    const [
+      operationalScope,
+      record,
+      studentDetail,
+    ] =
+      await Promise.all([
+        resolveAttendanceOperationalScope({
+          schoolId:
+            access.school.id,
+          sessionId:
+            active.session.id,
+          terminalId:
+            access.terminal.id,
+          studentId:
+            card.studentId,
+        }),
+        studentPresenceRecord(
+          db,
           access.school.id,
-        sessionId:
           active.session.id,
-        terminalId:
-          access.terminal.id,
-        studentId:
           card.studentId,
-      });
+        ),
+        studentDisplayDetail(
+          db,
+          access.school.id,
+          card.studentId,
+        ),
+      ]);
+
+    prefetchedStudentDetail =
+      studentDetail;
 
     const scopeRejection =
       getAttendanceScopeRejection(
@@ -502,45 +593,6 @@ export async function POST(
       classification =
         scopeRejection.classification;
     }
-  }
-
-
-
-  if (
-    card &&
-    outcome === "PENDING"
-  ) {
-    const existingRecords =
-      await db
-        .select({
-          id:
-            studentAttendanceRecords.id,
-          presenceState:
-            studentAttendanceRecords.presenceState,
-        })
-        .from(
-          studentAttendanceRecords,
-        )
-        .where(
-          and(
-            eq(
-              studentAttendanceRecords.schoolId,
-              access.school.id,
-            ),
-            eq(
-              studentAttendanceRecords.sessionId,
-              active.session.id,
-            ),
-            eq(
-              studentAttendanceRecords.studentId,
-              card.studentId,
-            ),
-          ),
-        )
-        .limit(1);
-
-    const record =
-      existingRecords[0];
 
     resolvedOperation =
       resolveTerminalScanOperation(
@@ -549,147 +601,268 @@ export async function POST(
           null,
       );
 
-    if (active.session.status !== "OPEN") {
-      if (active.session.status === "PLANNED") {
-        outcome = "REJECTED";
-        reasonCode = "ATTENDANCE_BRANCH_NOT_OPEN";
-        classification = "ATTENDANCE_BRANCH_NOT_OPEN";
+    if (
+      outcome === "PENDING" &&
+      active.session.status !==
+        "OPEN"
+    ) {
+      if (
+        active.session.status ===
+          "PLANNED"
+      ) {
+        outcome =
+          "REJECTED";
+        reasonCode =
+          "ATTENDANCE_BRANCH_NOT_OPEN";
+        classification =
+          "ATTENDANCE_BRANCH_NOT_OPEN";
       } else if (
-        active.session.status === "CLOSED" &&
-        resolvedOperation === "CHECK_OUT" &&
-        record?.presenceState === "ON_CAMPUS" &&
-        active.branch
+        active.session.status ===
+          "CLOSED" &&
+        resolvedOperation ===
+          "CHECK_OUT" &&
+        record?.presenceState ===
+          "ON_CAMPUS"
       ) {
         lateStayAuthorization =
           await findActiveLateStayAuthorization({
-            schoolId: access.school.id,
-            sessionId: active.session.id,
-            branchId: active.branch.id,
-            studentId: card.studentId,
-            attendanceRecordId: record.id,
+            schoolId:
+              access.school.id,
+            sessionId:
+              active.session.id,
+            branchId:
+              active.branch.id,
+            studentId:
+              card.studentId,
+            attendanceRecordId:
+              record.id,
           });
 
-        if (lateStayAuthorization) {
-          departureResult = "NORMAL";
+        if (
+          lateStayAuthorization
+        ) {
+          departureResult =
+            "NORMAL";
           manualVerifiedByMembershipId =
-            lateStayAuthorization.authorized_by_membership_id;
-          classification = "LATE_STAY";
-          reasonCode = null;
+            lateStayAuthorization
+              .authorized_by_membership_id;
+          classification =
+            "LATE_STAY";
+          reasonCode =
+            null;
         } else {
-          outcome = "REJECTED";
-          reasonCode = "ATTENDANCE_BRANCH_CLOSED";
-          classification = "ATTENDANCE_BRANCH_CLOSED";
+          outcome =
+            "REJECTED";
+          reasonCode =
+            "ATTENDANCE_BRANCH_CLOSED";
+          classification =
+            "ATTENDANCE_BRANCH_CLOSED";
         }
       } else {
-        outcome = "REJECTED";
-        reasonCode = "ATTENDANCE_BRANCH_CLOSED";
-        classification = "ATTENDANCE_BRANCH_CLOSED";
+        outcome =
+          "REJECTED";
+        reasonCode =
+          "ATTENDANCE_BRANCH_CLOSED";
+        classification =
+          "ATTENDANCE_BRANCH_CLOSED";
       }
     }
 
-    const presenceOnly = active.session.mode === "PRESENCE_ONLY";
+    const presenceOnly =
+      active.session.mode ===
+        "PRESENCE_ONLY";
 
     if (
       outcome === "PENDING" &&
-      lateStayAuthorization === null &&
-      resolvedOperation === "CHECK_IN"
+      lateStayAuthorization ===
+        null &&
+      resolvedOperation ===
+        "CHECK_IN"
     ) {
       if (presenceOnly) {
-        classification = "PRESENCE_ONLY";
-        timeResult = "ON_TIME";
-      } else if (active.policyDay) {
-        classification = classifyCheckIn(
-          active.clock.clock,
-          active.policyDay.checkInOpensAt,
-          active.policyDay.onTimeUntil,
-          active.policyDay.checkInClosesAt,
-        );
+        classification =
+          "PRESENCE_ONLY";
+        timeResult =
+          "ON_TIME";
+      } else if (
+        active.policyDay
+      ) {
+        classification =
+          classifyCheckIn(
+            active.clock.clock,
+            active.policyDay
+              .checkInOpensAt,
+            active.policyDay
+              .onTimeUntil,
+            active.policyDay
+              .checkInClosesAt,
+          );
 
-        if (classification === "ON_TIME") {
-          timeResult = "ON_TIME";
-        } else if (classification === "LATE") {
-          timeResult = "LATE";
+        if (
+          classification ===
+            "ON_TIME"
+        ) {
+          timeResult =
+            "ON_TIME";
+        } else if (
+          classification ===
+            "LATE"
+        ) {
+          timeResult =
+            "LATE";
         } else {
-          timeResult = "OUTSIDE_WINDOW";
-          outcome = "REJECTED";
-          reasonCode = classification === "BEFORE_WINDOW"
-            ? "CHECK_IN_NOT_OPEN"
-            : "CHECK_IN_WINDOW_CLOSED";
+          timeResult =
+            "OUTSIDE_WINDOW";
+          outcome =
+            "REJECTED";
+          reasonCode =
+            classification ===
+              "BEFORE_WINDOW"
+              ? "CHECK_IN_NOT_OPEN"
+              : "CHECK_IN_WINDOW_CLOSED";
         }
       }
 
-      if (outcome === "PENDING" && record?.presenceState === "ON_CAMPUS") {
-        outcome = "REJECTED";
-        reasonCode = "ALREADY_CHECKED_IN";
+      if (
+        outcome ===
+          "PENDING" &&
+        record?.presenceState ===
+          "ON_CAMPUS"
+      ) {
+        outcome =
+          "REJECTED";
+        reasonCode =
+          "ALREADY_CHECKED_IN";
       }
 
-      if (outcome === "PENDING" && record?.presenceState === "SIGNED_OUT") {
-        outcome = "REJECTED";
-        reasonCode = "REENTRY_NOT_ENABLED";
+      if (
+        outcome ===
+          "PENDING" &&
+        record?.presenceState ===
+          "SIGNED_OUT"
+      ) {
+        outcome =
+          "REJECTED";
+        reasonCode =
+          "REENTRY_NOT_ENABLED";
       }
     } else if (
       outcome === "PENDING" &&
-      lateStayAuthorization === null
+      lateStayAuthorization ===
+        null
     ) {
-      classification = presenceOnly
-        ? "PRESENCE_ONLY"
-        : active.policyDay
-          ? classifyCheckOut(
-              active.clock.clock,
-              active.policyDay.normalDismissalAt,
-              active.policyDay.checkOutClosesAt,
-            )
-          : null;
+      classification =
+        presenceOnly
+          ? "PRESENCE_ONLY"
+          : active.policyDay
+            ? classifyCheckOut(
+                active.clock.clock,
+                active.policyDay
+                  .normalDismissalAt,
+                active.policyDay
+                  .checkOutClosesAt,
+              )
+            : null;
 
       if (!record) {
-        outcome = "REJECTED";
-        reasonCode = "NOT_CHECKED_IN";
-      } else if (record.presenceState === "SIGNED_OUT") {
-        outcome = "REJECTED";
-        reasonCode = "ALREADY_SIGNED_OUT";
-      } else if (presenceOnly || classification === "NORMAL") {
-        departureResult = "NORMAL";
-      } else if (classification === "EARLY") {
+        outcome =
+          "REJECTED";
+        reasonCode =
+          "NOT_CHECKED_IN";
+      } else if (
+        record.presenceState ===
+          "SIGNED_OUT"
+      ) {
+        outcome =
+          "REJECTED";
+        reasonCode =
+          "ALREADY_SIGNED_OUT";
+      } else if (
+        presenceOnly ||
+        classification ===
+          "NORMAL"
+      ) {
+        departureResult =
+          "NORMAL";
+      } else if (
+        classification ===
+          "EARLY"
+      ) {
         const preauthorizationRows =
           await db
             .select({
-              id: attendanceEarlyDeparturePreauthorizations.id,
-              attendanceRecordId: attendanceEarlyDeparturePreauthorizations.attendanceRecordId,
-              authorizedByMembershipId: attendanceEarlyDeparturePreauthorizations.authorizedByMembershipId,
-              passkeyGrantId: attendanceEarlyDeparturePreauthorizations.passkeyGrantId,
-              reason: attendanceEarlyDeparturePreauthorizations.reason,
+              id:
+                attendanceEarlyDeparturePreauthorizations.id,
+              attendanceRecordId:
+                attendanceEarlyDeparturePreauthorizations.attendanceRecordId,
+              authorizedByMembershipId:
+                attendanceEarlyDeparturePreauthorizations.authorizedByMembershipId,
+              passkeyGrantId:
+                attendanceEarlyDeparturePreauthorizations.passkeyGrantId,
+              reason:
+                attendanceEarlyDeparturePreauthorizations.reason,
             })
-            .from(attendanceEarlyDeparturePreauthorizations)
+            .from(
+              attendanceEarlyDeparturePreauthorizations,
+            )
             .where(
               and(
-                eq(attendanceEarlyDeparturePreauthorizations.schoolId, access.school.id),
-                eq(attendanceEarlyDeparturePreauthorizations.sessionId, active.session.id),
-                eq(attendanceEarlyDeparturePreauthorizations.studentId, card.studentId),
-                isNull(attendanceEarlyDeparturePreauthorizations.consumedAttemptId),
-                isNull(attendanceEarlyDeparturePreauthorizations.revokedAt),
+                eq(
+                  attendanceEarlyDeparturePreauthorizations.schoolId,
+                  access.school.id,
+                ),
+                eq(
+                  attendanceEarlyDeparturePreauthorizations.sessionId,
+                  active.session.id,
+                ),
+                eq(
+                  attendanceEarlyDeparturePreauthorizations.studentId,
+                  card.studentId,
+                ),
+                isNull(
+                  attendanceEarlyDeparturePreauthorizations.consumedAttemptId,
+                ),
+                isNull(
+                  attendanceEarlyDeparturePreauthorizations.revokedAt,
+                ),
               ),
             )
             .limit(1);
 
-        earlyPreauthorization = preauthorizationRows[0] ?? null;
+        earlyPreauthorization =
+          preauthorizationRows[0] ??
+          null;
 
         if (
           earlyPreauthorization &&
-          earlyPreauthorization.attendanceRecordId === record.id
+          earlyPreauthorization
+            .attendanceRecordId ===
+            record.id
         ) {
-          departureResult = "EARLY";
-          manualVerifiedByMembershipId = earlyPreauthorization.authorizedByMembershipId;
-          requiresStaffAuthorization = false;
-          reasonCode = null;
+          departureResult =
+            "EARLY";
+          manualVerifiedByMembershipId =
+            earlyPreauthorization
+              .authorizedByMembershipId;
+          requiresStaffAuthorization =
+            false;
+          reasonCode =
+            null;
         } else {
-          earlyPreauthorization = null;
-          requiresStaffAuthorization = true;
-          reasonCode = "EARLY_DEPARTURE_AUTH_REQUIRED";
+          earlyPreauthorization =
+            null;
+          requiresStaffAuthorization =
+            true;
+          reasonCode =
+            "EARLY_DEPARTURE_AUTH_REQUIRED";
         }
       } else {
-        departureResult = "OUTSIDE_WINDOW";
-        outcome = "REJECTED";
-        reasonCode = "CHECK_OUT_WINDOW_CLOSED";
+        departureResult =
+          "OUTSIDE_WINDOW";
+        outcome =
+          "REJECTED";
+        reasonCode =
+          "CHECK_OUT_WINDOW_CLOSED";
       }
     }
   }
@@ -985,17 +1158,38 @@ export async function POST(
     }
   }
 
+  const responseStudentDetail =
+    card &&
+    cardResult ===
+      "MATCHED"
+      ? prefetchedStudentDetail ??
+        await studentDisplayDetail(
+          db,
+          access.school.id,
+          card.studentId,
+        )
+      : null;
+
   const student =
     card &&
     cardResult === "MATCHED"
       ? {
-          id: card.studentId,
-          casaStudentId: card.casaStudentId,
-          firstName: card.firstName,
-          middleName: card.middleName,
-          lastName: card.lastName,
-          ...(await studentDisplayDetail(db,access.school.id,card.studentId) ?? {}),
-          schoolName: access.school.name,
+          id:
+            card.studentId,
+          casaStudentId:
+            card.casaStudentId,
+          firstName:
+            card.firstName,
+          middleName:
+            card.middleName,
+          lastName:
+            card.lastName,
+          ...(responseStudentDetail ??
+            {}),
+          schoolName:
+            responseStudentDetail
+              ?.schoolName ??
+            access.school.name,
         }
       : null;
 

@@ -57,6 +57,23 @@ const FaceLivenessDetectorCore =
     },
   );
 
+let qrScannerModulePromise:
+  Promise<
+    typeof import(
+      "qr-scanner"
+    )
+  > | null =
+    null;
+
+function loadQrScannerModule() {
+  qrScannerModulePromise ??=
+    import(
+      "qr-scanner"
+    );
+
+  return qrScannerModulePromise;
+}
+
 type Phase =
   | "BOOTING"
   | "UNPROVISIONED"
@@ -185,7 +202,10 @@ async function terminalFetchWithRetry(
     await new Promise<void>((resolve) => {
       window.setTimeout(
         resolve,
-        attempt * 500,
+        Math.min(
+          750,
+          attempt * 250,
+        ),
       );
     });
   }
@@ -431,9 +451,7 @@ function QrCamera(
             default:
               QrScanner,
           } =
-            await import(
-              "qr-scanner"
-            );
+            await loadQrScannerModule();
 
           if (
             disposedRef.current ||
@@ -484,6 +502,65 @@ function QrCamera(
               {
                 preferredCamera:
                   cameraFacing,
+                maxScansPerSecond:
+                  30,
+                calculateScanRegion:
+                  (
+                    sourceVideo,
+                  ) => {
+                    const width =
+                      sourceVideo
+                        .videoWidth;
+                    const height =
+                      sourceVideo
+                        .videoHeight;
+                    const smallest =
+                      Math.min(
+                        width,
+                        height,
+                      );
+                    const size =
+                      Math.max(
+                        1,
+                        Math.round(
+                          smallest *
+                            0.78,
+                        ),
+                      );
+
+                    return {
+                      x:
+                        Math.max(
+                          0,
+                          Math.round(
+                            (
+                              width -
+                              size
+                            ) /
+                              2,
+                          ),
+                        ),
+                      y:
+                        Math.max(
+                          0,
+                          Math.round(
+                            (
+                              height -
+                              size
+                            ) /
+                              2,
+                          ),
+                        ),
+                      width:
+                        size,
+                      height:
+                        size,
+                      downScaledWidth:
+                        480,
+                      downScaledHeight:
+                        480,
+                    };
+                  },
                 returnDetailedScanResult:
                   true,
                 highlightScanRegion:
@@ -925,6 +1002,15 @@ function QrCamera(
 }
 
 export default function ScannerClient() {
+  useEffect(
+    () => {
+      // Warm the QR decoder bundle while terminal/session state is loading.
+      // This removes decoder-module startup from the first card scan.
+      void loadQrScannerModule();
+    },
+    [],
+  );
+
   const [
     phase,
     setPhase,
@@ -1008,9 +1094,11 @@ export default function ScannerClient() {
       ) => {
         try {
           const response =
-            await terminalFetch(
+            await terminalFetchWithRetry(
               credential,
               "/api/terminal/session",
+              {},
+              2,
             );
 
           if (
@@ -1057,21 +1145,44 @@ export default function ScannerClient() {
             data,
           );
 
+          const scannerCanAcceptCard =
+            !data.readiness &&
+            (
+              data.session?.status ===
+                "OPEN" ||
+              data.session?.status ===
+                "CLOSED"
+            );
+
           if (
-            !data.session
+            !scannerCanAcceptCard
           ) {
             setPhase(
               "WAITING",
             );
             setMessage(
-              "Attendance is not open right now. This scanner will be ready when the school opens an attendance session.",
+              scannerReasonMessage(
+                data.readiness
+                  ?.code ??
+                  "NO_ACTIVE_SESSION",
+                data.readiness
+                  ?.message ??
+                  null,
+              ),
             );
           } else {
             setPhase(
               "READY",
             );
             setMessage(
-              "Hold your CASA student card in front of the camera.",
+              data.session?.status ===
+                "CLOSED"
+                ? data.branch
+                  ? `Attendance is closed at ${data.branch.name}. The scanner is available only for an authorized late-stay checkout.`
+                  : "Attendance is closed. The scanner is available only for an authorized late-stay checkout."
+                : data.branch
+                  ? `Ready at ${data.branch.name}. Hold the CASA student card QR inside the frame.`
+                  : "Hold your CASA student card in front of the camera.",
             );
           }
 
@@ -1268,13 +1379,66 @@ export default function ScannerClient() {
               );
             }
           },
-          60_000,
+          phase ===
+            "WAITING"
+            ? 5_000
+            : phase ===
+                "READY"
+              ? 15_000
+              : 60_000,
         );
 
       return () =>
         clearInterval(
           timer,
         );
+    },
+    [
+      token,
+      phase,
+      refreshTerminal,
+    ],
+  );
+
+  useEffect(
+    () => {
+      if (!token) {
+        return;
+      }
+
+      const refresh =
+        () => {
+          if (
+            phase ===
+              "READY" ||
+            phase ===
+              "WAITING"
+          ) {
+            void refreshTerminal(
+              token,
+            );
+          }
+        };
+
+      window.addEventListener(
+        "online",
+        refresh,
+      );
+      window.addEventListener(
+        "focus",
+        refresh,
+      );
+
+      return () => {
+        window.removeEventListener(
+          "online",
+          refresh,
+        );
+        window.removeEventListener(
+          "focus",
+          refresh,
+        );
+      };
     },
     [
       token,
@@ -1668,7 +1832,7 @@ export default function ScannerClient() {
 
         try {
           const response =
-            await terminalFetch(
+            await terminalFetchWithRetry(
               token,
               "/api/terminal/scan",
               {
@@ -1686,6 +1850,7 @@ export default function ScannerClient() {
                     qrPayload,
                   }),
               },
+              2,
             );
 
           const data =
@@ -1712,6 +1877,8 @@ export default function ScannerClient() {
                 data?.attempt
                   ?.reasonCode ??
                   data?.code ??
+                  null,
+                data?.message ??
                   null,
               ),
             );
@@ -1759,7 +1926,9 @@ export default function ScannerClient() {
             "ERROR",
           );
           setMessage(
-            "CASA could not process this student card.",
+            navigator.onLine
+              ? "The QR code was read, but the connection to CASA was interrupted. The scanner retried automatically; please try the card again."
+              : "This scanner is offline. Reconnect to the internet, then try the card again.",
           );
         }
       },
@@ -1767,6 +1936,21 @@ export default function ScannerClient() {
         token,
         phase,
         startFace,
+      ],
+    );
+
+  const handleDecoded =
+    useCallback(
+      (
+        payload:
+          string,
+      ) => {
+        void processCard(
+          payload,
+        );
+      },
+      [
+        processCard,
       ],
     );
 
@@ -2042,7 +2226,7 @@ export default function ScannerClient() {
       ? "Provision scanner."
       : phase ===
           "WAITING"
-        ? "Attendance closed."
+        ? "Scanner waiting."
         : phase ===
             "READY"
           ? "Scan student card."
@@ -2120,6 +2304,13 @@ export default function ScannerClient() {
                     terminalSession
                       .terminal
                       .name
+                  }
+                  <br />
+                  {
+                    terminalSession
+                      .branch
+                      ?.name ??
+                    "Campus not assigned"
                   }
                 </>
               )
@@ -2233,10 +2424,7 @@ export default function ScannerClient() {
           "READY" && (
           <QrCamera
             onDecoded={
-              (payload) =>
-                void processCard(
-                  payload,
-                )
+              handleDecoded
             }
             onFailure={
               cameraFailure

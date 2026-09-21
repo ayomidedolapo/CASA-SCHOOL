@@ -11,8 +11,9 @@ import {
   authenticateTerminalRequest,
 } from "@/server/attendance/terminal-auth";
 import {
-  getActiveTerminalSession,
-} from "@/server/attendance/terminal-session";
+  getTerminalAttendanceReadiness,
+  getTerminalBranchAttendanceContext,
+} from "@/server/attendance/branch-session";
 
 export const dynamic =
   "force-dynamic";
@@ -30,9 +31,25 @@ export async function GET(
   }
 
   const resolved =
-    await getActiveTerminalSession(
-      access.school.id,
-      access.school.timezone,
+    await getTerminalBranchAttendanceContext({
+      schoolId:
+        access.school.id,
+      terminalId:
+        access.terminal.id,
+      timezone:
+        access.school.timezone,
+    });
+
+  const readiness =
+    getTerminalAttendanceReadiness(
+      resolved,
+      {
+        // A closed campus session may still accept an explicitly
+        // authorized late-stay checkout. The scan endpoint performs
+        // the student-specific authorization check.
+        allowClosedForLateStay:
+          true,
+      },
     );
 
   return NextResponse.json(
@@ -55,6 +72,8 @@ export async function GET(
         credentialVersion:
           access.terminal.credentialVersion,
       },
+      branch:
+        resolved.branch,
       clock:
         resolved.clock,
       session:
@@ -65,6 +84,7 @@ export async function GET(
                 resolved.policyDay,
             }
           : null,
+      readiness,
     },
     {
       headers:

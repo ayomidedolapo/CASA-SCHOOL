@@ -10,12 +10,44 @@ export interface ScannerTerminalSession {
     terminalCode: string;
     credentialVersion: number;
   };
-  clock: unknown;
+  branch:
+    | {
+        id: string;
+        name: string;
+        status: string;
+      }
+    | null;
+  clock: {
+    date: string;
+    clock: string;
+    weekday: number;
+  };
   session:
     | {
         id: string;
+        branchSessionId:
+          string | null;
+        status:
+          | "PLANNED"
+          | "OPEN"
+          | "CLOSED"
+          | "CANCELLED"
+          | null;
+        mode:
+          | "INSTRUCTIONAL"
+          | "PRESENCE_ONLY";
+        policyId:
+          string | null;
+        policyDay?:
+          unknown;
         [key: string]:
           unknown;
+      }
+    | null;
+  readiness:
+    | {
+        code: string;
+        message: string;
       }
     | null;
 }
@@ -161,7 +193,25 @@ const reasonMessages:
     STUDENT_NOT_ACTIVE:
       "This student is not active.",
     NO_ACTIVE_SESSION:
-      "Attendance is not open right now.",
+      "Attendance is not open for this scanner right now.",
+    TERMINAL_BRANCH_UNASSIGNED:
+      "This scanner is not assigned to a campus. Ask the School Technician to assign it to the correct campus.",
+    ATTENDANCE_BRANCH_SESSION_NOT_PREPARED:
+      "Attendance has not been prepared for this scanner's campus today.",
+    ATTENDANCE_BRANCH_NOT_OPEN:
+      "Attendance is prepared for this campus, but it has not been opened yet.",
+    ATTENDANCE_BRANCH_CLOSED:
+      "Attendance for this scanner's campus is closed.",
+    ATTENDANCE_POLICY_DAY_MISSING:
+      "Attendance is open, but today's timetable is missing from the policy bound to this campus session. Use current policy on the Attendance page, then try again.",
+    TERMINAL_BRANCH_MISMATCH:
+      "This student belongs to a different campus from this scanner.",
+    STUDENT_BRANCH_UNRESOLVED:
+      "CASA could not resolve this student's campus from the active enrollment.",
+    BRANCH_INACTIVE:
+      "The scanner campus or student campus is inactive.",
+    NON_INSTRUCTIONAL_DAY:
+      "Today is configured as a non-instructional day for this campus.",
     CHECK_IN_NOT_OPEN:
       "Check-in has not opened yet.",
     CHECK_IN_WINDOW_CLOSED:
@@ -197,13 +247,19 @@ const reasonMessages:
 export function scannerReasonMessage(
   code:
     string | null | undefined,
+  serverMessage?:
+    string | null,
 ): string {
   if (!code) {
-    return "The attendance check could not be completed.";
+    return (
+      serverMessage ??
+      "The attendance check could not be completed."
+    );
   }
 
   return (
     reasonMessages[code] ??
-    "The attendance check could not be completed."
+    serverMessage ??
+    `The attendance check could not be completed (${code}).`
   );
 }
