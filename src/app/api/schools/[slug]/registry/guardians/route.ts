@@ -92,49 +92,6 @@ export async function GET(
         status: guardians.status,
         membershipId:
           guardians.membershipId,
-        notificationsEnabled:
-          sql<boolean>`exists (
-            select 1
-            from student_guardians relationship
-            join guardian_push_devices device
-              on device.school_id =
-                 relationship.school_id
-             and device.student_guardian_link_id =
-                 relationship.id
-            where
-              relationship.school_id =
-                ${guardians.schoolId}
-              and relationship.guardian_id =
-                ${guardians.id}
-              and relationship.receives_notifications = true
-              and device.status =
-                'ACTIVE'
-          )`.as(
-            "notificationsEnabled",
-          ),
-        activeNotificationDevices:
-          sql<number>`(
-            select
-              count(
-                distinct device.id
-              )::int
-            from student_guardians relationship
-            join guardian_push_devices device
-              on device.school_id =
-                 relationship.school_id
-             and device.student_guardian_link_id =
-                 relationship.id
-            where
-              relationship.school_id =
-                ${guardians.schoolId}
-              and relationship.guardian_id =
-                ${guardians.id}
-              and relationship.receives_notifications = true
-              and device.status =
-                'ACTIVE'
-          )`.as(
-            "activeNotificationDevices",
-          ),
       })
       .from(guardians)
       .where(whereCondition)
@@ -144,6 +101,94 @@ export async function GET(
         ),
       )
       .limit(100);
+
+    const notificationResult =
+      await db.execute(sql`
+        select
+          sg.guardian_id,
+          count(
+            distinct device.id
+          )::int as active_notification_devices
+        from student_guardians sg
+        join guardian_push_devices device
+          on device.school_id =
+             sg.school_id
+         and device.student_guardian_link_id =
+             sg.id
+        where
+          sg.school_id =
+            ${access.school.id}::uuid
+          and sg.receives_notifications = true
+          and device.status = 'ACTIVE'
+        group by
+          sg.guardian_id
+      `);
+
+    const notificationRows =
+      Array.isArray(
+        notificationResult,
+      )
+        ? notificationResult as Array<{
+            guardian_id: string;
+            active_notification_devices:
+              number;
+          }>
+        : (
+            notificationResult &&
+            typeof notificationResult ===
+              "object" &&
+            "rows" in
+              notificationResult &&
+            Array.isArray(
+              (
+                notificationResult as {
+                  rows?: unknown;
+                }
+              ).rows,
+            )
+              ? (
+                  notificationResult as unknown as {
+                    rows: Array<{
+                      guardian_id:
+                        string;
+                      active_notification_devices:
+                        number;
+                    }>;
+                  }
+                ).rows
+              : []
+          );
+
+    const notificationCountByGuardian =
+      new Map(
+        notificationRows.map(
+          (row) => [
+            row.guardian_id,
+            Number(
+              row.active_notification_devices ??
+                0,
+            ),
+          ] as const,
+        ),
+      );
+
+    const guardianRows =
+      rows.map(
+        (row) => {
+          const activeNotificationDevices =
+            notificationCountByGuardian.get(
+              row.id,
+            ) ?? 0;
+
+          return {
+            ...row,
+            notificationsEnabled:
+              activeNotificationDevices >
+              0,
+            activeNotificationDevices,
+          };
+        },
+      );
 
     const totals = await db
       .select({
@@ -159,7 +204,8 @@ export async function GET(
 
     return NextResponse.json(
       {
-        guardians: rows,
+        guardians:
+          guardianRows,
         total:
           Number(
             totals[0]?.count ?? 0,
@@ -180,7 +226,26 @@ export async function GET(
       return authResponse;
     }
 
-    throw error;
+    const databaseResponse =
+      registryDatabaseErrorResponse(
+        error,
+      );
+
+    if (databaseResponse) {
+      return databaseResponse;
+    }
+
+    return NextResponse.json(
+      {
+        message:
+          "Guardian registry could not be loaded.",
+      },
+      {
+        status: 500,
+        headers:
+          registryNoStoreHeaders,
+      },
+    );
   }
 }
 

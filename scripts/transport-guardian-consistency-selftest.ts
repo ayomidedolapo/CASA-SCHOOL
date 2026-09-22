@@ -119,7 +119,7 @@ const guardianRoute =
 
 requireText(
   guardianRoute,
-  "from student_guardians relationship",
+  "from student_guardians sg",
   "guardian relationship truth",
 );
 
@@ -131,14 +131,26 @@ requireText(
 
 requireText(
   guardianRoute,
-  "relationship.receives_notifications = true",
+  "sg.receives_notifications = true",
   "guardian notification opt-in truth",
 );
 
 requireText(
   guardianRoute,
-  "activeNotificationDevices",
-  "guardian active-device count",
+  "group by",
+  "guardian notification aggregate",
+);
+
+requireText(
+  guardianRoute,
+  "notificationCountByGuardian",
+  "guardian device count merge",
+);
+
+rejectRegex(
+  guardianRoute,
+  /\$\{guardians\.id\}/g,
+  "guardian correlated raw SQL",
 );
 
 const registry =
@@ -156,6 +168,18 @@ requireText(
   registry,
   "Notifications enabled ·",
   "guardian list enabled label",
+);
+
+requireText(
+  registry,
+  "await response.text()",
+  "registry resilient response parsing",
+);
+
+requireText(
+  registry,
+  "JSON.parse(",
+  "registry guarded JSON parsing",
 );
 
 console.log(

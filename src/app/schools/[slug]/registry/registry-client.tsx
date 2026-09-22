@@ -223,10 +223,29 @@ export function RegistryClient({
         },
       );
 
-      const body =
-        (await response.json()) as {
+      const responseText =
+        await response.text();
+
+      let body:
+        ({
           message?: string;
-        } & T;
+        } & T) |
+        null = null;
+
+      if (
+        responseText.trim()
+      ) {
+        try {
+          body =
+            JSON.parse(
+              responseText,
+            ) as {
+              message?: string;
+            } & T;
+        } catch {
+          body = null;
+        }
+      }
 
       if (response.status === 401) {
         router.push(
@@ -241,8 +260,14 @@ export function RegistryClient({
 
       if (!response.ok) {
         throw new Error(
-          body.message ??
-            "CASA could not complete the request.",
+          body?.message ??
+            `CASA could not complete the request (${response.status}).`,
+        );
+      }
+
+      if (!body) {
+        throw new Error(
+          "CASA returned an empty or invalid response.",
         );
       }
 
