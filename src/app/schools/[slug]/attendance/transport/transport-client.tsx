@@ -59,6 +59,14 @@ const weekdays = [
   "SAT",
 ];
 
+function normalizePolicyTime(
+  value: string,
+) {
+  return value.length >= 5
+    ? value.slice(0, 5)
+    : value;
+}
+
 async function jsonOrThrow(
   response: Response,
 ) {
@@ -68,11 +76,23 @@ async function jsonOrThrow(
     );
 
   if (!response.ok) {
-    throw new Error(
-      typeof body.message ===
+    const issue =
+      Array.isArray(
+        body.issues,
+      ) &&
+      typeof body.issues[0]?.message ===
         "string"
-        ? body.message
-        : "Request failed.",
+        ? body.issues[0].message
+        : null;
+
+    throw new Error(
+      issue ??
+        (
+          typeof body.message ===
+            "string"
+            ? body.message
+            : "Request failed."
+        ),
     );
   }
 
@@ -83,10 +103,17 @@ export default function TransportClient({
   slug,
   schoolName,
   schoolTimezone,
+  branches,
 }: {
   slug: string;
   schoolName: string;
   schoolTimezone: string;
+  branches: Array<{
+    id: string;
+    name: string;
+    code: string;
+    isHeadquarters: boolean;
+  }>;
 }) {
   const [policies, setPolicies] =
     useState<Policy[]>([]);
@@ -123,6 +150,27 @@ export default function TransportClient({
     useState(false);
   const [policyMessage, setPolicyMessage] =
     useState("");
+  const [
+    selectedBranchId,
+    setSelectedBranchId,
+  ] = useState(
+    branches[0]?.id ?? "",
+  );
+
+  const currentBranch =
+    useMemo(
+      () =>
+        branches.find(
+          (branch) =>
+            branch.id ===
+            selectedBranchId,
+        ) ??
+        null,
+      [
+        branches,
+        selectedBranchId,
+      ],
+    );
 
   const [query, setQuery] =
     useState("");
@@ -177,14 +225,22 @@ export default function TransportClient({
 
   const fetchPolicies =
     useCallback(async () => {
+      if (!selectedBranchId) {
+        return [];
+      }
+
       const body =
         await jsonOrThrow(
           await fetch(
             `/api/schools/${encodeURIComponent(
               slug,
+            )}/branches/${encodeURIComponent(
+              selectedBranchId,
             )}/attendance/policies`,
             {
               cache: "no-store",
+              credentials:
+                "same-origin",
             },
           ),
         );
@@ -194,7 +250,10 @@ export default function TransportClient({
       )
         ? body.policies as Policy[]
         : [];
-    }, [slug]);
+    }, [
+      slug,
+      selectedBranchId,
+    ]);
 
   const applyPolicies =
     useCallback(
@@ -224,6 +283,9 @@ export default function TransportClient({
               active.independentGraceMinutes,
             ),
           );
+        } else {
+          setBusGrace("0");
+          setIndependentGrace("0");
         }
       },
       [],
@@ -278,6 +340,9 @@ export default function TransportClient({
               active.independentGraceMinutes,
             ),
           );
+        } else {
+          setBusGrace("0");
+          setIndependentGrace("0");
         }
       } catch (error) {
         if (cancelled) {
@@ -306,9 +371,16 @@ export default function TransportClient({
   ) {
     event.preventDefault();
 
+    if (!selectedBranchId) {
+      setPolicyMessage(
+        "Choose a campus before configuring transport grace.",
+      );
+      return;
+    }
+
     if (!currentPolicy) {
       setPolicyMessage(
-        "Create an attendance policy before configuring transport grace.",
+        "Create an attendance policy for this campus before configuring transport grace.",
       );
       return;
     }
@@ -345,6 +417,8 @@ export default function TransportClient({
         await fetch(
           `/api/schools/${encodeURIComponent(
             slug,
+          )}/branches/${encodeURIComponent(
+            selectedBranchId,
           )}/attendance/policies`,
           {
             method: "POST",
@@ -368,15 +442,25 @@ export default function TransportClient({
                     weekday:
                       day.weekday,
                     checkInOpensAt:
-                      day.checkInOpensAt,
+                      normalizePolicyTime(
+                        day.checkInOpensAt,
+                      ),
                     onTimeUntil:
-                      day.onTimeUntil,
+                      normalizePolicyTime(
+                        day.onTimeUntil,
+                      ),
                     checkInClosesAt:
-                      day.checkInClosesAt,
+                      normalizePolicyTime(
+                        day.checkInClosesAt,
+                      ),
                     normalDismissalAt:
-                      day.normalDismissalAt,
+                      normalizePolicyTime(
+                        day.normalDismissalAt,
+                      ),
                     checkOutClosesAt:
-                      day.checkOutClosesAt,
+                      normalizePolicyTime(
+                        day.checkOutClosesAt,
+                      ),
                   }),
                 ),
             }),
@@ -580,6 +664,53 @@ export default function TransportClient({
         >
           <label className="grid gap-2 border-t border-black pt-4">
             <span className="font-mono text-[10px] uppercase tracking-[0.16em]">
+              Campus
+            </span>
+            {branches.length === 1 ? (
+              <div className="border-b border-black py-3 text-sm font-semibold">
+                {currentBranch?.name ?? "Campus unavailable"}
+                {currentBranch?.isHeadquarters
+                  ? " · HQ"
+                  : ""}
+              </div>
+            ) : (
+              <select
+                className="border border-black bg-transparent px-3 py-3"
+                value={selectedBranchId}
+                onChange={(event) => {
+                  setSelectedBranchId(
+                    event.target.value,
+                  );
+                  setPolicies([]);
+                  setPolicyMessage("");
+                }}
+                required
+              >
+                <option value="" disabled>
+                  Select campus
+                </option>
+                {branches.map(
+                  (branch) => (
+                    <option
+                      key={branch.id}
+                      value={branch.id}
+                    >
+                      {branch.name}
+                      {branch.isHeadquarters
+                        ? " · HQ"
+                        : ""}
+                    </option>
+                  ),
+                )}
+              </select>
+            )}
+            <span className="text-xs leading-5 text-black/50">
+              Grace settings create a new policy version only for this campus.
+            </span>
+          </label>
+
+          <label className="grid gap-2 border-t border-black pt-4">
+            <span className="font-mono text-[10px] uppercase tracking-[0.16em]">
               School bus grace / minutes
             </span>
             <input
@@ -639,7 +770,7 @@ export default function TransportClient({
 
           {!currentPolicy ? (
             <p className="border border-black/20 p-3 text-sm leading-5 text-black/55">
-              No attendance schedule exists yet. Create the first attendance schedule on the Attendance page; then return here to set School Bus and Independent grace minutes.
+              No attendance schedule exists yet for this campus. Create its first attendance schedule on the Attendance page; then return here to set School Bus and Independent grace minutes.
             </p>
           ) : null}
 

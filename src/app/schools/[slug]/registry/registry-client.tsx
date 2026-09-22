@@ -58,6 +58,7 @@ interface GuardianRow {
   status: string;
   membershipId: string | null;
   notificationsEnabled: boolean;
+  activeNotificationDevices: number;
 }
 
 interface StudentDetail {
@@ -1109,7 +1110,7 @@ export function RegistryClient({
                             }`}
                           >
                             {guardian.notificationsEnabled
-                              ? "Notifications enabled"
+                              ? `Notifications enabled · ${guardian.activeNotificationDevices} device${guardian.activeNotificationDevices === 1 ? "" : "s"}`
                               : "Notifications not enabled"}
                           </span>
                         </div>

@@ -95,16 +95,45 @@ export async function GET(
         notificationsEnabled:
           sql<boolean>`exists (
             select 1
-            from guardian_push_devices device
+            from student_guardians relationship
+            join guardian_push_devices device
+              on device.school_id =
+                 relationship.school_id
+             and device.student_guardian_link_id =
+                 relationship.id
             where
-              device.school_id =
+              relationship.school_id =
                 ${guardians.schoolId}
-              and device.guardian_id =
+              and relationship.guardian_id =
                 ${guardians.id}
+              and relationship.receives_notifications = true
               and device.status =
                 'ACTIVE'
           )`.as(
             "notificationsEnabled",
+          ),
+        activeNotificationDevices:
+          sql<number>`(
+            select
+              count(
+                distinct device.id
+              )::int
+            from student_guardians relationship
+            join guardian_push_devices device
+              on device.school_id =
+                 relationship.school_id
+             and device.student_guardian_link_id =
+                 relationship.id
+            where
+              relationship.school_id =
+                ${guardians.schoolId}
+              and relationship.guardian_id =
+                ${guardians.id}
+              and relationship.receives_notifications = true
+              and device.status =
+                'ACTIVE'
+          )`.as(
+            "activeNotificationDevices",
           ),
       })
       .from(guardians)
