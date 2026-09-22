@@ -1,6 +1,9 @@
 import { sql } from "drizzle-orm";
 
 import { getDb } from "@/db";
+import {
+  emitCasaOperationalNotificationBestEffort,
+} from "@/server/internal/operational-notifications";
 
 type TerminalHealthStatus = "ONLINE" | "OFFLINE";
 
@@ -119,48 +122,40 @@ export async function reconcileTerminalHealthNotifications(input?: {
       ? `${terminal.school_name}${terminal.branch_name ? ` · ${terminal.branch_name}` : ""}: ${terminal.terminal_name} has not checked in for more than five minutes.`
       : `${terminal.school_name}${terminal.branch_name ? ` · ${terminal.branch_name}` : ""}: ${terminal.terminal_name} is responding again.`;
 
-    await db.execute(sql`
-      insert into casa_in_app_notifications (
-        school_id,
-        branch_id,
-        recipient_internal_membership_id,
-        audience,
-        event_type,
-        title,
-        body,
-        action_url,
-        payload,
-        created_at
-      )
-      select
-        ${terminal.school_id}::uuid,
-        ${terminal.branch_id}::uuid,
-        membership.id,
-        'CASA_INTERNAL',
-        ${eventType},
-        ${title},
-        ${body},
-        '/internal/notifications',
-        jsonb_build_object(
-          'terminalId', ${terminal.terminal_id},
-          'terminalCode', ${terminal.terminal_code},
-          'observedStatus', ${observed},
-          'lastSeenAt', ${terminal.last_seen_at ? new Date(terminal.last_seen_at).toISOString() : null}
-        ),
-        now()
-      from casa_internal_memberships membership
-      where membership.status = 'ACTIVE'
-        and (
-          membership.role = 'CASA_SUPER_ADMIN'
-          or exists (
-            select 1
-            from casa_internal_school_assignments assignment
-            where assignment.membership_id = membership.id
-              and assignment.school_id = ${terminal.school_id}::uuid
-              and assignment.status = 'ACTIVE'
-          )
-        )
-    `);
+    await emitCasaOperationalNotificationBestEffort({
+      event:
+        observed === "OFFLINE"
+          ? "ATTENDANCE_TERMINAL_OFFLINE"
+          : "ATTENDANCE_TERMINAL_ONLINE",
+      scope: {
+        kind:
+          "SCHOOL",
+        schoolId:
+          terminal.school_id,
+        branchId:
+          terminal.branch_id,
+      },
+      title,
+      body,
+      actionUrl:
+        "/internal/notifications",
+      dedupKey:
+        `terminal-health:${terminal.terminal_id}:${observed}`,
+      payload: {
+        terminalId:
+          terminal.terminal_id,
+        terminalCode:
+          terminal.terminal_code,
+        observedStatus:
+          observed,
+        lastSeenAt:
+          terminal.last_seen_at
+            ? new Date(
+                terminal.last_seen_at,
+              ).toISOString()
+            : null,
+      },
+    });
   }
 
   return { checked: terminals.length, transitions };

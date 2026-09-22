@@ -27,6 +27,9 @@ import {
 import {
   createStudentCardCredential,
 } from "@/server/identity/student-card";
+import {
+  emitCasaOperationalNotificationBestEffort,
+} from "@/server/internal/operational-notifications";
 
 import {
   deletePrivateCardObjectsBestEffort,
@@ -459,6 +462,31 @@ export async function produceStudentCard(
   }
 
   if (!activeTemplate) {
+    await emitCasaOperationalNotificationBestEffort({
+      event:
+        "CARD_PRODUCTION_CONFIGURATION_FAILURE",
+      scope: {
+        kind:
+          "SCHOOL",
+        schoolId:
+          input.access.school.id,
+        branchId:
+          student.branch_id,
+      },
+      title:
+        "Card production template missing",
+      body:
+        "Card production cannot continue because the school does not have an active card template.",
+      actionUrl:
+        "/internal/templates",
+      dedupKey:
+        `card-template-missing:${input.access.school.id}`,
+      payload: {
+        studentId:
+          input.studentId,
+      },
+    });
+
     return {
       ok: false as const,
       status: 503 as const,
@@ -470,6 +498,31 @@ export async function produceStudentCard(
   try {
     assertCardStorageConfigured();
   } catch {
+    await emitCasaOperationalNotificationBestEffort({
+      event:
+        "CARD_PRODUCTION_CONFIGURATION_FAILURE",
+      scope: {
+        kind:
+          "SCHOOL",
+        schoolId:
+          input.access.school.id,
+        branchId:
+          student.branch_id,
+      },
+      title:
+        "Card storage is not configured",
+      body:
+        "Card rendering cannot continue because the private card-storage configuration is unavailable.",
+      actionUrl:
+        "/internal/health",
+      dedupKey:
+        "card-storage:not-configured",
+      payload: {
+        studentId:
+          input.studentId,
+      },
+    });
+
     return {
       ok: false as const,
       status: 503 as const,
@@ -993,6 +1046,39 @@ export async function produceStudentCard(
         ],
       );
     }
+
+    await emitCasaOperationalNotificationBestEffort({
+      event:
+        "CARD_PRODUCTION_FAILURE",
+      scope: {
+        kind:
+          "SCHOOL",
+        schoolId:
+          input.access.school.id,
+        branchId:
+          student.branch_id,
+      },
+      title:
+        "Card production failed",
+      body:
+        `Card rendering or storage failed for student ${student.casa_student_id}.`,
+      actionUrl:
+        "/internal/card-production",
+      dedupKey:
+        `card-production-failure:${jobId}`,
+      payload: {
+        studentId:
+          input.studentId,
+        casaStudentId:
+          student.casa_student_id,
+        jobId,
+        action,
+        errorName:
+          error instanceof Error
+            ? error.name
+            : "UnknownError",
+      },
+    });
 
     throw error;
   }

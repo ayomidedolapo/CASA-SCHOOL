@@ -10,6 +10,9 @@ import {
 import {
   getTrustedSourceAddress,
 } from "@/server/auth/security";
+import {
+  emitCasaOperationalNotificationBestEffort,
+} from "@/server/internal/operational-notifications";
 
 export const dynamic = "force-dynamic";
 
@@ -93,6 +96,28 @@ export async function POST(
           result.retryAfterSeconds,
         ),
       );
+    }
+
+    if (
+      result.status ===
+      429
+    ) {
+      await emitCasaOperationalNotificationBestEffort({
+        event:
+          "AUTH_RATE_LIMIT_TRIGGERED",
+        scope: {
+          kind:
+            "PLATFORM",
+        },
+        title:
+          "Sign-in rate limit triggered",
+        body:
+          "CASA blocked repeated sign-in attempts. Review security activity if this occurs unexpectedly or repeatedly.",
+        actionUrl:
+          "/internal/security",
+        dedupKey:
+          "auth-rate-limit:platform",
+      });
     }
 
     return NextResponse.json(

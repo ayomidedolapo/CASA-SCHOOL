@@ -2,6 +2,9 @@ import { sql } from "drizzle-orm";
 
 import { getDb } from "@/db";
 import {
+  emitCasaAuditOperationalNotificationBestEffort,
+} from "@/server/internal/operational-notifications";
+import {
   registerStudentOnce,
 } from "@/server/students/registration";
 import type {
@@ -93,6 +96,19 @@ export async function writeCasaInternalAudit(
       now()
     )
   `);
+
+  await emitCasaAuditOperationalNotificationBestEffort({
+    action:
+      input.action,
+    schoolId:
+      input.schoolId,
+    subjectType:
+      input.subjectType,
+    subjectId:
+      input.subjectId,
+    metadata:
+      input.metadata,
+  });
 }
 
 export async function listCasaInternalSchools(

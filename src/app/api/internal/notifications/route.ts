@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
 import { getDb } from "@/db";
-import { reconcileTerminalHealthNotifications } from "@/server/internal/terminal-health";
+import { reconcileCasaOperationalNotifications } from "@/server/internal/operational-reconcile";
 import {
   CasaInternalAccessDeniedError,
   isAuthRequiredError,
@@ -30,7 +30,7 @@ function authError(error: unknown) {
 export async function GET() {
   try {
     const access = await requireCasaInternalAccess();
-    await reconcileTerminalHealthNotifications();
+    await reconcileCasaOperationalNotifications();
     const db = getDb();
     const notifications = rowsOf(await db.execute(sql`
       select
@@ -40,6 +40,16 @@ export async function GET() {
         notification.branch_id::text as "branchId",
         branch.name as "branchName",
         notification.event_type as "eventType",
+        coalesce(
+          notification.payload #>>
+            '{operational,severity}',
+          'INFO'
+        ) as severity,
+        coalesce(
+          notification.payload #>>
+            '{operational,category}',
+          'PLATFORM_HEALTH'
+        ) as category,
         notification.title,
         notification.body,
         notification.action_url as "actionUrl",

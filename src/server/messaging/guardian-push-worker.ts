@@ -1,6 +1,9 @@
 import { sql } from "drizzle-orm";
 
 import { getDb } from "@/db";
+import {
+  emitCasaOperationalNotificationBestEffort,
+} from "@/server/internal/operational-notifications";
 import { sendFcmToFid } from "./firebase-fcm";
 
 type PushRow = {
@@ -72,6 +75,8 @@ export async function runGuardianPushOutbox(input: { limit?: number } = {}) {
   let sent = 0;
   let retried = 0;
   let failed = 0;
+  const failedBySchool =
+    new Map<string, number>();
 
   for (const row of claimed) {
     try {
@@ -104,7 +109,17 @@ export async function runGuardianPushOutbox(input: { limit?: number } = {}) {
       const terminalFailure = row.attempt_count >= 5;
       const delayMinutes = Math.min(60, Math.max(1, 2 ** Math.max(0, row.attempt_count - 1)));
       const nextAttempt = new Date(Date.now() + delayMinutes * 60_000).toISOString();
-      if (terminalFailure) failed += 1; else retried += 1;
+      if (terminalFailure) {
+        failed += 1;
+        failedBySchool.set(
+          row.school_id,
+          (failedBySchool.get(
+            row.school_id,
+          ) ?? 0) + 1,
+        );
+      } else {
+        retried += 1;
+      }
 
       await db.execute(sql`
         update guardian_push_outbox
@@ -121,7 +136,17 @@ export async function runGuardianPushOutbox(input: { limit?: number } = {}) {
       const terminalFailure = row.attempt_count >= 5;
       const delayMinutes = Math.min(60, Math.max(1, 2 ** Math.max(0, row.attempt_count - 1)));
       const nextAttempt = new Date(Date.now() + delayMinutes * 60_000).toISOString();
-      if (terminalFailure) failed += 1; else retried += 1;
+      if (terminalFailure) {
+        failed += 1;
+        failedBySchool.set(
+          row.school_id,
+          (failedBySchool.get(
+            row.school_id,
+          ) ?? 0) + 1,
+        );
+      } else {
+        retried += 1;
+      }
       const message = error instanceof Error ? error.message : "FCM worker failure";
 
       await db.execute(sql`
@@ -136,6 +161,34 @@ export async function runGuardianPushOutbox(input: { limit?: number } = {}) {
           and status = 'PROCESSING'
       `);
     }
+  }
+
+  for (
+    const [
+      schoolId,
+      failedCount,
+    ] of failedBySchool
+  ) {
+    await emitCasaOperationalNotificationBestEffort({
+      event:
+        "GUARDIAN_PUSH_DELIVERY_FAILED",
+      scope: {
+        kind:
+          "SCHOOL",
+        schoolId,
+      },
+      title:
+        "Guardian push delivery failed",
+      body:
+        `${failedCount} guardian push notification(s) reached terminal failure during the latest delivery run.`,
+      actionUrl:
+        "/internal/notifications",
+      dedupKey:
+        `guardian-push-terminal-failure:${schoolId}`,
+      payload: {
+        failedCount,
+      },
+    });
   }
 
   return { claimed: claimed.length, sent, retried, failed };

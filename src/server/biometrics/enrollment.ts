@@ -16,6 +16,9 @@ import type {
 import {
   requirePasskeyStepUpGrant,
 } from "@/server/auth/passkey-step-up";
+import {
+  emitCasaOperationalNotificationBestEffort,
+} from "@/server/internal/operational-notifications";
 
 import {
   getBiometricThresholdPolicy,
@@ -139,17 +142,55 @@ export async function enrollStudentBiometric(
   const policy =
     getBiometricThresholdPolicy();
 
-  const provider =
-    await enrollBiometricSubject({
-      schoolId:
-        input.access.school.id,
-      studentId:
-        input.studentId,
-      requestId:
-        randomUUID(),
-      capture:
-        input.capture,
+  let provider:
+    Awaited<
+      ReturnType<
+        typeof enrollBiometricSubject
+      >
+    >;
+
+  try {
+    provider =
+      await enrollBiometricSubject({
+        schoolId:
+          input.access.school.id,
+        studentId:
+          input.studentId,
+        requestId:
+          randomUUID(),
+        capture:
+          input.capture,
+      });
+  } catch (error) {
+    await emitCasaOperationalNotificationBestEffort({
+      event:
+        "BIOMETRIC_PROVIDER_FAILURE",
+      scope: {
+        kind:
+          "SCHOOL",
+        schoolId:
+          input.access.school.id,
+      },
+      title:
+        "Biometric enrollment provider failed",
+      body:
+        "CASA could not complete a face-enrollment provider request.",
+      actionUrl:
+        "/internal/health",
+      dedupKey:
+        `biometric-enrollment-provider:${input.access.school.id}`,
+      payload: {
+        studentId:
+          input.studentId,
+        errorName:
+          error instanceof Error
+            ? error.name
+            : "UnknownError",
+      },
     });
+
+    throw error;
+  }
 
   if (
     !provider.liveness.passed ||

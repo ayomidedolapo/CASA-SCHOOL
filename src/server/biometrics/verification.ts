@@ -15,6 +15,9 @@ import {
   createBiometricAssertion,
 } from "@/server/attendance/biometric-assertion";
 import {
+  emitCasaOperationalNotificationBestEffort,
+} from "@/server/internal/operational-notifications";
+import {
   finalizeVerifiedPresence,
 } from "@/server/attendance/finalize-presence-dispatch";
 import type {
@@ -154,24 +157,97 @@ export async function verifyAndFinalizeBiometricPresence(
     };
   }
 
-  const provider =
-    await verifyBiometricSubject({
-      schoolId:
-        input.access.school.id,
-      studentId:
-        attempt.studentId,
-      attemptId:
-        attempt.id,
-      subjectRef:
-        profile.providerSubjectRef,
-      capture:
-        input.capture,
+  let provider:
+    Awaited<
+      ReturnType<
+        typeof verifyBiometricSubject
+      >
+    >;
+
+  try {
+    provider =
+      await verifyBiometricSubject({
+        schoolId:
+          input.access.school.id,
+        studentId:
+          attempt.studentId,
+        attemptId:
+          attempt.id,
+        subjectRef:
+          profile.providerSubjectRef,
+        capture:
+          input.capture,
+      });
+  } catch (error) {
+    await emitCasaOperationalNotificationBestEffort({
+      event:
+        "BIOMETRIC_PROVIDER_FAILURE",
+      scope: {
+        kind:
+          "SCHOOL",
+        schoolId:
+          input.access.school.id,
+      },
+      title:
+        "Biometric verification provider failed",
+      body:
+        "CASA could not complete a scanner biometric provider request.",
+      actionUrl:
+        "/internal/health",
+      dedupKey:
+        `biometric-verification-provider:${input.access.school.id}`,
+      payload: {
+        studentId:
+          attempt.studentId,
+        attemptId:
+          attempt.id,
+        terminalId:
+          input.access.terminal.id,
+        errorName:
+          error instanceof Error
+            ? error.name
+            : "UnknownError",
+      },
     });
+
+    throw error;
+  }
 
   if (
     provider.provider !==
       profile.provider
   ) {
+    await emitCasaOperationalNotificationBestEffort({
+      event:
+        "BIOMETRIC_PROVIDER_PROFILE_MISMATCH",
+      scope: {
+        kind:
+          "SCHOOL",
+        schoolId:
+          input.access.school.id,
+      },
+      title:
+        "Biometric provider/profile mismatch",
+      body:
+        "A scanner verification response came from a different biometric provider than the student's active profile.",
+      actionUrl:
+        "/internal/health",
+      dedupKey:
+        `biometric-provider-mismatch:${input.access.school.id}:${profile.id}`,
+      payload: {
+        studentId:
+          attempt.studentId,
+        attemptId:
+          attempt.id,
+        terminalId:
+          input.access.terminal.id,
+        profileProvider:
+          profile.provider,
+        responseProvider:
+          provider.provider,
+      },
+    });
+
     return {
       ok: false as const,
       status: 502 as const,
@@ -271,6 +347,29 @@ export async function verifyAndFinalizeBiometricPresence(
       .CASA_BIOMETRIC_ASSERTION_HMAC_SECRET;
 
   if (!secret) {
+    await emitCasaOperationalNotificationBestEffort({
+      event:
+        "BIOMETRIC_CONFIGURATION_FAILURE",
+      scope: {
+        kind:
+          "SCHOOL",
+        schoolId:
+          input.access.school.id,
+      },
+      title:
+        "Biometric assertion secret is missing",
+      body:
+        "CASA cannot finalize verified attendance because the biometric assertion configuration is unavailable.",
+      actionUrl:
+        "/internal/health",
+      dedupKey:
+        "biometric-assertion-secret:missing",
+      payload: {
+        terminalId:
+          input.access.terminal.id,
+      },
+    });
+
     return {
       ok: false as const,
       status: 503 as const,

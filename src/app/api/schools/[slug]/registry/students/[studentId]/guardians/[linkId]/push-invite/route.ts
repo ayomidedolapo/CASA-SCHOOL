@@ -23,6 +23,9 @@ import {
   sendGuardianInviteEmail,
 } from "@/server/messaging/guardian-invite-email";
 import {
+  emitCasaOperationalNotificationBestEffort,
+} from "@/server/internal/operational-notifications";
+import {
   registryAuthErrorResponse,
   registryNoStoreHeaders,
   requireRegistryAdmin,
@@ -347,6 +350,50 @@ export async function POST(
         expiresAt:
           created.expires_at,
       });
+
+    if (
+      emailDelivery ===
+        "FAILED" ||
+      emailDelivery ===
+        "NOT_CONFIGURED"
+    ) {
+      await emitCasaOperationalNotificationBestEffort({
+        event:
+          emailDelivery ===
+            "NOT_CONFIGURED"
+            ? "GUARDIAN_EMAIL_NOT_CONFIGURED"
+            : "GUARDIAN_EMAIL_INVITE_FAILED",
+        scope: {
+          kind:
+            "SCHOOL",
+          schoolId:
+            access.school.id,
+          branchId:
+            relation.home_branch_id,
+        },
+        title:
+          emailDelivery ===
+            "NOT_CONFIGURED"
+            ? "Guardian email delivery is not configured"
+            : "Guardian invitation email failed",
+        body:
+          emailDelivery ===
+            "NOT_CONFIGURED"
+            ? "CASA could not send a guardian setup email because Gmail delivery is not configured."
+            : "CASA created the guardian setup link, but Gmail could not deliver the invitation email.",
+        actionUrl:
+          "/internal/notifications",
+        dedupKey:
+          `guardian-email:${access.school.id}:${emailDelivery}`,
+        payload: {
+          studentId,
+          guardianId:
+            relation.guardian_id,
+          delivery:
+            emailDelivery,
+        },
+      });
+    }
 
     return NextResponse.json(
       {

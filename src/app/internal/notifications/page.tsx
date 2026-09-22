@@ -10,6 +10,11 @@ type Notice = {
   schoolName: string | null;
   branchName: string | null;
   eventType: string;
+  severity:
+    | "INFO"
+    | "WARNING"
+    | "CRITICAL";
+  category: string;
   title: string;
   body: string;
   actionUrl: string | null;
@@ -76,7 +81,7 @@ export default function InternalNotificationsPage() {
       </header>
       <section className="mt-6 border border-black bg-white">
         {items.length === 0 ? <p className="p-6 text-sm text-black/50">No action-needed notifications.</p> : items.map((item) => <article key={item.id} className={`border-b border-black/15 p-5 last:border-b-0 ${item.readAt ? "opacity-60" : ""}`}>
-          <div className="flex flex-wrap justify-between gap-4"><div><p className="font-mono text-[9px] uppercase tracking-[0.12em] text-black/40">{item.eventType.replaceAll("_", " ")}</p><h2 className="mt-1 text-lg font-semibold">{item.title}</h2><p className="mt-2 max-w-3xl text-sm leading-6 text-black/60">{item.body}</p><p className="mt-2 text-xs text-black/40">{[item.schoolName, item.branchName].filter(Boolean).join(" · ") || "CASA platform"}</p></div><time className="text-xs text-black/40">{new Date(item.createdAt).toLocaleString()}</time></div>
+          <div className="flex flex-wrap justify-between gap-4"><div><p className="font-mono text-[9px] uppercase tracking-[0.12em] text-black/40">{item.severity} · {item.category.replaceAll("_", " ")} · {item.eventType.replaceAll("_", " ")}</p><h2 className="mt-1 text-lg font-semibold">{item.title}</h2><p className="mt-2 max-w-3xl text-sm leading-6 text-black/60">{item.body}</p><p className="mt-2 text-xs text-black/40">{[item.schoolName, item.branchName].filter(Boolean).join(" · ") || "CASA platform"}</p></div><time className="text-xs text-black/40">{new Date(item.createdAt).toLocaleString()}</time></div>
           {item.actionUrl ? <Link className="mt-4 inline-block border-b border-black text-sm" href={item.actionUrl}>Open context →</Link> : null}
         </article>)}
       </section>
