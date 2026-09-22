@@ -61,6 +61,13 @@ export interface ScannerStudent {
   middleName:
     string | null;
   lastName: string;
+  schoolName?: string;
+  branchName?:
+    string | null;
+  className?:
+    string | null;
+  sex?:
+    string | null;
 }
 
 export interface ScannerAttemptResponse {
@@ -124,10 +131,14 @@ export interface ScannerPresenceResult {
     presenceEventId:
       string;
     notificationQueued:
-      boolean;
+      number;
+    guardianPushQueued:
+      number;
     replayed:
       boolean;
   };
+  verificationImageDataUrl:
+    string | null;
   scores: {
     faceConfidenceBps:
       number;

@@ -37,17 +37,36 @@ function stringData(payload: Record<string, unknown> | null): Record<string, str
   return result;
 }
 
-export async function runGuardianPushOutbox(input: { limit?: number } = {}) {
+export async function runGuardianPushOutbox(
+  input: {
+    limit?: number;
+    schoolId?: string;
+  } = {},
+) {
   const db = getDb();
-  const limit = Math.min(100, Math.max(1, input.limit ?? 50));
+  const limit =
+    Math.min(
+      100,
+      Math.max(
+        1,
+        input.limit ?? 50,
+      ),
+    );
+  const schoolFilter =
+    input.schoolId
+      ? sql`and outbox.school_id = ${input.schoolId}::uuid`
+      : sql``;
 
-  const claimed = rowsOf<PushRow>(await db.execute(sql`
+  const claimed =
+    rowsOf<PushRow>(
+      await db.execute(sql`
     with due as (
-      select id
-      from guardian_push_outbox
-      where status in ('PENDING', 'RETRY')
-        and available_at <= now()
-      order by available_at asc, created_at asc
+      select outbox.id
+      from guardian_push_outbox outbox
+      where outbox.status in ('PENDING', 'RETRY')
+        and outbox.available_at <= now()
+        ${schoolFilter}
+      order by outbox.available_at asc, outbox.created_at asc
       limit ${limit}
       for update skip locked
     )
@@ -70,7 +89,8 @@ export async function runGuardianPushOutbox(input: { limit?: number } = {}) {
       outbox.click_url,
       outbox.payload,
       outbox.attempt_count
-  `));
+  `),
+    );
 
   let sent = 0;
   let retried = 0;

@@ -323,7 +323,7 @@ for (
   const marker of [
     "Select campus",
     "Assign campus",
-    "Change campus",
+    "Campus locked",
     "Legacy scanner: assign a campus",
     "newTerminalBranchId",
   ]
@@ -335,6 +335,13 @@ for (
     `Technician terminal campus UX missing ${marker}`,
   );
 }
+
+assert(
+  terminalLifecycleRouteSource.includes(
+    "TERMINAL_CAMPUS_IMMUTABLE",
+  ),
+  "Provisioned terminals must retain immutable campus assignment.",
+);
 
 const terminalScanRouteSource =
   fs.readFileSync(

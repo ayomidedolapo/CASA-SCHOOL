@@ -2406,7 +2406,7 @@ export default function AttendanceClient(
           1
             ? ""
             : "s"}{" "}
-          currently have no guardian notification outbox row.
+          currently have no guardian notification queued.
         </div>
       )}
 

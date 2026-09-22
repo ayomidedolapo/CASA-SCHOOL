@@ -114,6 +114,31 @@ interface FinalResult {
     ScannerPresenceResult;
 }
 
+function displayStudentSex(
+  value:
+    string | null | undefined,
+): string {
+  if (!value) {
+    return "—";
+  }
+
+  const normalized =
+    value
+      .trim()
+      .toLowerCase();
+
+  if (!normalized) {
+    return "—";
+  }
+
+  return (
+    normalized
+      .charAt(0)
+      .toUpperCase() +
+    normalized.slice(1)
+  );
+}
+
 async function parseJson<T>(
   response: Response,
 ): Promise<T | null> {
@@ -1227,7 +1252,28 @@ export default function ScannerClient() {
             );
 
           if (
-            !data?.pending ||
+            !data?.pending
+          ) {
+            return false;
+          }
+
+          if (
+            data.pending
+              .requiresStaffAuthorization
+          ) {
+            setCurrentAttempt(
+              data.pending,
+            );
+            setPhase(
+              "STAFF",
+            );
+            setMessage(
+              "Early departure is waiting for staff authorization. The scanner will continue automatically after an authorized staff member confirms the release with CASA Passkey.",
+            );
+            return true;
+          }
+
+          if (
             !data.pending
               .requiresBiometric
           ) {
@@ -1500,7 +1546,7 @@ export default function ScannerClient() {
           () => {
             void resetToReady();
           },
-          5000,
+          6500,
         );
 
       return () => {
@@ -2326,6 +2372,30 @@ export default function ScannerClient() {
           )
         : null;
 
+  const resultStudent =
+    finalResult?.student ??
+    null;
+
+  const resultAttendanceLabel =
+    finalResult
+      ?.result
+      .presence
+      .operation ===
+    "CHECK_OUT"
+      ? "Signed out"
+      : "Checked in";
+
+  const resultGuardianAlert =
+    (
+      finalResult
+        ?.result
+        .presence
+        .guardianPushQueued ??
+      0
+    ) > 0
+      ? "Queued"
+      : "Not queued";
+
   return (
     <div
       className={
@@ -2580,7 +2650,56 @@ export default function ScannerClient() {
             >
               {currentAttempt.student.casaStudentId}
             </p>
-            {(() => { const detail=currentAttempt.student as ScannerStudent & {schoolName?:string;branchName?:string|null;className?:string|null;sex?:string|null}; return <p className={styles.message}>{[detail.schoolName,detail.branchName,detail.className,detail.sex].filter(Boolean).join(" · ")}</p>; })()}
+            <div
+              className={
+                styles.preVerificationDetails
+              }
+            >
+              {currentAttempt
+                .student
+                .schoolName && (
+                <span>
+                  {
+                    currentAttempt
+                      .student
+                      .schoolName
+                  }
+                </span>
+              )}
+              {currentAttempt
+                .student
+                .branchName && (
+                <span>
+                  {
+                    currentAttempt
+                      .student
+                      .branchName
+                  }
+                </span>
+              )}
+              {currentAttempt
+                .student
+                .className && (
+                <span>
+                  {
+                    currentAttempt
+                      .student
+                      .className
+                  }
+                </span>
+              )}
+              {currentAttempt
+                .student
+                .sex && (
+                <span>
+                  {displayStudentSex(
+                    currentAttempt
+                      .student
+                      .sex,
+                  )}
+                </span>
+              )}
+            </div>
           </div>
         )}
 
@@ -2692,70 +2811,210 @@ export default function ScannerClient() {
 
         {phase ===
           "STAFF" && (
-          <div
+          <p
             className={
-              styles.actions
+              styles.score
             }
           >
-            <button
-              className={
-                styles.button
-              }
-              type="button"
-              onClick={
-                () =>
-                  void resetToReady()
-              }
-            >
-              Next student
-            </button>
-          </div>
+            Waiting for staff authorization · do not scan another card · the scanner will continue automatically
+          </p>
         )}
 
         {phase ===
           "RESULT" &&
           finalResult && (
-          <>
+          <div
+            className={
+              styles.resultFade
+            }
+          >
             <div
               className={
-                styles.student
+                `${styles.student} ${styles.resultSummary}`
               }
             >
-              <p
+              <div
                 className={
-                  styles.studentName
+                  styles.verificationPhotoPanel
                 }
               >
-                {resultName}
-              </p>
-              {finalResult.student && (() => { const detail=finalResult.student as ScannerStudent & {schoolName?:string;branchName?:string|null;className?:string|null;sex?:string|null}; return <><p className={styles.studentId}>{finalResult.student.casaStudentId}</p><p className={styles.message}>{[detail.schoolName,detail.branchName,detail.className,detail.sex].filter(Boolean).join(" · ")}</p></>; })()}
-
-              {finalResult
-                .result
-                .presence
-                .operation ===
-                "CHECK_OUT" &&
-                finalResult
+                {finalResult
                   .result
-                  .presence
-                  .notificationQueued && (
+                  .verificationImageDataUrl ? (
+                  <img
+                    className={
+                      styles.verificationPhoto
+                    }
+                    src={
+                      finalResult
+                        .result
+                        .verificationImageDataUrl
+                    }
+                    alt={`${resultName ?? "Student"} verification`}
+                  />
+                ) : (
+                  <div
+                    className={
+                      styles.verificationPhotoPlaceholder
+                    }
+                  >
+                    Face verified
+                  </div>
+                )}
                 <p
                   className={
-                    styles.message
+                    styles.verificationPhotoCaption
                   }
                 >
-                  Guardian notification queued from the school.
+                  Current verification image
                 </p>
-              )}
+              </div>
 
-              <p
+              <dl
                 className={
-                  styles.score
+                  styles.resultList
                 }
               >
-                Identity verification completed.
-              </p>
+                <div
+                  className={
+                    styles.resultRow
+                  }
+                >
+                  <dt>
+                    Name
+                  </dt>
+                  <dd>
+                    {resultName ??
+                      "Student"}
+                  </dd>
+                </div>
+                <div
+                  className={
+                    styles.resultRow
+                  }
+                >
+                  <dt>
+                    CASA ID
+                  </dt>
+                  <dd>
+                    {resultStudent
+                      ?.casaStudentId ??
+                      "—"}
+                  </dd>
+                </div>
+                <div
+                  className={
+                    styles.resultRow
+                  }
+                >
+                  <dt>
+                    School
+                  </dt>
+                  <dd>
+                    {resultStudent
+                      ?.schoolName ??
+                      terminalSession
+                        ?.school
+                        .name ??
+                      "—"}
+                  </dd>
+                </div>
+                <div
+                  className={
+                    styles.resultRow
+                  }
+                >
+                  <dt>
+                    Campus
+                  </dt>
+                  <dd>
+                    {resultStudent
+                      ?.branchName ??
+                      terminalSession
+                        ?.branch
+                        ?.name ??
+                      "—"}
+                  </dd>
+                </div>
+                <div
+                  className={
+                    styles.resultRow
+                  }
+                >
+                  <dt>
+                    Class
+                  </dt>
+                  <dd>
+                    {resultStudent
+                      ?.className ??
+                      "—"}
+                  </dd>
+                </div>
+                <div
+                  className={
+                    styles.resultRow
+                  }
+                >
+                  <dt>
+                    Sex
+                  </dt>
+                  <dd>
+                    {displayStudentSex(
+                      resultStudent
+                        ?.sex,
+                    )}
+                  </dd>
+                </div>
+                <div
+                  className={
+                    styles.resultRow
+                  }
+                >
+                  <dt>
+                    Attendance
+                  </dt>
+                  <dd>
+                    {
+                      resultAttendanceLabel
+                    }
+                  </dd>
+                </div>
+                <div
+                  className={
+                    styles.resultRow
+                  }
+                >
+                  <dt>
+                    Identity
+                  </dt>
+                  <dd>
+                    Verified
+                  </dd>
+                </div>
+                <div
+                  className={
+                    styles.resultRow
+                  }
+                >
+                  <dt>
+                    Guardian alert
+                  </dt>
+                  <dd>
+                    {
+                      resultGuardianAlert
+                    }
+                  </dd>
+                </div>
+              </dl>
             </div>
+
+            <p
+              className={
+                styles.score
+              }
+            >
+              Identity verification completed.
+            </p>
 
             <div
               className={
@@ -2775,7 +3034,7 @@ export default function ScannerClient() {
                 Next student
               </button>
             </div>
-          </>
+          </div>
         )}
 
         {(phase ===

@@ -134,6 +134,51 @@ function expired(
     Date.now();
 }
 
+function verificationImageDataUrl(
+  image: Uint8Array,
+): string | null {
+  if (
+    image.byteLength === 0 ||
+    image.byteLength >
+      1_500_000
+  ) {
+    return null;
+  }
+
+  let mime =
+    "image/jpeg";
+
+  if (
+    image.length >= 8 &&
+    image[0] === 0x89 &&
+    image[1] === 0x50 &&
+    image[2] === 0x4e &&
+    image[3] === 0x47
+  ) {
+    mime =
+      "image/png";
+  } else if (
+    image.length >= 12 &&
+    image[0] === 0x52 &&
+    image[1] === 0x49 &&
+    image[2] === 0x46 &&
+    image[3] === 0x46 &&
+    image[8] === 0x57 &&
+    image[9] === 0x45 &&
+    image[10] === 0x42 &&
+    image[11] === 0x50
+  ) {
+    mime =
+      "image/webp";
+  }
+
+  return `data:${mime};base64,${Buffer.from(
+    image,
+  ).toString(
+    "base64",
+  )}`;
+}
+
 async function markLivenessSession(
   input: {
     schoolId: string;
@@ -1648,6 +1693,11 @@ export async function completeAwsVerificationLiveness(
     };
   }
 
+  const currentVerificationImageDataUrl =
+    verificationImageDataUrl(
+      liveness.referenceImage,
+    );
+
   const profileRows =
     await db
       .select({
@@ -1890,9 +1940,14 @@ export async function completeAwsVerificationLiveness(
       notificationQueued:
         finalized
           .notificationQueued,
+      guardianPushQueued:
+        finalized
+          .guardianPushQueued,
       replayed:
         finalized.replayed,
     },
+    verificationImageDataUrl:
+      currentVerificationImageDataUrl,
     scores: {
       faceConfidenceBps:
         face.similarityBps,

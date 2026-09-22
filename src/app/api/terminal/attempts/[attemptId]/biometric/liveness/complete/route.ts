@@ -1,4 +1,5 @@
 import {
+  after,
   NextRequest,
   NextResponse,
 } from "next/server";
@@ -11,6 +12,9 @@ import {
 import {
   authenticateTerminalRequest,
 } from "@/server/attendance/terminal-auth";
+import {
+  runGuardianPushOutbox,
+} from "@/server/messaging/guardian-push-worker";
 import {
   AwsBiometricUnavailableError,
   completeAwsVerificationLiveness,
@@ -132,10 +136,33 @@ export async function POST(
       );
     }
 
+    if (
+      result.presence
+        .guardianPushQueued >
+      0
+    ) {
+      after(
+        async () => {
+          try {
+            await runGuardianPushOutbox({
+              schoolId:
+                access.school.id,
+              limit: 50,
+            });
+          } catch {
+            // Attendance is already committed. Pending push rows remain
+            // durable for a later worker pass instead of failing the scan.
+          }
+        },
+      );
+    }
+
     return NextResponse.json(
       {
         presence:
           result.presence,
+        verificationImageDataUrl:
+          result.verificationImageDataUrl,
         scores:
           result.scores,
       },

@@ -334,6 +334,124 @@
   text-transform: uppercase;
 }
 
+.preVerificationDetails {
+  margin-top: 12px;
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.resultSummary {
+  display: grid;
+  grid-template-columns:
+    minmax(145px, 210px)
+    minmax(0, 1fr);
+  gap: clamp(22px, 4vw, 42px);
+  align-items: start;
+}
+
+.verificationPhotoPanel {
+  min-width: 0;
+}
+
+.verificationPhoto,
+.verificationPhotoPlaceholder {
+  width: 100%;
+  aspect-ratio: 4 / 5;
+  border: 1px solid var(--ink);
+  background: var(--soft);
+}
+
+.verificationPhoto {
+  display: block;
+  object-fit: cover;
+}
+
+.verificationPhotoPlaceholder {
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  color: var(--muted);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.verificationPhotoCaption {
+  margin: 9px 0 0;
+  color: var(--muted);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.resultList {
+  margin: 0;
+  border-top: 1px solid var(--ink);
+}
+
+.resultRow {
+  display: grid;
+  grid-template-columns:
+    minmax(94px, 0.65fr)
+    minmax(0, 1.35fr);
+  gap: 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(11, 11, 10, 0.22);
+}
+
+.resultRow dt {
+  color: var(--muted);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.resultRow dd {
+  margin: 0;
+  min-width: 0;
+  font-size: clamp(14px, 2vw, 18px);
+  font-weight: 700;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.resultFade {
+  animation:
+    casaResultFade
+    6.3s
+    ease-in-out
+    forwards;
+}
+
+@keyframes casaResultFade {
+  0%,
+  78% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .resultFade {
+    animation: none;
+  }
+}
+
 .form {
   margin-top: 34px;
   max-width: 720px;
@@ -512,6 +630,22 @@
   .footer {
     grid-row: 3;
     border-right: 0;
+  }
+}
+
+@media (max-width: 620px) {
+  .resultSummary {
+    grid-template-columns: 1fr;
+  }
+
+  .verificationPhotoPanel {
+    width: min(210px, 62vw);
+  }
+
+  .resultRow {
+    grid-template-columns:
+      minmax(82px, 0.55fr)
+      minmax(0, 1.45fr);
   }
 }
 

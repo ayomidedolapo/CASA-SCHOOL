@@ -12,6 +12,10 @@ import {
   studentPresenceEvents,
 } from "@/db/schema";
 
+import {
+  queueGuardianPresencePushBestEffort,
+} from "@/server/messaging/guardian-presence-push";
+
 import type {
   BiometricAssertionPayload,
 } from "./biometric-assertion";
@@ -47,6 +51,8 @@ export type FinalizePresenceResult =
       presenceEventId:
         string;
       notificationQueued: number;
+      guardianPushQueued:
+        number;
     }
   | {
       ok: false;
@@ -223,6 +229,25 @@ export async function finalizeVerifiedPresence(
       };
     }
 
+    const guardianPushQueued =
+      attempt.studentId
+        ? await queueGuardianPresencePushBestEffort({
+            schoolId:
+              access.school.id,
+            studentId:
+              attempt.studentId,
+            attendanceRecordId:
+              record.id,
+            presenceEventId:
+              events[0].id,
+            eventType:
+              attempt.operation ===
+                "CHECK_IN"
+                ? "STUDENT_CHECKED_IN"
+                : "STUDENT_SIGNED_OUT",
+          })
+        : 0;
+
     return {
       ok: true,
       replayed: true,
@@ -233,6 +258,7 @@ export async function finalizeVerifiedPresence(
       presenceEventId:
         events[0].id,
       notificationQueued: 0,
+      guardianPushQueued,
     };
   }
 
@@ -1196,6 +1222,20 @@ export async function finalizeVerifiedPresence(
       )?.count ?? 0,
     );
 
+  const guardianPushQueued =
+    await queueGuardianPresencePushBestEffort({
+      schoolId:
+        access.school.id,
+      studentId:
+        attempt.studentId,
+      attendanceRecordId:
+        record.id,
+      presenceEventId:
+        event.id,
+      eventType:
+        notificationEventType,
+    });
+
   return {
     ok: true,
     replayed: false,
@@ -1206,5 +1246,6 @@ export async function finalizeVerifiedPresence(
     presenceEventId:
       event.id,
     notificationQueued,
+    guardianPushQueued,
   };
 }

@@ -639,6 +639,16 @@ export async function getTodayAttendanceOperations(
                   and outbox.presence_event_id =
                     event.id
               )
+              and not exists (
+                select 1
+                from guardian_push_outbox
+                  push_outbox
+                where
+                  push_outbox.school_id =
+                    event.school_id
+                  and push_outbox.presence_event_id =
+                    event.id
+              )
           `)
         : Promise.resolve(
             [],

@@ -39,11 +39,11 @@ const operations =
   );
 const guardianRoute =
   read(
-    "src/app/api/schools/[slug]/registry/students/[studentId]/guardians/route.ts",
+    "src/app/api/schools/[slug]/registry/students/[studentId]/guardians/[linkId]/route.ts",
   );
 const registryClient =
   read(
-    "src/app/schools/[slug]/registry/registry-client.tsx",
+    "src/app/schools/[slug]/registry/m34a-registry-operations.tsx",
   );
 const presence =
   read(
@@ -180,17 +180,20 @@ assert.ok(
     guardianRoute.includes(
       "receivesNotifications",
     ),
-  "Guardian route must support switching the single attendance SMS recipient.",
+  "Guardian relationship route must support attendance-notification selection.",
 );
 
 assert.ok(
   registryClient.includes(
-    "Send attendance SMS here",
+    'name="receivesNotifications"',
   ) &&
     registryClient.includes(
-      "Attendance SMS",
+      "Create notification link",
+    ) &&
+    registryClient.includes(
+      "Notifications active",
     ),
-  "Registry must expose the one-recipient switch.",
+  "Registry must expose the current guardian notification controls.",
 );
 
 assert.ok(

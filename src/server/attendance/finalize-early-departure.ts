@@ -13,6 +13,10 @@ import {
   studentPresenceEvents,
 } from "@/db/schema";
 
+import {
+  queueGuardianPresencePushBestEffort,
+} from "@/server/messaging/guardian-presence-push";
+
 import type {
   BiometricAssertionPayload,
 } from "./biometric-assertion";
@@ -704,6 +708,20 @@ const now =
       ? outboxRows[0]
       : null;
 
+  const guardianPushQueued =
+    await queueGuardianPresencePushBestEffort({
+      schoolId:
+        access.school.id,
+      studentId:
+        attempt.studentId,
+      attendanceRecordId:
+        record.id,
+      presenceEventId:
+        event.id,
+      eventType:
+        "STUDENT_EARLY_DEPARTURE",
+    });
+
   return {
     ok: true,
     replayed: false,
@@ -723,5 +741,6 @@ const now =
             | undefined
         )?.count ?? 0,
       ),
+    guardianPushQueued,
   };
 }
