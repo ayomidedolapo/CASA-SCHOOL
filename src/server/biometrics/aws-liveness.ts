@@ -12,6 +12,8 @@ import {
   randomBytes,
 } from "node:crypto";
 
+import sharp from "sharp";
+
 import { getDb } from "@/db";
 import {
   attendanceVerificationAttempts,
@@ -134,49 +136,80 @@ function expired(
     Date.now();
 }
 
-function verificationImageDataUrl(
+async function verificationImageDataUrl(
   image: Uint8Array,
-): string | null {
+): Promise<string | null> {
   if (
-    image.byteLength === 0 ||
-    image.byteLength >
-      1_500_000
+    image.byteLength === 0
   ) {
     return null;
   }
 
-  let mime =
-    "image/jpeg";
+  try {
+    const preview =
+      await sharp(
+        Buffer.from(
+          image,
+        ),
+      )
+        .rotate()
+        .resize({
+          width: 480,
+          height: 600,
+          fit: "inside",
+          withoutEnlargement:
+            true,
+        })
+        .jpeg({
+          quality: 82,
+          mozjpeg: true,
+        })
+        .toBuffer();
 
-  if (
-    image.length >= 8 &&
-    image[0] === 0x89 &&
-    image[1] === 0x50 &&
-    image[2] === 0x4e &&
-    image[3] === 0x47
-  ) {
-    mime =
-      "image/png";
-  } else if (
-    image.length >= 12 &&
-    image[0] === 0x52 &&
-    image[1] === 0x49 &&
-    image[2] === 0x46 &&
-    image[3] === 0x46 &&
-    image[8] === 0x57 &&
-    image[9] === 0x45 &&
-    image[10] === 0x42 &&
-    image[11] === 0x50
-  ) {
-    mime =
-      "image/webp";
+    return `data:image/jpeg;base64,${preview.toString(
+      "base64",
+    )}`;
+  } catch {
+    if (
+      image.byteLength >
+      2_500_000
+    ) {
+      return null;
+    }
+
+    let mime =
+      "image/jpeg";
+
+    if (
+      image.length >= 8 &&
+      image[0] === 0x89 &&
+      image[1] === 0x50 &&
+      image[2] === 0x4e &&
+      image[3] === 0x47
+    ) {
+      mime =
+        "image/png";
+    } else if (
+      image.length >= 12 &&
+      image[0] === 0x52 &&
+      image[1] === 0x49 &&
+      image[2] === 0x46 &&
+      image[3] === 0x46 &&
+      image[8] === 0x57 &&
+      image[9] === 0x45 &&
+      image[10] === 0x42 &&
+      image[11] === 0x50
+    ) {
+      mime =
+        "image/webp";
+    }
+
+    return `data:${mime};base64,${Buffer.from(
+      image,
+    ).toString(
+      "base64",
+    )}`;
   }
-
-  return `data:${mime};base64,${Buffer.from(
-    image,
-  ).toString(
-    "base64",
-  )}`;
 }
 
 async function markLivenessSession(
@@ -1694,7 +1727,7 @@ export async function completeAwsVerificationLiveness(
   }
 
   const currentVerificationImageDataUrl =
-    verificationImageDataUrl(
+    await verificationImageDataUrl(
       liveness.referenceImage,
     );
 

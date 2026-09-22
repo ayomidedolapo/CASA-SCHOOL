@@ -74,6 +74,9 @@ function loadQrScannerModule() {
   return qrScannerModulePromise;
 }
 
+const SCANNER_UI_REVISION =
+  "2026-09-22-r4";
+
 type Phase =
   | "BOOTING"
   | "UNPROVISIONED"
@@ -1312,7 +1315,17 @@ export default function ScannerClient() {
             {
               scope:
                 "/scanner",
+              updateViaCache:
+                "none",
             },
+          )
+          .then(
+            (registration) =>
+              registration.update(),
+          )
+          .catch(
+            () =>
+              undefined,
           );
       }
 
@@ -2396,6 +2409,22 @@ export default function ScannerClient() {
       ? "Queued"
       : "Not queued";
 
+  const isEarlyDepartureRetry =
+    currentAttempt
+      ?.attempt
+      .operation ===
+      "CHECK_OUT" &&
+    (
+      currentAttempt
+        .attempt
+        .reasonCode ===
+        "EARLY_DEPARTURE_AUTH_REQUIRED" ||
+      currentAttempt
+        .attempt
+        .departureResult ===
+        "EARLY"
+    );
+
   return (
     <div
       className={
@@ -2794,18 +2823,20 @@ export default function ScannerClient() {
               Try face verification again
             </button>
 
-            <button
-              className={
-                styles.secondaryButton
-              }
-              type="button"
-              onClick={
-                () =>
-                  void resetToReady()
-              }
-            >
-              Next student
-            </button>
+            {!isEarlyDepartureRetry && (
+              <button
+                className={
+                  styles.secondaryButton
+                }
+                type="button"
+                onClick={
+                  () =>
+                    void resetToReady()
+                }
+              >
+                Next student
+              </button>
+            )}
           </div>
         )}
 
@@ -3124,6 +3155,14 @@ export default function ScannerClient() {
       >
         <span>
           The card identifies. The face verifies.
+          <span
+            className={
+              styles.revision
+            }
+          >
+            {" "}
+            · {SCANNER_UI_REVISION}
+          </span>
         </span>
 
         {token && (

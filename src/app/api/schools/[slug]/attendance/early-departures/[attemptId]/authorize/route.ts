@@ -6,6 +6,7 @@ import { z } from "zod";
 
 import {
   authorizeEarlyDeparture,
+  cancelEarlyDeparture,
 } from "@/server/attendance/early-departure";
 import {
   attendanceAuthErrorResponse,
@@ -127,6 +128,97 @@ export async function POST(
         {
           message:
             "Early departure could not be authorized.",
+          code:
+            result.code,
+          requiredAction:
+            "requiredAction" in
+              result
+              ? result.requiredAction
+              : undefined,
+        },
+        {
+          status:
+            result.status,
+          headers:
+            attendanceNoStoreHeaders,
+        },
+      );
+    }
+
+    return NextResponse.json(
+      result,
+      {
+        headers:
+          attendanceNoStoreHeaders,
+      },
+    );
+  } catch (error) {
+    const response =
+      attendanceAuthErrorResponse(
+        error,
+      );
+
+    if (response) {
+      return response;
+    }
+
+    throw error;
+  }
+}
+
+export async function DELETE(
+  request:
+    NextRequest,
+  context:
+    RouteContext,
+) {
+  const {
+    slug,
+    attemptId,
+  } =
+    await context.params;
+
+  if (
+    !z.string()
+      .uuid()
+      .safeParse(
+        attemptId,
+      ).success
+  ) {
+    return NextResponse.json(
+      {
+        message:
+          "Invalid attendance attempt.",
+      },
+      {
+        status: 400,
+        headers:
+          attendanceNoStoreHeaders,
+      },
+    );
+  }
+
+  try {
+    const access =
+      await requireSchoolAccess(
+        slug,
+      );
+
+    const result =
+      await cancelEarlyDeparture({
+        access,
+        attemptId,
+        stepUpToken:
+          request.headers.get(
+            "x-casa-passkey-step-up",
+          ),
+      });
+
+    if (!result.ok) {
+      return NextResponse.json(
+        {
+          message:
+            "Early departure request could not be cancelled.",
           code:
             result.code,
           requiredAction:

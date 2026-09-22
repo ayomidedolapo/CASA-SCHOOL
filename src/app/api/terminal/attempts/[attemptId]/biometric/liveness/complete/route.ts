@@ -136,26 +136,20 @@ export async function POST(
       );
     }
 
-    if (
-      result.presence
-        .guardianPushQueued >
-      0
-    ) {
-      after(
-        async () => {
-          try {
-            await runGuardianPushOutbox({
-              schoolId:
-                access.school.id,
-              limit: 50,
-            });
-          } catch {
-            // Attendance is already committed. Pending push rows remain
-            // durable for a later worker pass instead of failing the scan.
-          }
-        },
-      );
-    }
+    after(
+      async () => {
+        try {
+          await runGuardianPushOutbox({
+            schoolId:
+              access.school.id,
+            limit: 50,
+          });
+        } catch {
+          // Attendance is already committed. The worker also reconciles
+          // recent accepted events whose initial push enqueue was missed.
+        }
+      },
+    );
 
     return NextResponse.json(
       {

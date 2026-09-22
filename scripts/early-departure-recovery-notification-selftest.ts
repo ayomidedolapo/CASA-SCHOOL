@@ -112,16 +112,34 @@ const today =
     "src/server/attendance/today.ts",
   );
 
-requireText(
+rejectText(
   today,
   "school_notification_outbox",
-  "legacy notification truth",
+  "legacy notification outbox must not mask guardian push gaps",
 );
-requireText(
-  today,
-  "guardian_push_outbox",
-  "browser push notification truth",
-);
+for (
+  const marker of [
+    "guardian_push_outbox",
+    "guardian_push_devices",
+    "interval '2 hours'",
+  ]
+) {
+  requireText(
+    today,
+    marker,
+    "browser push notification truth",
+  );
+}
+
+if (
+  !/relationship\.receives_notifications\s*=\s*true/.test(
+    today,
+  )
+) {
+  throw new Error(
+    "browser push notification truth: receives_notifications=true relationship filter is missing",
+  );
+}
 
 const attendanceClient =
   read(
@@ -130,7 +148,7 @@ const attendanceClient =
 
 requireText(
   attendanceClient,
-  "no guardian notification queued",
+  "waiting for guardian push reconciliation",
   "notification warning wording",
 );
 rejectText(

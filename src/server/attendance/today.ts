@@ -623,21 +623,45 @@ export async function getTodayAttendanceOperations(
                 ${session.id}::uuid
               and event.event_type =
                 'CHECKED_OUT'::attendance_presence_event_type
+              and event.occurred_at >=
+                now() -
+                interval '2 hours'
               and (
                 ${input.branchId ?? null}::uuid
                   is null
                 or terminal_branch.branch_id =
                    ${input.branchId ?? null}::uuid
               )
-              and not exists (
+              and exists (
                 select 1
-                from school_notification_outbox
-                  outbox
+                from student_guardians
+                  relationship
+                join guardians guardian
+                  on guardian.school_id =
+                     relationship.school_id
+                 and guardian.id =
+                     relationship.guardian_id
+                 and guardian.status =
+                     'ACTIVE'::guardian_status
+                join guardian_push_devices
+                  device
+                  on device.school_id =
+                     relationship.school_id
+                 and device.student_id =
+                     relationship.student_id
+                 and device.guardian_id =
+                     relationship.guardian_id
+                 and device.student_guardian_link_id =
+                     relationship.id
+                 and device.status =
+                     'ACTIVE'
                 where
-                  outbox.school_id =
+                  relationship.school_id =
                     event.school_id
-                  and outbox.presence_event_id =
-                    event.id
+                  and relationship.student_id =
+                    event.student_id
+                  and relationship.receives_notifications =
+                    true
               )
               and not exists (
                 select 1

@@ -4,6 +4,9 @@ import { getDb } from "@/db";
 import {
   emitCasaOperationalNotificationBestEffort,
 } from "@/server/internal/operational-notifications";
+import {
+  reconcileRecentGuardianPresencePushes,
+} from "./guardian-presence-push";
 import { sendFcmToFid } from "./firebase-fcm";
 
 type PushRow = {
@@ -52,6 +55,20 @@ export async function runGuardianPushOutbox(
         input.limit ?? 50,
       ),
     );
+
+  const reconciled =
+    await reconcileRecentGuardianPresencePushes({
+      schoolId:
+        input.schoolId,
+      lookbackMinutes:
+        120,
+      limit:
+        Math.min(
+          200,
+          limit * 4,
+        ),
+    });
+
   const schoolFilter =
     input.schoolId
       ? sql`and outbox.school_id = ${input.schoolId}::uuid`
@@ -211,5 +228,12 @@ export async function runGuardianPushOutbox(
     });
   }
 
-  return { claimed: claimed.length, sent, retried, failed };
+  return {
+    reconciled,
+    claimed:
+      claimed.length,
+    sent,
+    retried,
+    failed,
+  };
 }

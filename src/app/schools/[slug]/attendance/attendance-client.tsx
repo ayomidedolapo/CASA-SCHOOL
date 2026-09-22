@@ -1749,6 +1749,82 @@ export default function AttendanceClient(
   }
 
 
+
+  async function cancelEarlyDepartureRequest(
+    attemptId:
+      string,
+  ) {
+    const confirmed =
+      window.confirm(
+        "Cancel this pending early-departure request? The student will remain on campus.",
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const grant =
+        await obtainPasskeyStepUpGrant({
+          schoolSlug:
+            slug,
+          action:
+            "EARLY_DEPARTURE",
+        });
+
+      const response =
+        await fetch(
+          `/api/schools/${encodeURIComponent(
+            slug,
+          )}/attendance/early-departures/${attemptId}/authorize`,
+          {
+            method:
+              "DELETE",
+            headers: {
+              "x-casa-passkey-step-up":
+                grant,
+            },
+            credentials:
+              "same-origin",
+          },
+        );
+
+      const body =
+        await response.json() as {
+          code?:
+            string;
+          message?:
+            string;
+        };
+
+      if (!response.ok) {
+        throw new Error(
+          body.message ??
+            body.code ??
+            "Early departure request could not be cancelled.",
+        );
+      }
+
+      setNotice(
+        "Early departure request cancelled. The student remains on campus.",
+      );
+
+      await refreshToday();
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Early departure request could not be cancelled.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function authorizeSelectedEarlyDepartures() {
     const reason =
       selectedEarlyReason.trim();
@@ -2399,14 +2475,14 @@ export default function AttendanceClient(
               .exceptions
               .signOutsWithoutGuardianOutbox
           }{" "}
-          accepted sign-out
+          recent accepted sign-out
           {data
             .exceptions
             .signOutsWithoutGuardianOutbox ===
           1
-            ? ""
-            : "s"}{" "}
-          currently have no guardian notification queued.
+            ? " is"
+            : "s are"}{" "}
+          waiting for guardian push reconciliation. CASA will retry automatically.
         </div>
       )}
 
@@ -2704,6 +2780,24 @@ export default function AttendanceClient(
                       Authorize with Passkey
                     </button>
                   )}
+
+                  <button
+                    type="button"
+                    className={
+                      styles.secondaryButton
+                    }
+                    disabled={
+                      busy
+                    }
+                    onClick={
+                      () =>
+                        void cancelEarlyDepartureRequest(
+                          departure.attemptId,
+                        )
+                    }
+                  >
+                    Cancel request with Passkey
+                  </button>
                 </div>
               ),
             )}

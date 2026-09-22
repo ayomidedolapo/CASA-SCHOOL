@@ -583,6 +583,259 @@ export async function authorizeEarlyDeparture(
   };
 }
 
+
+export async function cancelEarlyDeparture(
+  input: {
+    access:
+      SchoolAccess;
+    attemptId:
+      string;
+    stepUpToken:
+      string | null | undefined;
+  },
+) {
+  const db = getDb();
+
+  const candidateResult =
+    await db.execute(sql`
+      select
+        attempt.id,
+        attempt.terminal_id,
+        attempt.student_id,
+        attempt.card_result,
+        attempt.operation,
+        attempt.outcome,
+        attempt.departure_result,
+        attempt.reason_code,
+        terminal_branch.branch_id
+      from attendance_verification_attempts
+        attempt
+      left join school_branch_terminals
+        terminal_branch
+        on terminal_branch.school_id =
+           attempt.school_id
+       and terminal_branch.terminal_id =
+           attempt.terminal_id
+      where
+        attempt.school_id =
+          ${input.access.school.id}::uuid
+        and attempt.id =
+          ${input.attemptId}::uuid
+      limit 1
+    `);
+
+  const candidate =
+    rowsOf<{
+      id: string;
+      terminal_id:
+        string;
+      student_id:
+        string | null;
+      card_result:
+        string;
+      operation:
+        string;
+      outcome:
+        string;
+      departure_result:
+        string;
+      reason_code:
+        string | null;
+      branch_id:
+        string | null;
+    }>(
+      candidateResult,
+    )[0];
+
+  const isPendingEarlyDeparture =
+    candidate &&
+    candidate.operation ===
+      "CHECK_OUT" &&
+    candidate.outcome ===
+      "PENDING" &&
+    candidate.card_result ===
+      "MATCHED" &&
+    (
+      candidate.reason_code ===
+        "EARLY_DEPARTURE_AUTH_REQUIRED" ||
+      (
+        candidate.departure_result ===
+          "EARLY" &&
+        candidate.reason_code ===
+          null
+      )
+    );
+
+  if (
+    !candidate ||
+    !isPendingEarlyDeparture ||
+    !candidate.branch_id
+  ) {
+    return {
+      ok: false as const,
+      status: 409 as const,
+      code:
+        "EARLY_DEPARTURE_NOT_CANCELLABLE",
+    };
+  }
+
+  if (
+    !(
+      await canAuthorizeBranch({
+        access:
+          input.access,
+        branchId:
+          candidate.branch_id,
+      })
+    )
+  ) {
+    return {
+      ok: false as const,
+      status: 403 as const,
+      code:
+        "EARLY_DEPARTURE_AUTHORITY_REQUIRED",
+    };
+  }
+
+  if (!input.stepUpToken) {
+    return {
+      ok: false as const,
+      status: 403 as const,
+      code:
+        "PASSKEY_STEP_UP_REQUIRED",
+      requiredAction:
+        "EARLY_DEPARTURE" as const,
+    };
+  }
+
+  const passkeyGrantId =
+    await consumePasskeyStepUpGrantWithId({
+      token:
+        input.stepUpToken,
+      access:
+        input.access,
+      action:
+        "EARLY_DEPARTURE",
+    });
+
+  if (!passkeyGrantId) {
+    return {
+      ok: false as const,
+      status: 403 as const,
+      code:
+        "PASSKEY_STEP_UP_REQUIRED",
+      requiredAction:
+        "EARLY_DEPARTURE" as const,
+    };
+  }
+
+  const result =
+    await db.execute(sql`
+      with grant_check as (
+        select grant.id
+        from auth_passkey_step_up_grants
+          grant
+        where
+          grant.id =
+            ${passkeyGrantId}::uuid
+          and grant.user_id =
+            ${input.access.session.userId}::uuid
+          and grant.school_id =
+            ${input.access.school.id}::uuid
+          and grant.membership_id =
+            ${input.access.membership.id}::uuid
+          and grant.action =
+            'EARLY_DEPARTURE'
+          and grant.consumed_at
+            is not null
+        limit 1
+      ),
+      updated as (
+        update attendance_verification_attempts
+          attempt
+        set
+          outcome =
+            'REJECTED'::attendance_attempt_outcome,
+          reason_code =
+            'EARLY_DEPARTURE_CANCELLED_BY_STAFF',
+          manual_verified_by_membership_id =
+            ${input.access.membership.id}::uuid,
+          completed_at =
+            now()
+        where
+          attempt.school_id =
+            ${input.access.school.id}::uuid
+          and attempt.id =
+            ${input.attemptId}::uuid
+          and attempt.outcome =
+            'PENDING'::attendance_attempt_outcome
+          and attempt.operation =
+            'CHECK_OUT'::attendance_operation
+          and (
+            attempt.reason_code =
+              'EARLY_DEPARTURE_AUTH_REQUIRED'
+            or
+            (
+              attempt.departure_result =
+                'EARLY'::attendance_departure_result
+              and attempt.reason_code
+                is null
+            )
+          )
+          and exists (
+            select 1
+            from grant_check
+          )
+        returning attempt.id
+      ),
+      cancelled_liveness as (
+        update biometric_liveness_sessions
+          session
+        set
+          status = 'FAILED',
+          failure_code =
+            'EARLY_DEPARTURE_CANCELLED_BY_STAFF',
+          updated_at = now()
+        from updated
+        where
+          session.school_id =
+            ${input.access.school.id}::uuid
+          and session.attempt_id =
+            updated.id
+          and session.purpose =
+            'VERIFICATION'
+          and session.status =
+            'CREATED'
+        returning session.id
+      )
+      select id
+      from updated
+    `);
+
+  const cancelled =
+    rowsOf<{
+      id: string;
+    }>(
+      result,
+    )[0];
+
+  if (!cancelled) {
+    return {
+      ok: false as const,
+      status: 409 as const,
+      code:
+        "EARLY_DEPARTURE_CANCELLATION_STATE_CHANGED",
+    };
+  }
+
+  return {
+    ok: true as const,
+    cancelled: true,
+    attemptId:
+      cancelled.id,
+  };
+}
+
 export async function preauthorizeEarlyDepartures(
   input: {
     access:
