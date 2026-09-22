@@ -52,6 +52,10 @@ const renderer =
   read(
     "src/server/card-production/render.ts",
   );
+const renderHealth =
+  read(
+    "src/app/api/internal/operations/card-production/render-health/route.ts",
+  );
 const summer =
   read(
     "src/app/schools/[slug]/summer/summer-client.tsx",
@@ -144,6 +148,35 @@ assert.match(
 );
 assert.match(
   renderer,
+  /CARD_TEXT_FONT_FILE/,
+);
+assert.match(
+  renderer,
+  /fontfile:\s*CARD_TEXT_FONT_FILE/,
+);
+assert.match(
+  renderer,
+  /NotoSans\.ttf/,
+);
+assert.match(
+  renderer,
+  /AYỌMÍDÉ ỌLÁYÍWỌLÁ/,
+);
+assert.doesNotMatch(
+  renderer,
+  /function textSvg/,
+  "Card text must not depend on host SVG font discovery.",
+);
+assert.match(
+  renderHealth,
+  /sharp-text-fontfile-noto-sans/,
+);
+assert.match(
+  renderHealth,
+  /fontFileBytes/,
+);
+assert.match(
+  renderer,
   /qrImage/,
 );
 assert.match(
@@ -160,13 +193,23 @@ assert.match(
 );
 assert.match(
   renderer,
-  /item\.source !==\s*"ACADEMIC_SESSION"/,
-  "Academic session must remain suppressed on permanent physical cards.",
+  /\.source\s*!==\s*"ACADEMIC_SESSION"/,
+  "Academic session must remain suppressed on permanent physical cards regardless of renderer callback variable naming.",
 );
 assert.match(
   renderer,
-  /item\.source !==\s*"CLASS"/,
-  "Class must remain suppressed on permanent physical cards.",
+  /\.source\s*!==\s*"CLASS"/,
+  "Class must remain suppressed on permanent physical cards regardless of renderer callback variable naming.",
+);
+assert.match(
+  renderer,
+  /ACADEMIC_SESSION:\s*""/,
+  "Academic session resolver must stay blank on permanent physical cards.",
+);
+assert.match(
+  renderer,
+  /CLASS:\s*""/,
+  "Class resolver must stay blank on permanent physical cards.",
 );
 
 assert.match(

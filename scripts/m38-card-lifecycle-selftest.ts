@@ -130,11 +130,12 @@ assert.doesNotMatch(
 for (
   const marker of [
     "CARD_TEXT_FONT_FAMILY",
-    '"sans-serif"',
+    '"Noto Sans"',
+    "CARD_TEXT_FONT_FILE",
+    "fontfile:",
     "probeCardTextRuntime",
     "fitCardTextNormalized",
     "artifactRevision",
-    "dominant-baseline=\"middle\"",
   ]
 ) {
   assert.ok(
@@ -148,6 +149,11 @@ assert.doesNotMatch(
   renderer,
   /VECTOR_GLYPHS|vectorTextLine|<rect /,
   "M37 pixel-box glyph renderer must be gone.",
+);
+assert.doesNotMatch(
+  renderer,
+  /function textSvg|sharp-svg-generic-sans/,
+  "Card text must not regress to host-dependent SVG font rendering.",
 );
 
 const fit =

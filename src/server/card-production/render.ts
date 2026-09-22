@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+
 import QRCode from "qrcode";
 import sharp from "sharp";
 
@@ -104,9 +107,33 @@ function escapeXml(
 }
 
 const CARD_TEXT_FONT_FAMILY =
-  "sans-serif";
+  "Noto Sans";
 
-function textSvg(
+const CARD_TEXT_FONT_FILE =
+  path.join(
+    process.cwd(),
+    "src",
+    "server",
+    "card-production",
+    "fonts",
+    "NotoSans.ttf",
+  );
+
+const CARD_TEXT_FONT_BYTES =
+  readFileSync(
+    CARD_TEXT_FONT_FILE,
+  );
+
+if (
+  CARD_TEXT_FONT_BYTES.length <
+  500000
+) {
+  throw new Error(
+    "CARD_TEXT_FONT_BUNDLE_INVALID",
+  );
+}
+
+async function textOverlays(
   input: {
     width: number;
     height: number;
@@ -117,173 +144,253 @@ function textSvg(
         "frontText"
       ];
   },
-): Buffer {
-  const text =
-    input.items
-      .filter(
-        (item) =>
-          item.source !==
+): Promise<
+  Parameters<
+    ReturnType<
+      typeof sharp
+    >["composite"]
+  >[0]
+> {
+  const overlays:
+    Parameters<
+      ReturnType<
+        typeof sharp
+      >["composite"]
+    >[0] = [];
+
+  for (
+    const item of
+      input.items.filter(
+        (candidate) =>
+          candidate.source !==
             "ACADEMIC_SESSION" &&
-          item.source !==
+          candidate.source !==
             "CLASS",
       )
-      .map(
-        (item) => {
-          let value =
-            resolveText(
-              input.snapshot,
-              item.source,
-            );
+  ) {
+    let value =
+      resolveText(
+        input.snapshot,
+        item.source,
+      );
 
-          value =
-            truncate(
-              value,
-              item.maxCharacters,
-            );
+    value =
+      truncate(
+        value,
+        item.maxCharacters,
+      );
 
-          if (
-            item.uppercase
-          ) {
-            value =
-              value.toUpperCase();
-          }
+    if (
+      item.uppercase
+    ) {
+      value =
+        value.toUpperCase();
+    }
 
-          if (!value.trim()) {
-            return "";
-          }
+    if (
+      !value.trim()
+    ) {
+      continue;
+    }
 
-          const requestedFontSize =
+    const requestedFontSize =
+      Math.max(
+        0.008,
+        item.fontSize,
+      );
+
+    const minimumFontSize =
+      Math.min(
+        requestedFontSize,
+        Math.max(
+          0.006,
+          item.minFontSize ??
             Math.max(
-              0.008,
-              item.fontSize,
-            );
-          const minimumFontSize =
-            Math.min(
-              requestedFontSize,
-              Math.max(
-                0.006,
-                item.minFontSize ??
-                  Math.max(
-                    requestedFontSize *
-                      0.58,
-                    0.006,
-                  ),
-              ),
-            );
-          const maxWidth =
-            item.maxWidth ??
-            defaultCardTextMaxWidth({
-              x:
-                item.x,
-              align:
-                item.align,
-            });
-          const defaultLines =
-            item.source ===
-              "STUDENT_NAME" ||
-            item.source ===
-              "SCHOOL_NAME"
-              ? 2
-              : 1;
-          const fitted =
-            fitCardTextNormalized({
-              value,
-              fontSize:
-                requestedFontSize,
-              minFontSize:
-                minimumFontSize,
-              maxWidth,
-              maxLines:
-                item.maxLines ??
-                defaultLines,
-            });
+              requestedFontSize *
+                0.58,
+              0.006,
+            ),
+        ),
+      );
 
-          const x =
-            item.x *
-            input.width;
-          const centerY =
-            item.y *
-            input.height;
-          const fontSize =
-            fitted.fontSize *
-            input.width;
-          const lineHeight =
-            Math.max(
-              1,
-              fontSize *
-                1.08,
-            );
-          const anchor =
-            item.align ===
-              "CENTER"
-              ? "middle"
-              : item.align ===
-                  "RIGHT"
-                ? "end"
-                : "start";
+    const maxWidth =
+      item.maxWidth ??
+      defaultCardTextMaxWidth({
+        x:
+          item.x,
+        align:
+          item.align,
+      });
 
-          return fitted.lines
-            .map(
-              (
+    const defaultLines =
+      item.source ===
+        "STUDENT_NAME" ||
+      item.source ===
+        "SCHOOL_NAME"
+        ? 2
+        : 1;
+
+    const fitted =
+      fitCardTextNormalized({
+        value,
+        fontSize:
+          requestedFontSize,
+        minFontSize:
+          minimumFontSize,
+        maxWidth,
+        maxLines:
+          item.maxLines ??
+          defaultLines,
+      });
+
+    const x =
+      item.x *
+      input.width;
+
+    const centerY =
+      item.y *
+      input.height;
+
+    const fontSize =
+      fitted.fontSize *
+      input.width;
+
+    const lineHeight =
+      Math.max(
+        1,
+        fontSize *
+          1.08,
+      );
+
+    for (
+      const [
+        index,
+        line,
+      ] of
+        fitted.lines.entries()
+    ) {
+      const offset =
+        (
+          index -
+          (
+            fitted.lines.length -
+            1
+          ) /
+            2
+        ) *
+        lineHeight;
+
+      const y =
+        centerY +
+        offset;
+
+      const overlay =
+        await sharp({
+          text: {
+            text:
+              `<span foreground="${item.color}" weight="${item.weight}" size="${Math.max(
+                1,
+                fontSize,
+              ).toFixed(
+                2,
+              )}pt">${escapeXml(
                 line,
-                index,
-              ) => {
-                const offset =
-                  (
-                    index -
-                    (
-                      fitted.lines.length -
-                      1
-                    ) /
-                      2
-                  ) *
-                  lineHeight;
-                const y =
-                  centerY +
-                  offset;
+              )}</span>`,
+            font:
+              CARD_TEXT_FONT_FAMILY,
+            fontfile:
+              CARD_TEXT_FONT_FILE,
+            rgba: true,
+            dpi: 72,
+            wrap:
+              "none",
+          },
+        })
+          .png()
+          .toBuffer();
 
-                return `<text x="${x.toFixed(
-                  2,
-                )}" y="${y.toFixed(
-                  2,
-                )}" fill="${item.color}" font-family="${CARD_TEXT_FONT_FAMILY}" font-size="${fontSize.toFixed(
-                  2,
-                )}" font-weight="${Number(
-                  item.weight,
-                )}" text-anchor="${anchor}" dominant-baseline="middle" text-rendering="geometricPrecision">${escapeXml(
-                  line,
-                )}</text>`;
-              },
-            )
-            .join("");
-        },
-      )
-      .join("");
+      const meta =
+        await sharp(
+          overlay,
+        ).metadata();
 
-  return Buffer.from(
-    `<svg width="${input.width}" height="${input.height}" xmlns="http://www.w3.org/2000/svg">${text}</svg>`,
-    "utf8",
-  );
+      if (
+        !meta.width ||
+        !meta.height
+      ) {
+        throw new Error(
+          "CARD_TEXT_OVERLAY_DIMENSIONS_UNAVAILABLE",
+        );
+      }
+
+      const rawLeft =
+        item.align ===
+          "CENTER"
+          ? x -
+            meta.width /
+              2
+          : item.align ===
+              "RIGHT"
+            ? x -
+              meta.width
+            : x;
+
+      const rawTop =
+        y -
+        meta.height /
+          2;
+
+      overlays.push({
+        input:
+          overlay,
+        left:
+          Math.max(
+            0,
+            Math.round(
+              rawLeft,
+            ),
+          ),
+        top:
+          Math.max(
+            0,
+            Math.round(
+              rawTop,
+            ),
+          ),
+      });
+    }
+  }
+
+  return overlays;
 }
 
 export async function probeCardTextRuntime(): Promise<{
   healthy: boolean;
   sampleABytes: number;
   sampleBBytes: number;
+  fontFileBytes: number;
 }> {
   const renderProbe =
     async (
       value:
         string,
     ) =>
-      sharp(
-        Buffer.from(
-          `<svg width="360" height="100" xmlns="http://www.w3.org/2000/svg"><text x="180" y="50" fill="#000000" font-family="${CARD_TEXT_FONT_FAMILY}" font-size="44" font-weight="700" text-anchor="middle" dominant-baseline="middle">${escapeXml(
-            value,
-          )}</text></svg>`,
-          "utf8",
-        ),
-      )
+      sharp({
+        text: {
+          text:
+            `<span foreground="#000000" weight="700" size="44pt">${escapeXml(
+              value,
+            )}</span>`,
+          font:
+            CARD_TEXT_FONT_FAMILY,
+          fontfile:
+            CARD_TEXT_FONT_FILE,
+          rgba: true,
+          dpi: 72,
+          wrap:
+            "none",
+        },
+      })
         .png()
         .toBuffer();
 
@@ -293,15 +400,17 @@ export async function probeCardTextRuntime(): Promise<{
   ] =
     await Promise.all([
       renderProbe(
-        "CASA",
+        "CASA SCHOOL",
       ),
       renderProbe(
-        "MIND",
+        "AYỌMÍDÉ ỌLÁYÍWỌLÁ",
       ),
     ]);
 
   return {
     healthy:
+      CARD_TEXT_FONT_BYTES.length >=
+        500000 &&
       sampleA.length >
         300 &&
       sampleB.length >
@@ -313,6 +422,8 @@ export async function probeCardTextRuntime(): Promise<{
       sampleA.length,
     sampleBBytes:
       sampleB.length,
+    fontFileBytes:
+      CARD_TEXT_FONT_BYTES.length,
   };
 }
 
@@ -365,20 +476,13 @@ async function renderSide(
 
   const composites:
     Parameters<ReturnType<typeof sharp>["composite"]>[0] =
-      [
-        {
-          input:
-            textSvg({
-              width,
-              height,
-              snapshot:
-                input.snapshot,
-              items,
-            }),
-          left: 0,
-          top: 0,
-        },
-      ];
+      await textOverlays({
+        width,
+        height,
+        snapshot:
+          input.snapshot,
+        items,
+      });
 
   if (
     input.layout.qr

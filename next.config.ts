@@ -1,7 +1,11 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  outputFileTracingIncludes: {
+    "/*": [
+      "./src/server/card-production/fonts/NotoSans.ttf",
+    ],
+  },
 };
 
 export default nextConfig;

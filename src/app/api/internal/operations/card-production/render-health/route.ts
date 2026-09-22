@@ -21,11 +21,13 @@ export async function GET() {
         healthy:
           probe.healthy,
         renderer:
-          "sharp-svg-generic-sans",
+          "sharp-text-fontfile-noto-sans",
         sampleABytes:
           probe.sampleABytes,
         sampleBBytes:
           probe.sampleBBytes,
+        fontFileBytes:
+          probe.fontFileBytes,
       },
       {
         status:
