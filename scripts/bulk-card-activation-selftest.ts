@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 
 const read = (path: string) =>
-  fs.readFileSync(path, "utf8");
+  fs
+    .readFileSync(path, "utf8")
+    .replace(/\r\n/g, "\n");
 
 const stepUp =
   read("src/server/auth/passkey-step-up.ts");

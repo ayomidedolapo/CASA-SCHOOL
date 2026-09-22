@@ -10,6 +10,7 @@ import {
 import {
   BulkCardActivationError,
   activateBranchReadyCardsBulk,
+  getBranchActiveCardActivationAudit,
   getBranchBulkCardActivationReadiness,
 } from "@/server/card-production/bulk-activation";
 import {
@@ -109,6 +110,13 @@ export async function GET(
                 branch.is_headquarters,
               readiness:
                 await getBranchBulkCardActivationReadiness({
+                  access:
+                    visibility.access,
+                  branchId:
+                    branch.id,
+                }),
+              activeCards:
+                await getBranchActiveCardActivationAudit({
                   access:
                     visibility.access,
                   branchId:

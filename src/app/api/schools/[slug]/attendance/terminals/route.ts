@@ -88,6 +88,43 @@ export async function GET(
         slug,
       );
 
+    const visibility =
+      await listVisibleBranches(
+        slug,
+      );
+    const visibleBranchIds =
+      visibility.branches.map(
+        (branch) =>
+          String(
+            (
+              branch as {
+                id: unknown;
+              }
+            ).id,
+          ),
+      );
+    const canSeeUnassigned =
+      visibility.organizationAdmin ||
+      access.roles.includes(
+        "SCHOOL_TECHNICIAN",
+      );
+
+    if (
+      visibleBranchIds.length ===
+        0 &&
+      !canSeeUnassigned
+    ) {
+      return NextResponse.json(
+        {
+          terminals: [],
+        },
+        {
+          headers:
+            attendanceNoStoreHeaders,
+        },
+      );
+    }
+
     const db = getDb();
 
     const terminals =
@@ -138,6 +175,16 @@ export async function GET(
           where
             t.school_id =
               ${access.school.id}::uuid
+            and (
+              mapping.branch_id =
+                any(
+                  ${visibleBranchIds}::uuid[]
+                )
+              or (
+                mapping.branch_id is null
+                and ${canSeeUnassigned}
+              )
+            )
           order by
             t.created_at desc
         `),

@@ -57,6 +57,7 @@ interface GuardianRow {
   phone: string | null;
   status: string;
   membershipId: string | null;
+  notificationsEnabled: boolean;
 }
 
 interface StudentDetail {
@@ -1088,17 +1089,30 @@ export function RegistryClient({
                           </p>
                         </div>
 
-                        <span
-                          className={`casa-status ${
-                            guardian.membershipId
-                              ? "casa-status-positive"
-                              : ""
-                          }`}
-                        >
-                          {guardian.membershipId
-                            ? "Portal linked"
-                            : "No login account"}
-                        </span>
+                        <div className="flex flex-wrap justify-end gap-2">
+                          <span
+                            className={`casa-status ${
+                              guardian.membershipId
+                                ? "casa-status-positive"
+                                : ""
+                            }`}
+                          >
+                            {guardian.membershipId
+                              ? "Portal linked"
+                              : "No portal account"}
+                          </span>
+                          <span
+                            className={`casa-status ${
+                              guardian.notificationsEnabled
+                                ? "casa-status-positive"
+                                : ""
+                            }`}
+                          >
+                            {guardian.notificationsEnabled
+                              ? "Notifications enabled"
+                              : "Notifications not enabled"}
+                          </span>
+                        </div>
                       </div>
                     ),
                   )

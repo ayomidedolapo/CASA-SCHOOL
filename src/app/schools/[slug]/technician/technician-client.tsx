@@ -2327,6 +2327,11 @@ export default function TechnicianClient(
                                   : ""
                               )
                             }
+                            disabled={
+                              Boolean(
+                                terminal.branchId,
+                              )
+                            }
                             onChange={
                               (
                                 event,
@@ -2345,7 +2350,14 @@ export default function TechnicianClient(
                             <option value="">
                               Select campus
                             </option>
-                            {branches.map(
+                            {branches
+                              .filter(
+                                (branch) =>
+                                  !terminal.branchId ||
+                                  branch.id ===
+                                    terminal.branchId,
+                              )
+                              .map(
                               (branch) => (
                                 <option
                                   key={
@@ -2369,6 +2381,9 @@ export default function TechnicianClient(
                               styles.secondary
                             }
                             disabled={
+                              Boolean(
+                                terminal.branchId,
+                              ) ||
                               busy ||
                               !(
                                 terminalBranchSelections[
@@ -2403,7 +2418,7 @@ export default function TechnicianClient(
                           >
                             {
                               terminal.branchId
-                                ? "Change campus"
+                                ? "Campus locked"
                                 : "Assign campus"
                             }
                           </button>

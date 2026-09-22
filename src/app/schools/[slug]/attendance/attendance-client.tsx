@@ -1564,6 +1564,21 @@ export default function AttendanceClient(
             10,
           );
 
+      const policyDays =
+        selectedWeekdays.map(
+          (
+            weekday,
+          ) => ({
+            weekday,
+            ...(
+              dayTimes[
+                weekday
+              ] ??
+              defaultAttendanceDayTimes
+            ),
+          }),
+        );
+
       const response =
         await fetch(
           `/api/schools/${encodeURIComponent(
@@ -1592,19 +1607,7 @@ export default function AttendanceClient(
                 schoolBusGraceMinutes,
                 independentGraceMinutes,
                 days:
-                  selectedWeekdays.map(
-                    (
-                      weekday,
-                    ) => ({
-                      weekday,
-                      ...(
-                        dayTimes[
-                          weekday
-                        ] ??
-                        defaultAttendanceDayTimes
-                      ),
-                    }),
-                  ),
+                  policyDays,
               }),
           },
         );
@@ -3551,7 +3554,7 @@ export default function AttendanceClient(
               ) : null}
 
               <p className={styles.muted}>
-                Each selected weekday has its own attendance times. Each instructional weekday has its own attendance times. Use the Saturday Lessons control above to turn normal Saturday attendance on or off. Calendar remains for exceptional dates such as holidays, breaks, branch closures or a Special non-instructional day.
+                Editing one weekday changes only that weekday. Saving creates a new version of the weekly policy, but CASA preserves the separate times entered for every selected day. Use the Saturday Lessons control above to turn normal Saturday attendance on or off. Calendar remains for exceptional dates such as holidays, breaks, branch closures or a Special non-instructional day.
               </p>
             </div>
 

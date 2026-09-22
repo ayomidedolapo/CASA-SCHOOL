@@ -246,6 +246,133 @@ export async function getBranchBulkCardActivationReadiness(
   };
 }
 
+
+export interface ActiveCardActivationAuditRow {
+  cardId: string;
+  serialNumber: string;
+  studentId: string;
+  casaStudentId: string;
+  studentName: string;
+  activatedAt:
+    string |
+    Date |
+    null;
+  actorMembershipId:
+    string |
+    null;
+  actorName:
+    string |
+    null;
+  reason:
+    string |
+    null;
+}
+
+export async function getBranchActiveCardActivationAudit(
+  input: {
+    access: SchoolAccess;
+    branchId: string;
+  },
+): Promise<ActiveCardActivationAuditRow[]> {
+  const db = getDb();
+
+  const result =
+    await db.execute(sql`
+      select distinct on (card.id)
+        card.id::text
+          as "cardId",
+        card.serial_number
+          as "serialNumber",
+        student.id::text
+          as "studentId",
+        student.casa_student_id
+          as "casaStudentId",
+        concat_ws(
+          ' ',
+          student.first_name,
+          nullif(
+            student.middle_name,
+            ''
+          ),
+          student.last_name
+        ) as "studentName",
+        activation.created_at
+          as "activatedAt",
+        activation.actor_membership_id::text
+          as "actorMembershipId",
+        actor.full_name
+          as "actorName",
+        activation.reason
+          as "reason"
+      from student_identity_cards card
+      join students student
+        on student.school_id =
+           card.school_id
+       and student.id =
+           card.student_id
+       and student.status =
+           'ACTIVE'::student_status
+      join student_enrollments enrollment
+        on enrollment.school_id =
+           card.school_id
+       and enrollment.student_id =
+           card.student_id
+       and enrollment.status =
+           'ACTIVE'::student_enrollment_status
+       and enrollment.starts_on <=
+           current_date
+       and (
+         enrollment.ends_on is null
+         or enrollment.ends_on >=
+            current_date
+       )
+      join school_branch_class_arms mapping
+        on mapping.school_id =
+           enrollment.school_id
+       and mapping.class_arm_id =
+           enrollment.class_arm_id
+       and mapping.branch_id =
+           ${input.branchId}::uuid
+      left join lateral (
+        select
+          event.actor_membership_id,
+          event.reason,
+          event.created_at
+        from student_identity_card_events event
+        where
+          event.school_id =
+            card.school_id
+          and event.card_id =
+            card.id
+          and event.event_type =
+            'ACTIVATED'::student_identity_card_event_type
+        order by
+          event.created_at desc
+        limit 1
+      ) activation on true
+      left join school_memberships actor_membership
+        on actor_membership.school_id =
+           card.school_id
+       and actor_membership.id =
+           activation.actor_membership_id
+      left join users actor
+        on actor.id =
+           actor_membership.user_id
+      where
+        card.school_id =
+          ${input.access.school.id}::uuid
+        and card.status =
+          'ACTIVE'::student_identity_card_status
+      order by
+        card.id,
+        enrollment.starts_on desc
+    `);
+
+  return rowsOf<
+    ActiveCardActivationAuditRow
+  >(result);
+}
+
 export async function activateBranchReadyCardsBulk(
   input: {
     access: SchoolAccess;

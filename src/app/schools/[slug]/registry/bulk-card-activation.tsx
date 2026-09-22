@@ -23,12 +23,26 @@ interface BranchReadiness {
   manualReviewCount: number;
 }
 
+interface ActiveCardActivationAudit {
+  cardId: string;
+  serialNumber: string;
+  studentId: string;
+  casaStudentId: string;
+  studentName: string;
+  activatedAt: string | null;
+  actorMembershipId: string | null;
+  actorName: string | null;
+  reason: string | null;
+}
+
 interface BranchRow {
   id: string;
   name: string;
   code: string;
   isHeadquarters: boolean;
   readiness: BranchReadiness;
+  activeCards:
+    ActiveCardActivationAudit[];
 }
 
 interface ReadinessResponse {
@@ -387,6 +401,47 @@ export function BulkCardActivation({
                         ),
                       )}
                     </div>
+
+                    {branch.activeCards.length > 0 ? (
+                      <details className="mt-3 border border-black/15 bg-white p-3">
+                        <summary className="cursor-pointer text-xs font-semibold">
+                          Activation history · {branch.activeCards.length}
+                        </summary>
+                        <div className="mt-3 divide-y divide-black/10">
+                          {branch.activeCards.map(
+                            (card) => (
+                              <div
+                                key={card.cardId}
+                                className="grid gap-1 py-3 text-xs sm:grid-cols-[1fr_auto]"
+                              >
+                                <div>
+                                  <strong>
+                                    {card.studentName}
+                                  </strong>
+                                  <p className="mt-1 font-mono text-[9px] uppercase tracking-[0.08em] text-black/45">
+                                    {card.casaStudentId} · {card.serialNumber}
+                                  </p>
+                                  <p className="mt-1 text-black/55">
+                                    {card.activatedAt
+                                      ? `Activated ${new Date(card.activatedAt).toLocaleString()}`
+                                      : "No activation event recorded"}
+                                    {" · "}
+                                    {card.actorName
+                                      ? `By ${card.actorName}`
+                                      : "Actor unavailable"}
+                                  </p>
+                                  {card.reason ? (
+                                    <p className="mt-1 text-black/45">
+                                      {card.reason}
+                                    </p>
+                                  ) : null}
+                                </div>
+                              </div>
+                            ),
+                          )}
+                        </div>
+                      </details>
+                    ) : null}
                   </div>
 
                   <button

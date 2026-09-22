@@ -42,6 +42,27 @@ interface RouteContext {
   }>;
 }
 
+function rowsOf<T>(
+  result: unknown,
+): T[] {
+  if (Array.isArray(result)) {
+    return result as T[];
+  }
+
+  if (
+    result &&
+    typeof result === "object" &&
+    "rows" in result &&
+    Array.isArray(
+      (result as { rows?: unknown }).rows,
+    )
+  ) {
+    return (result as { rows: T[] }).rows;
+  }
+
+  return [];
+}
+
 export async function PATCH(
   request: NextRequest,
   context: RouteContext,
@@ -157,6 +178,84 @@ export async function PATCH(
       );
     }
 
+    const visibility =
+      await listVisibleBranches(
+        slug,
+      );
+    const visibleBranchIds =
+      visibility.branches.map(
+        (branch) =>
+          String(
+            (
+              branch as {
+                id: unknown;
+              }
+            ).id,
+          ),
+      );
+    const assignment =
+      rowsOf<{
+        branch_id: string;
+      }>(
+        await db.execute(sql`
+          select
+            mapping.branch_id::text
+              as branch_id
+          from school_branch_terminals mapping
+          where
+            mapping.school_id =
+              ${access.school.id}::uuid
+            and mapping.terminal_id =
+              ${terminalId}::uuid
+          limit 1
+        `),
+      )[0] ??
+      null;
+    const currentBranchId =
+      assignment?.branch_id ??
+      null;
+
+    if (
+      currentBranchId &&
+      !visibleBranchIds.includes(
+        currentBranchId,
+      )
+    ) {
+      return NextResponse.json(
+        {
+          message:
+            "This terminal belongs to a campus outside your current scope.",
+          code:
+            "TERMINAL_CAMPUS_SCOPE_DENIED",
+        },
+        {
+          status: 403,
+          headers:
+            attendanceNoStoreHeaders,
+        },
+      );
+    }
+
+    if (
+      !currentBranchId &&
+      parsed.data.action !==
+        "ASSIGN_CAMPUS"
+    ) {
+      return NextResponse.json(
+        {
+          message:
+            "Assign this legacy terminal to a campus before changing it.",
+          code:
+            "TERMINAL_CAMPUS_REQUIRED",
+        },
+        {
+          status: 409,
+          headers:
+            attendanceNoStoreHeaders,
+        },
+      );
+    }
+
     const passkeyActionByLifecycle: Record<
       typeof parsed.data.action,
       PasskeyStepUpAction
@@ -202,10 +301,21 @@ export async function PATCH(
       const requestedBranchId =
         parsed.data.branchId;
 
-      const visibility =
-        await listVisibleBranches(
-          slug,
+      if (currentBranchId) {
+        return NextResponse.json(
+          {
+            message:
+              "A provisioned terminal stays with its campus. Provision a separate terminal for another campus.",
+            code:
+              "TERMINAL_CAMPUS_IMMUTABLE",
+          },
+          {
+            status: 409,
+            headers:
+              attendanceNoStoreHeaders,
+          },
         );
+      }
 
       const selectedBranch =
         visibility.branches.find(

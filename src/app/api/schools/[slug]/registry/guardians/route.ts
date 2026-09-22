@@ -5,6 +5,7 @@ import {
   eq,
   ilike,
   or,
+  sql,
 } from "drizzle-orm";
 import {
   NextRequest,
@@ -91,6 +92,20 @@ export async function GET(
         status: guardians.status,
         membershipId:
           guardians.membershipId,
+        notificationsEnabled:
+          sql<boolean>`exists (
+            select 1
+            from guardian_push_devices device
+            where
+              device.school_id =
+                ${guardians.schoolId}
+              and device.guardian_id =
+                ${guardians.id}
+              and device.status =
+                'ACTIVE'
+          )`.as(
+            "notificationsEnabled",
+          ),
       })
       .from(guardians)
       .where(whereCondition)
