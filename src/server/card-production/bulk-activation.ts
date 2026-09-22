@@ -30,6 +30,7 @@ function rowsOf<T>(
 }
 
 export interface BulkCardActivationReadiness {
+  activeCount: number;
   totalReadyCards: number;
   eligibleCount: number;
   awaitingPrintCount: number;
@@ -153,6 +154,46 @@ export async function getBranchBulkCardActivationReadiness(
         enrollment.starts_on desc
     )
     select
+      (
+        select
+          count(
+            distinct active_card.student_id
+          )::int
+        from student_identity_cards active_card
+        join students active_student
+          on active_student.school_id =
+             active_card.school_id
+         and active_student.id =
+             active_card.student_id
+         and active_student.status =
+             'ACTIVE'::student_status
+        join student_enrollments active_enrollment
+          on active_enrollment.school_id =
+             active_card.school_id
+         and active_enrollment.student_id =
+             active_card.student_id
+         and active_enrollment.status =
+             'ACTIVE'::student_enrollment_status
+         and active_enrollment.starts_on <=
+             current_date
+         and (
+           active_enrollment.ends_on is null
+           or active_enrollment.ends_on >=
+              current_date
+         )
+        join school_branch_class_arms active_mapping
+          on active_mapping.school_id =
+             active_enrollment.school_id
+         and active_mapping.class_arm_id =
+             active_enrollment.class_arm_id
+         and active_mapping.branch_id =
+             ${input.branchId}::uuid
+        where
+          active_card.school_id =
+            ${input.access.school.id}::uuid
+          and active_card.status =
+            'ACTIVE'::student_identity_card_status
+      ) as active_count,
       count(*)::int as total_ready_cards,
       count(*) filter (
         where
@@ -181,6 +222,7 @@ export async function getBranchBulkCardActivationReadiness(
   `);
 
   const row = rowsOf<{
+    active_count: number;
     total_ready_cards: number;
     eligible_count: number;
     awaiting_print_count: number;
@@ -189,6 +231,8 @@ export async function getBranchBulkCardActivationReadiness(
   }>(result)[0];
 
   return {
+    activeCount:
+      Number(row?.active_count ?? 0),
     totalReadyCards:
       Number(row?.total_ready_cards ?? 0),
     eligibleCount:

@@ -15,6 +15,7 @@ interface BulkCardActivationProps {
 }
 
 interface BranchReadiness {
+  activeCount: number;
   totalReadyCards: number;
   eligibleCount: number;
   awaitingPrintCount: number;
@@ -286,7 +287,7 @@ export function BulkCardActivation({
             Activate ready cards in one Passkey ceremony
           </h3>
           <p className="mt-2 max-w-3xl text-xs leading-5 text-black/55">
-            The school activates only cards that have been printed and whose student has completed face registration. Branch Admins activate their own campus; HQ Admins activate HQ only. CASA Team can print and audit cards but cannot activate them.
+            The school activates only cards that have been printed and whose student has completed face registration. Cards already activated are shown separately and do not need another Passkey ceremony. Branch Admins activate their own campus; HQ Admins activate HQ only. CASA Team can print and audit cards but cannot activate them.
           </p>
         </div>
         <p className="font-mono text-[9px] uppercase tracking-[0.1em] text-black/40">
@@ -348,8 +349,12 @@ export function BulkCardActivation({
                       </span>
                     </div>
 
-                    <div className="mt-4 grid grid-cols-2 gap-px border border-black/20 bg-black/20 sm:grid-cols-4">
+                    <div className="mt-4 grid grid-cols-2 gap-px border border-black/20 bg-black/20 sm:grid-cols-3 lg:grid-cols-5">
                       {[
+                        [
+                          "Already active",
+                          readiness.activeCount,
+                        ],
                         [
                           "Ready to activate",
                           readiness.eligibleCount,
