@@ -300,8 +300,9 @@ export async function getTodayAttendanceOperations(
             as excuse_id,
           excuse.reason
             as excuse_reason,
-          card_state.card_count,
+                    card_state.card_count,
           card_state.pending_count,
+          card_state.active_count,
           replacement.id
             as card_replacement_case_id,
           replacement.reported_lost_on::text
@@ -402,12 +403,18 @@ export async function getTodayAttendanceOperations(
           select
             count(*)::int
               as card_count,
-            count(*) filter (
+                        count(*) filter (
               where
                 card.status =
                   'READY_FOR_ACTIVATION'::student_identity_card_status
             )::int
-              as pending_count
+              as pending_count,
+            count(*) filter (
+              where
+                card.status =
+                  'ACTIVE'::student_identity_card_status
+            )::int
+              as active_count
           from student_identity_cards
             card
           where
@@ -757,7 +764,9 @@ export async function getTodayAttendanceOperations(
         string | null;
       card_count:
         number;
-      pending_count:
+            pending_count:
+        number;
+      active_count:
         number;
       card_replacement_case_id:
         string | null;
@@ -853,8 +862,13 @@ export async function getTodayAttendanceOperations(
             student.recorded_at,
           checkedOutAt:
             student.checked_out_at,
-          earlyDeparturePreauthorized:
+                    earlyDeparturePreauthorized:
             student.early_departure_preauthorized,
+          scannerCheckoutEligible:
+            Number(
+              student.active_count ??
+                0,
+            ) > 0,
           firstCardPendingHandover:
             Number(
               student.card_count ??

@@ -212,7 +212,8 @@ export const studentCardProductionJobs =
         .$type<
           | "SCHOOL_MEMBERSHIP"
           | "SCHOOL_ENROLLMENT_AUTO_ISSUE"
-          | "CASA_INTERNAL_RENEWAL"
+                    | "CASA_INTERNAL_RENEWAL"
+          | "CASA_INTERNAL_REPLACEMENT"
         >()
         .default(
           "SCHOOL_MEMBERSHIP",
@@ -420,9 +421,16 @@ export const studentCardProductionJobs =
           and ${table.passkeyGrantId} is null
           and ${table.internalAuthorityReference} is not null
         )
-        or
+                or
         (
           ${table.productionAuthority} = 'CASA_INTERNAL_RENEWAL'
+          and ${table.issuedByMembershipId} is null
+          and ${table.passkeyGrantId} is null
+          and ${table.internalAuthorityReference} is not null
+        )
+        or
+        (
+          ${table.productionAuthority} = 'CASA_INTERNAL_REPLACEMENT'
           and ${table.issuedByMembershipId} is null
           and ${table.passkeyGrantId} is null
           and ${table.internalAuthorityReference} is not null

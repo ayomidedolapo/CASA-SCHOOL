@@ -386,7 +386,34 @@ export async function produceStudentCard(
       string;
   },
 ) {
-  const db = getDb();
+    const db = getDb();
+
+  const pendingReplacement =
+    asArrayRow<{
+      id: string;
+    }>(
+      await db.execute(sql`
+        select id
+        from student_card_replacement_cases
+        where
+          school_id =
+            ${input.access.school.id}::uuid
+          and student_id =
+            ${input.studentId}::uuid
+          and status =
+            'CARD_REPLACEMENT_PENDING'::student_card_replacement_case_status
+        limit 1
+      `),
+    );
+
+  if (pendingReplacement) {
+    return {
+      ok: false as const,
+      status: 409 as const,
+      code:
+        "CARD_REPLACEMENT_BATCH_REQUIRED",
+    };
+  }
 
   const [
     student,

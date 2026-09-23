@@ -6,9 +6,13 @@ import { z } from "zod";
 
 import {
   getPendingCardReplacementCase,
+  markStudentCardReplacementPaid,
   reportStudentCardLost,
   requestStudentCardReplacement,
 } from "@/server/attendance/card-replacement";
+import {
+  consumePasskeyStepUpGrant,
+} from "@/server/auth/passkey-step-up";
 import {
   registryAuthErrorResponse,
   registryNoStoreHeaders,
@@ -45,8 +49,34 @@ const mutationSchema =
       z.object({
         action:
           z.literal(
+            "REPORT_DAMAGED",
+          ),
+        reason:
+          z.string()
+            .trim()
+            .min(1)
+            .max(240)
+            .optional()
+            .nullable(),
+      }),
+      z.object({
+        action:
+          z.literal(
             "REQUEST_REPLACEMENT",
           ),
+      }),
+      z.object({
+        action:
+          z.literal(
+            "MARK_PAID",
+          ),
+        paymentReference:
+          z.string()
+            .trim()
+            .min(1)
+            .max(120)
+            .optional()
+            .nullable(),
       }),
     ],
   );
@@ -147,25 +177,88 @@ export async function POST(
       );
     }
 
-    const result =
+    let result;
+
+    if (
       parsed.data.action ===
-        "REPORT_LOST"
-        ? await reportStudentCardLost({
+        "REPORT_LOST" ||
+      parsed.data.action ===
+        "REPORT_DAMAGED"
+    ) {
+      result =
+        await reportStudentCardLost({
+          access,
+          studentId,
+          reason:
+            parsed.data.reason ??
+            null,
+          replacementReason:
+            parsed.data.action ===
+              "REPORT_DAMAGED"
+              ? "DAMAGED"
+              : "LOST",
+        });
+    } else if (
+      parsed.data.action ===
+      "MARK_PAID"
+    ) {
+      const token =
+        request.headers.get(
+          "x-casa-passkey-step-up",
+        );
+
+      const authorized =
+        token
+          ? await consumePasskeyStepUpGrant({
+              token,
+              access,
+              action:
+                "CARD_REPLACEMENT_PAYMENT",
+            })
+          : false;
+
+      if (!authorized) {
+        return NextResponse.json(
+          {
+            message:
+              "Passkey authorization is required to mark a replacement payment as received.",
+            code:
+              "PASSKEY_STEP_UP_REQUIRED",
+            requiredAction:
+              "CARD_REPLACEMENT_PAYMENT",
+          },
+          {
+            status: 403,
+            headers:
+              registryNoStoreHeaders,
+          },
+        );
+      }
+
+      result = {
+        case:
+          await markStudentCardReplacementPaid({
             access,
             studentId,
-            reason:
-              parsed.data.reason ??
+            paymentReference:
+              parsed.data
+                .paymentReference ??
               null,
-          })
-        : {
-            case:
-              await requestStudentCardReplacement({
-                access,
-                studentId,
-              }),
-            created:
-              false,
-          };
+          }),
+        created:
+          false,
+      };
+    } else {
+      result = {
+        case:
+          await requestStudentCardReplacement({
+            access,
+            studentId,
+          }),
+        created:
+          false,
+      };
+    }
 
     return NextResponse.json(
       result,

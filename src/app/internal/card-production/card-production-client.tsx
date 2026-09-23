@@ -8,6 +8,8 @@ type Branch = { id: string; school_id: string; name: string };
 type Template = { id: string; school_id: string; school_name: string; version_label: string; status: string; activated_at: string | null; created_at: string };
 type Snapshot = { schoolName?: string; studentName?: string; casaStudentId?: string; admissionNumber?: string | null; className?: string | null; cardSerial?: string; branchId?: string | null; branchName?: string | null };
 type Job = { id: string; schoolId: string; status: "READY" | "EXPORTED" | "PRINTED"; publicLinkRevision: number; renderSnapshot: Snapshot; queuedAt: string; exportedAt: string | null; printedAt: string | null; templateVersion: string; publicUrl: string };
+type ReplacementBatch = { school_id: string; school_name: string; batch_eligible_on: string; student_count: number; due: boolean };
+
 
 function fmt(value: string | null | undefined) { if (!value) return "—"; const date = new Date(value); return Number.isNaN(date.getTime()) ? value : date.toLocaleString(); }
 
@@ -19,7 +21,8 @@ export default function CardProductionClient({ schools, branches, templates }: {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [rotateJob, setRotateJob] = useState<Job | null>(null);
+    const [rotateJob, setRotateJob] = useState<Job | null>(null);
+  const [replacementBatches, setReplacementBatches] = useState<ReplacementBatch[]>([]);
   const availableBranches = useMemo(() => branches.filter((branch) => !schoolId || branch.school_id === schoolId), [branches, schoolId]);
 
   const load = useCallback(async () => {
@@ -77,7 +80,37 @@ export default function CardProductionClient({ schools, branches, templates }: {
       cancelled = true;
     };
   }, [status, schoolId, branchId]);
+    useEffect(() => {
+    let cancelled = false;
+    const params = new URLSearchParams();
+    if (schoolId) params.set("schoolId", schoolId);
+
+    void fetch(`/api/internal/operations/card-production/replacement-batches?${params}`, {
+      cache: "no-store",
+      credentials: "same-origin",
+    })
+      .then(async (response) => {
+        const body = await response.json().catch(() => null) as {
+          batches?: ReplacementBatch[];
+          message?: string;
+        } | null;
+        if (!response.ok) throw new Error(body?.message ?? "Unable to load scheduled replacement batches.");
+        return body;
+      })
+      .then((body) => {
+        if (!cancelled) setReplacementBatches(body?.batches ?? []);
+      })
+      .catch((caught) => {
+        if (!cancelled) setError(caught instanceof Error ? caught.message : "Unable to load scheduled replacement batches.");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [schoolId]);
+
   const counts = useMemo(() => ({ ready: jobs.filter((job) => job.status === "READY").length, exported: jobs.filter((job) => job.status === "EXPORTED").length, printed: jobs.filter((job) => job.status === "PRINTED").length }), [jobs]);
+
 
   async function action(job: Job, kind: "MARK_PRINTED" | "ROTATE_PUBLIC_LINK", reason = "") {
     if (kind === "ROTATE_PUBLIC_LINK" && reason.trim().length < 3) {
@@ -93,6 +126,56 @@ export default function CardProductionClient({ schools, branches, templates }: {
       setRotateJob(null);
       await load();
     } catch (caught) { setError(caught instanceof Error ? caught.message : "Card production action failed."); } finally { setBusy(false); }
+  }
+
+  async function releaseReplacementBatch(batch: ReplacementBatch) {
+    if (!batch.due) return;
+    if (!window.confirm(`Release ${batch.student_count} paid replacement card(s) for ${batch.school_name}, scheduled for ${batch.batch_eligible_on}?`)) return;
+
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+
+    try {
+      const response = await fetch(
+        "/api/internal/operations/card-production/replacement-batches",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({
+            schoolId: batch.school_id,
+            batchEligibleOn: batch.batch_eligible_on,
+            limit: 500,
+          }),
+        },
+      );
+      const body = await response.json().catch(() => null) as {
+        produced?: number;
+        failed?: number;
+        message?: string;
+      } | null;
+      if (!response.ok) throw new Error(body?.message ?? "Replacement batch release failed.");
+
+      const produced = body?.produced ?? 0;
+      const failed = body?.failed ?? 0;
+      setMessage(`Replacement batch released: ${produced} card(s) queued for central production${failed ? `, ${failed} failed and remain pending` : ""}.`);
+
+      const params = new URLSearchParams();
+      if (schoolId) params.set("schoolId", schoolId);
+      const batchResponse = await fetch(
+        `/api/internal/operations/card-production/replacement-batches?${params}`,
+        { cache: "no-store", credentials: "same-origin" },
+      );
+      const batchBody = await batchResponse.json().catch(() => null) as { batches?: ReplacementBatch[] } | null;
+      if (batchResponse.ok) setReplacementBatches(batchBody?.batches ?? []);
+
+      await load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Replacement batch release failed.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function refreshUnprintedCards() {
@@ -237,6 +320,31 @@ export default function CardProductionClient({ schools, branches, templates }: {
 
   return <div className="px-5 py-6 sm:px-8 lg:px-10 lg:py-8">
     <section className="grid border border-black bg-white sm:grid-cols-3">{[["Ready to print", counts.ready], ["Printing / exported", counts.exported], ["Printed", counts.printed]].map(([label, value]) => <div key={String(label)} className="border-b border-black/15 p-5 sm:border-r sm:border-b-0 sm:last:border-r-0"><p className="casa-kicker text-black/40">{label}</p><p className="mt-7 text-4xl font-semibold tracking-[-0.06em]">{value}</p></div>)}</section>
+        <section className="mt-8 border border-black bg-white">
+      <div className="border-b border-black p-5">
+        <p className="casa-kicker text-black/40">Scheduled replacements</p>
+        <h2 className="mt-2 text-2xl font-semibold tracking-[-0.04em]">Lost & damaged card batches</h2>
+        <p className="mt-3 max-w-3xl text-sm leading-6 text-black/50">Paid replacement cases accumulate until their scheduled term-end date. CASA releases due groups here; each produced card enters the normal central print queue and remains inactive until the school physically hands it over and activates it.</p>
+      </div>
+      {replacementBatches.length === 0 ? (
+        <p className="p-6 text-sm text-black/50">No paid replacement cases are waiting for a scheduled batch.</p>
+      ) : (
+        <div className="divide-y divide-black/15">
+          {replacementBatches.map((batch) => (
+            <div key={`${batch.school_id}:${batch.batch_eligible_on}`} className="grid gap-3 p-5 md:grid-cols-[minmax(0,1fr)_auto_auto_auto] md:items-center">
+              <div>
+                <p className="font-semibold">{batch.school_name}</p>
+                <p className="mt-1 text-xs text-black/45">Scheduled {batch.batch_eligible_on}</p>
+              </div>
+              <span className="font-mono text-xs">{batch.student_count} card(s)</span>
+              <span className={`casa-status ${batch.due ? "casa-status-positive" : "casa-status-warning"}`}>{batch.due ? "DUE" : "SCHEDULED"}</span>
+              <button type="button" disabled={busy || !batch.due} onClick={() => void releaseReplacementBatch(batch)} className="border border-black px-3 py-2 text-xs disabled:opacity-40">Release due batch</button>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+
     <section className="mt-8 border border-black bg-white">
       <div className="grid gap-3 border-b border-black p-4 lg:grid-cols-[1fr_1fr_1fr_auto_auto_auto]">
         <select value={schoolId} onChange={(event) => { setSchoolId(event.target.value); setBranchId(""); }} className="h-12 border border-black/20 bg-white px-3"><option value="">All organizations</option>{schools.map((school) => <option key={school.id} value={school.id}>{school.name}</option>)}</select>

@@ -58,7 +58,7 @@ interface ProductionJob {
     string | null;
   templateVersion:
     string;
-  publicUrl:
+    schoolPreviewUrl:
     string;
 }
 
@@ -81,6 +81,31 @@ interface BiometricResponse {
         status: string;
       }
     | null;
+}
+
+interface ReplacementCase {
+  id: string;
+  status: string;
+  replacement_reason:
+    | "LOST"
+    | "DAMAGED";
+  payment_status:
+    | "UNPAID"
+    | "PAID";
+  paid_at:
+    string | null;
+  payment_reference:
+    string | null;
+  batch_eligible_on:
+    string | null;
+  reported_lost_on: string;
+  replacement_requested_at:
+    string | null;
+}
+
+interface ReplacementResponse {
+  replacementCase:
+    ReplacementCase | null;
 }
 
 function errorMessage(
@@ -150,10 +175,18 @@ export function StudentCards({
   ] =
     useState(false);
 
-  const [
-    busy,
-    setBusy,
-  ] =
+    const [
+      replacementCase,
+      setReplacementCase,
+    ] =
+      useState<ReplacementCase | null>(
+        null,
+      );
+
+    const [
+      busy,
+      setBusy,
+    ] =
     useState(false);
 
   const [
@@ -207,6 +240,16 @@ export function StudentCards({
       ],
     );
 
+  const replacementEndpoint =
+    useMemo(
+      () =>
+        `${apiBase}/students/${studentId}/card-replacement`,
+      [
+        apiBase,
+        studentId,
+      ],
+    );
+
   const activeCard =
     cards.find(
       (card) =>
@@ -223,10 +266,11 @@ export function StudentCards({
     ) ??
     null;
 
-  const reissueRequired =
-    !activeCard &&
-    !pendingCard &&
-    cards.length > 0;
+    const reissueRequired =
+      !activeCard &&
+      !pendingCard &&
+      !replacementCase &&
+      cards.length > 0;
 
   const pendingProduction =
     pendingCard
@@ -250,12 +294,13 @@ export function StudentCards({
   const reload =
     useCallback(
       async () => {
-        const [
-          cardsResponse,
-          productionResponse,
-          biometricResponse,
-        ] =
-          await Promise.all([
+                const [
+                  cardsResponse,
+                  productionResponse,
+                  biometricResponse,
+                  replacementResponse,
+                ] =
+                  await Promise.all([
             fetch(
               endpoint,
               {
@@ -274,16 +319,25 @@ export function StudentCards({
                   "no-store",
               },
             ),
-            fetch(
-              biometricEndpoint,
-              {
-                credentials:
-                  "same-origin",
-                cache:
-                  "no-store",
-              },
-            ),
-          ]);
+                        fetch(
+                          biometricEndpoint,
+                          {
+                            credentials:
+                              "same-origin",
+                            cache:
+                              "no-store",
+                          },
+                        ),
+                        fetch(
+                          replacementEndpoint,
+                          {
+                            credentials:
+                              "same-origin",
+                            cache:
+                              "no-store",
+                          },
+                        ),
+                      ]);
 
         const cardsBody:
           unknown =
@@ -293,9 +347,13 @@ export function StudentCards({
           unknown =
             await productionResponse.json();
 
-        const biometricBody:
-          unknown =
-            await biometricResponse.json();
+                const biometricBody:
+                  unknown =
+                    await biometricResponse.json();
+
+                const replacementBody:
+                  unknown =
+                    await replacementResponse.json();
 
         if (
           !cardsResponse.ok
@@ -319,18 +377,29 @@ export function StudentCards({
           );
         }
 
-        if (
-          !biometricResponse.ok
-        ) {
-          throw new Error(
-            errorMessage(
-              biometricBody,
-              "Unable to load face-enrollment readiness.",
-            ),
-          );
-        }
+                if (
+                  !biometricResponse.ok
+                ) {
+                  throw new Error(
+                    errorMessage(
+                      biometricBody,
+                      "Unable to load face-enrollment readiness.",
+                    ),
+                  );
+                }
 
-        const cardData =
+                if (
+                  !replacementResponse.ok
+                ) {
+                  throw new Error(
+                    errorMessage(
+                      replacementBody,
+                      "Unable to load card-replacement status.",
+                    ),
+                  );
+                }
+
+                const cardData =
           cardsBody as
             CardsResponse;
 
@@ -338,11 +407,21 @@ export function StudentCards({
           productionBody as
             ProductionResponse;
 
-        const biometricData =
-          biometricBody as
-            BiometricResponse;
+                const biometricData =
+                  biometricBody as
+                    BiometricResponse;
 
-        setCards(
+                const replacementData =
+                  replacementBody as
+                    ReplacementResponse;
+
+                setReplacementCase(
+                  replacementData
+                    .replacementCase ??
+                  null,
+                );
+
+                setCards(
           cardData.cards,
         );
         setEvents(
@@ -362,9 +441,10 @@ export function StudentCards({
       [
         endpoint,
         productionEndpoint,
-        biometricEndpoint,
-      ],
-    );
+                biometricEndpoint,
+                replacementEndpoint,
+              ],
+            );
 
   useEffect(() => {
     const handleCardChanged =
@@ -426,8 +506,15 @@ export function StudentCards({
     ],
   );
 
-  async function produce() {
-    if (pendingCard) {
+    async function produce() {
+      if (replacementCase) {
+        setError(
+          "This replacement is managed through the scheduled CASA batch. The school cannot create a one-off replacement card.",
+        );
+        return;
+      }
+
+      if (pendingCard) {
       setError(
         "A produced card is already awaiting physical handover. Activate it before producing another card.",
       );
@@ -657,6 +744,203 @@ export function StudentCards({
     }
   }
 
+
+async function reportReplacement(
+  replacementReason:
+    | "LOST"
+    | "DAMAGED",
+) {
+  const actionReason =
+    reason.trim();
+
+  if (
+    actionReason.length <
+    3
+  ) {
+    setError(
+      `Enter a clear ${replacementReason === "DAMAGED" ? "damage" : "loss"} reason before continuing.`,
+    );
+    return;
+  }
+
+  setBusy(true);
+  setError(null);
+  setNotice(null);
+
+  try {
+    const response =
+      await fetch(
+        replacementEndpoint,
+        {
+          method:
+            "POST",
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+          credentials:
+            "same-origin",
+          cache:
+            "no-store",
+          body:
+            JSON.stringify({
+              action:
+                replacementReason ===
+                  "DAMAGED"
+                  ? "REPORT_DAMAGED"
+                  : "REPORT_LOST",
+              reason:
+                actionReason,
+            }),
+        },
+      );
+
+    const body =
+      await response
+        .json()
+        .catch(
+          () => ({}),
+        ) as {
+          message?: string;
+          code?: string;
+        };
+
+    if (!response.ok) {
+      throw new Error(
+        body.message ??
+        body.code ??
+        "Card replacement case could not be opened.",
+      );
+    }
+
+    setNotice(
+      replacementReason ===
+        "DAMAGED"
+        ? "Damaged card permanently deactivated and replacement case opened."
+        : "Lost card permanently deactivated and replacement case opened.",
+    );
+    setReason("");
+    await reload();
+  } catch (caught) {
+    setError(
+      caught instanceof Error
+        ? caught.message
+        : "Card replacement case could not be opened.",
+    );
+  } finally {
+    setBusy(false);
+  }
+}
+
+async function markReplacementPaid() {
+  if (!replacementCase) {
+    return;
+  }
+
+  const entered =
+    window.prompt(
+      "Optional payment reference/receipt number. Leave blank if none is available.",
+      replacementCase.payment_reference ??
+        "",
+    );
+
+  if (entered === null) {
+    return;
+  }
+
+  setBusy(true);
+  setError(null);
+  setNotice(null);
+
+  try {
+    const slugPart =
+      apiBase
+        .split(
+          "/api/schools/",
+        )[1]
+        ?.split(
+          "/",
+        )[0] ??
+      "";
+
+    const schoolSlug =
+      decodeURIComponent(
+        slugPart,
+      );
+
+    if (!schoolSlug) {
+      throw new Error(
+        "Unable to resolve the school for payment authorization.",
+      );
+    }
+
+    const grant =
+      await obtainPasskeyStepUpGrant({
+        schoolSlug,
+        action:
+          "CARD_REPLACEMENT_PAYMENT",
+      });
+
+    const response =
+      await fetch(
+        replacementEndpoint,
+        {
+          method:
+            "POST",
+          headers: {
+            "Content-Type":
+              "application/json",
+            "x-casa-passkey-step-up":
+              grant,
+          },
+          credentials:
+            "same-origin",
+          cache:
+            "no-store",
+          body:
+            JSON.stringify({
+              action:
+                "MARK_PAID",
+              paymentReference:
+                entered.trim() ||
+                null,
+            }),
+        },
+      );
+
+    const body =
+      await response
+        .json()
+        .catch(
+          () => ({}),
+        ) as {
+          message?: string;
+          code?: string;
+        };
+
+    if (!response.ok) {
+      throw new Error(
+        body.message ??
+        body.code ??
+        "Replacement payment could not be recorded.",
+      );
+    }
+
+    setNotice(
+      "Replacement payment recorded with Passkey audit. The card is now waiting for the scheduled CASA batch.",
+    );
+    await reload();
+  } catch (caught) {
+    setError(
+      caught instanceof Error
+        ? caught.message
+        : "Replacement payment could not be recorded.",
+    );
+  } finally {
+    setBusy(false);
+  }
+}
+
   async function deactivate(
     cardId:
       string,
@@ -805,8 +1089,20 @@ export function StudentCards({
                 Face enrollment: {faceReady ? "READY" : "REQUIRED"}.
                 This card becomes Scanner-usable only after the physical card
                 is PRINTED, the student&apos;s face is enrolled, and an authorized
-                operator confirms handover.
+                                operator confirms handover.
               </p>
+              {pendingProduction ? (
+                <a
+                  href={
+                    pendingProduction.schoolPreviewUrl
+                  }
+                  target="_blank"
+                  rel="noreferrer"
+                  className="casa-button-secondary mt-3 inline-flex"
+                >
+                  View watermarked school preview
+                </a>
+              ) : null}
               {!faceReady ? (
                 <p className="mt-2 text-xs font-semibold text-[var(--casa-warning)]">
                   Activation locked: complete face enrollment first.
@@ -889,13 +1185,13 @@ export function StudentCards({
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-black p-4">
               <a
                 href={
-                  activeProduction.publicUrl
+                  activeProduction.schoolPreviewUrl
                 }
                 target="_blank"
                 rel="noreferrer"
                 className="casa-button-secondary"
               >
-                View finished card
+                View watermarked school preview
               </a>
 
               <span className="font-mono text-[9px] uppercase tracking-[0.08em] text-black/45">
@@ -935,18 +1231,30 @@ export function StudentCards({
             <button
               type="button"
               disabled={busy}
-              onClick={() =>
-                void deactivate(
-                  activeCard.id,
-                  "LOST",
-                )
-              }
-              className="casa-button-secondary"
-            >
-              Mark lost
-            </button>
+                onClick={() =>
+                  void reportReplacement(
+                    "LOST",
+                  )
+                }
+                className="casa-button-secondary"
+              >
+                Mark lost
+              </button>
 
-            <button
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() =>
+                  void reportReplacement(
+                    "DAMAGED",
+                  )
+                }
+                className="casa-button-secondary"
+              >
+                Mark damaged
+              </button>
+
+              <button
               type="button"
               disabled={busy}
               onClick={() =>
@@ -975,8 +1283,39 @@ export function StudentCards({
             </button>
           </div>
         </div>
-      ) : reissueRequired ? (
-        <div className="mt-5 border border-black p-4">
+      ) : replacementCase ? (
+              <div className="mt-5 border border-black p-4">
+                <p className="casa-kicker text-black/45">
+                  {replacementCase.replacement_reason === "DAMAGED"
+                    ? "Damaged card"
+                    : "Lost card"}
+                </p>
+                <p className="mt-2 text-sm font-semibold">
+                  {replacementCase.payment_status === "PAID"
+                    ? "Replacement paid · awaiting scheduled CASA batch"
+                    : "Replacement unpaid"}
+                </p>
+                <p className="mt-2 text-xs leading-5 text-black/55">
+                  The old card stays permanently inactive.
+                  {replacementCase.payment_status === "PAID"
+                    ? ` Assisted attendance remains available while the replacement waits for the scheduled batch.${replacementCase.batch_eligible_on ? ` Batch eligible from ${replacementCase.batch_eligible_on}.` : ""}`
+                    : " Assisted attendance is limited to three instructional grace days; payment must be recorded after grace expires."}
+                </p>
+                {replacementCase.payment_status !== "PAID" ? (
+                  <button
+                    type="button"
+                    className="casa-button mt-4"
+                    disabled={busy}
+                    onClick={() =>
+                      void markReplacementPaid()
+                    }
+                  >
+                    Mark replacement paid with Passkey
+                  </button>
+                ) : null}
+              </div>
+            ) : reissueRequired ? (
+              <div className="mt-5 border border-black p-4">
           <p className="casa-kicker text-black/45">
             Reissue required
           </p>
@@ -1035,13 +1374,13 @@ export function StudentCards({
 
                   <a
                     href={
-                      job.publicUrl
+                      job.schoolPreviewUrl
                     }
                     target="_blank"
                     rel="noreferrer"
                     className="font-mono text-[10px] font-semibold uppercase tracking-[0.1em] underline"
                   >
-                    Finished card
+                    Watermarked preview
                   </a>
                 </div>
               ),

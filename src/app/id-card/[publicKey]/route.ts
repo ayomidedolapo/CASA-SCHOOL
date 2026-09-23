@@ -15,8 +15,8 @@ import {
   studentIdentityCards,
 } from "@/db/schema";
 import {
-  getCurrentCardProductionPreview,
-} from "@/server/card-production/live-preview";
+  getSchoolWatermarkedCardProductionPreview,
+} from "@/server/card-production/school-preview";
 
 export const dynamic =
   "force-dynamic";
@@ -73,6 +73,10 @@ export async function GET(
       .select({
         jobId:
           studentCardProductionJobs.id,
+        schoolId:
+          studentCardProductionJobs.schoolId,
+        studentId:
+          studentCardProductionJobs.studentId,
       })
       .from(
         studentCardProductionJobs,
@@ -114,9 +118,14 @@ export async function GET(
   }
 
   const preview =
-    await getCurrentCardProductionPreview(
-      job.jobId,
-    );
+    await getSchoolWatermarkedCardProductionPreview({
+      schoolId:
+        job.schoolId,
+      studentId:
+        job.studentId,
+      jobId:
+        job.jobId,
+    });
 
   if (!preview) {
     return notFound(
@@ -142,7 +151,7 @@ export async function GET(
         "Referrer-Policy":
           "no-referrer",
         "X-CASA-Card-Preview":
-          "LIVE_RENDER_WITH_PRESERVED_QR",
+          "PUBLIC_WATERMARKED_QR",
       },
     },
   );

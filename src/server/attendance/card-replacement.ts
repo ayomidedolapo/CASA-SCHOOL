@@ -88,6 +88,15 @@ export async function getPendingCardReplacementCase(
         c.student_id,
         c.lost_card_id,
         c.status::text as status,
+        c.replacement_reason::text
+          as replacement_reason,
+        c.payment_status::text
+          as payment_status,
+        c.paid_at,
+        c.paid_by_membership_id,
+        c.payment_reference,
+        c.batch_eligible_on::text
+          as batch_eligible_on,
         c.reported_lost_on::text
           as reported_lost_on,
         c.reported_lost_at,
@@ -117,6 +126,9 @@ export async function reportStudentCardLost(
     access: SchoolAccess;
     studentId: string;
     reason?: string | null;
+    replacementReason?:
+      | "LOST"
+      | "DAMAGED";
   },
 ) {
   const existing =
@@ -218,6 +230,7 @@ export async function reportStudentCardLost(
           student_id,
           lost_card_id,
           status,
+          replacement_reason,
           reported_lost_on,
           reported_lost_at,
           reported_by_membership_id,
@@ -231,6 +244,7 @@ export async function reportStudentCardLost(
           lost.student_id,
           lost.id,
           'CARD_REPLACEMENT_PENDING'::student_card_replacement_case_status,
+          ${input.replacementReason ?? "LOST"}::student_card_replacement_reason,
           ${clock.date}::date,
           now(),
           ${input.access.membership.id}::uuid,
@@ -335,6 +349,123 @@ export async function requestStudentCardReplacement(
   return replacementCase;
 }
 
+
+export async function markStudentCardReplacementPaid(
+  input: {
+    access: SchoolAccess;
+    studentId: string;
+    paymentReference?:
+      string | null;
+  },
+) {
+  const clock =
+    getSchoolClock(
+      new Date(),
+      input.access.school.timezone,
+    );
+
+  const reference =
+    input.paymentReference
+      ?.trim() ||
+    null;
+
+  const db = getDb();
+
+  const result =
+    await db.execute(sql`
+      update student_card_replacement_cases
+      set
+        payment_status =
+          'PAID'::student_card_replacement_payment_status,
+        paid_at =
+          coalesce(
+            paid_at,
+            now()
+          ),
+        paid_by_membership_id =
+          coalesce(
+            paid_by_membership_id,
+            ${input.access.membership.id}::uuid
+          ),
+        payment_reference =
+          coalesce(
+            payment_reference,
+            ${reference}
+          ),
+        batch_eligible_on =
+          coalesce(
+            batch_eligible_on,
+            (
+              select term.ends_on
+              from academic_terms term
+              where
+                term.school_id =
+                  ${input.access.school.id}::uuid
+                and term.starts_on <=
+                  ${clock.date}::date
+                and term.ends_on >=
+                  ${clock.date}::date
+              order by
+                term.ends_on asc
+              limit 1
+            ),
+            ${clock.date}::date
+          ),
+        replacement_requested_at =
+          coalesce(
+            replacement_requested_at,
+            now()
+          ),
+        replacement_requested_by_membership_id =
+          coalesce(
+            replacement_requested_by_membership_id,
+            ${input.access.membership.id}::uuid
+          ),
+        updated_at = now()
+      where
+        school_id =
+          ${input.access.school.id}::uuid
+        and student_id =
+          ${input.studentId}::uuid
+        and status =
+          'CARD_REPLACEMENT_PENDING'::student_card_replacement_case_status
+      returning
+        id,
+        student_id,
+        lost_card_id,
+        status::text as status,
+        replacement_reason::text
+          as replacement_reason,
+        payment_status::text
+          as payment_status,
+        paid_at,
+        paid_by_membership_id,
+        payment_reference,
+        batch_eligible_on::text
+          as batch_eligible_on,
+        reported_lost_on::text
+          as reported_lost_on,
+        replacement_requested_at,
+        replacement_requested_by_membership_id,
+        replacement_card_id,
+        created_at,
+        updated_at
+    `);
+
+  const replacementCase =
+    rowsOf(result)[0];
+
+  if (!replacementCase) {
+    throw new CardReplacementAttendanceError(
+      "No pending card replacement case exists for this student.",
+      404,
+      "CARD_REPLACEMENT_CASE_NOT_FOUND",
+    );
+  }
+
+  return replacementCase;
+}
+
 async function resolveStudentBranch(
   input: {
     schoolId: string;
@@ -398,7 +529,7 @@ async function resolveStudentBranch(
   return row.branch_id;
 }
 
-async function countInstructionalGraceDays(
+export async function countInstructionalGraceDays(
   input: {
     schoolId: string;
     branchId: string;
@@ -616,6 +747,12 @@ export async function recordCardReplacementAttendanceException(
         string;
       replacement_requested_at:
         Date | string | null;
+      replacement_reason:
+        "LOST" | "DAMAGED";
+      payment_status:
+        "UNPAID" | "PAID";
+      batch_eligible_on:
+        string | null;
     } | null;
 
   if (!replacementCase) {
@@ -632,11 +769,16 @@ export async function recordCardReplacementAttendanceException(
         .replacement_requested_at,
     );
 
+  const replacementPaid =
+    replacementCase
+      .payment_status ===
+      "PAID";
+
   let graceDayNumber:
     number | null =
       null;
 
-  if (!replacementRequested) {
+  if (!replacementPaid) {
     graceDayNumber =
       await countInstructionalGraceDays({
         schoolId:
@@ -663,9 +805,9 @@ export async function recordCardReplacementAttendanceException(
       graceDayNumber > 3
     ) {
       throw new CardReplacementAttendanceError(
-        "The three-instructional-day card replacement grace period expired without a formal replacement request.",
+        "The three-instructional-day card replacement grace period has expired. Replacement payment must be recorded before assisted attendance can continue.",
         409,
-        "CARD_REPLACEMENT_GRACE_EXPIRED",
+        "CARD_REPLACEMENT_PAYMENT_REQUIRED",
       );
     }
   }
@@ -815,7 +957,7 @@ export async function recordCardReplacementAttendanceException(
           ${input.access.membership.id}::uuid,
           ${input.verificationMethod}::student_card_attendance_exception_verification,
           ${graceDayNumber},
-          ${replacementRequested},
+          ${replacementPaid},
           now()
         from inserted_record record
         returning *
@@ -987,6 +1129,13 @@ export async function recordCardReplacementAttendanceException(
     attendanceRecordStatus:
       "MANUAL" as const,
     replacementRequested,
+    replacementPaid,
+    replacementReason:
+      replacementCase
+        .replacement_reason,
+    batchEligibleOn:
+      replacementCase
+        .batch_eligible_on,
     graceDayNumber,
     verificationMethod:
       input.verificationMethod,

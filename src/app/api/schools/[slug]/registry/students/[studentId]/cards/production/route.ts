@@ -66,9 +66,45 @@ export async function GET(
           request.nextUrl.origin,
       });
 
+        const schoolJobs =
+      jobs.map(
+        (job) => ({
+          id:
+            job.id,
+          cardId:
+            job.cardId,
+          status:
+            job.status,
+          publicLinkRevision:
+            job.publicLinkRevision,
+          renderSnapshot:
+            job.renderSnapshot,
+          queuedAt:
+            job.queuedAt,
+          exportedAt:
+            job.exportedAt,
+          printedAt:
+            job.printedAt,
+          templateVersion:
+            job.templateVersion,
+          schoolPreviewUrl:
+            new URL(
+              `/api/schools/${encodeURIComponent(
+                slug,
+              )}/registry/students/${encodeURIComponent(
+                studentId,
+              )}/cards/production/${encodeURIComponent(
+                job.id,
+              )}/preview`,
+              request.nextUrl.origin,
+            ).toString(),
+        }),
+      );
+
     return NextResponse.json(
       {
-        jobs,
+        jobs:
+          schoolJobs,
       },
       {
         headers:
@@ -168,7 +204,25 @@ export async function POST(
             ok: true,
             automaticFirstCard:
               true,
-            firstCard,
+                        firstCard: {
+              status:
+                firstCard.status,
+              cardId:
+                firstCard.cardId,
+              jobId:
+                firstCard.jobId,
+              schoolPreviewUrl:
+                new URL(
+                  `/api/schools/${encodeURIComponent(
+                    slug,
+                  )}/registry/students/${encodeURIComponent(
+                    studentId,
+                  )}/cards/production/${encodeURIComponent(
+                    firstCard.jobId,
+                  )}/preview`,
+                  request.nextUrl.origin,
+                ).toString(),
+            },
           },
           {
             status: 201,
@@ -284,8 +338,36 @@ export async function POST(
       );
     }
 
-    return NextResponse.json(
-      result,
+        return NextResponse.json(
+      {
+        ok:
+          result.ok,
+        action:
+          result.action,
+        card:
+          result.card,
+        production: {
+          id:
+            result.production.id,
+          status:
+            result.production.status,
+          templateVersion:
+            result.production.templateVersion,
+          queuedAt:
+            result.production.queuedAt,
+          schoolPreviewUrl:
+            new URL(
+              `/api/schools/${encodeURIComponent(
+                slug,
+              )}/registry/students/${encodeURIComponent(
+                studentId,
+              )}/cards/production/${encodeURIComponent(
+                result.production.id,
+              )}/preview`,
+              request.nextUrl.origin,
+            ).toString(),
+        },
+      },
       {
         status: 201,
         headers:

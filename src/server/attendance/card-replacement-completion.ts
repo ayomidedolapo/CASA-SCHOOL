@@ -61,7 +61,8 @@ export async function completeStudentCardReplacement(
         select
           replacement.id,
           replacement.lost_card_id,
-          replacement.replacement_requested_at
+          replacement.replacement_requested_at,
+          replacement.payment_status
         from student_card_replacement_cases replacement
         where
           replacement.school_id =
@@ -99,6 +100,8 @@ export async function completeStudentCardReplacement(
         where
           replacement.replacement_requested_at
             is not null
+          and replacement.payment_status =
+            'PAID'::student_card_replacement_payment_status
           and (
             select count(*)
             from active_card
@@ -164,6 +167,8 @@ export async function completeStudentCardReplacement(
         replacement.status::text
           as status,
         replacement.replacement_requested_at,
+        replacement.payment_status::text
+          as payment_status,
         replacement.replacement_card_id,
         (
           select count(*)::int
@@ -215,6 +220,8 @@ export async function completeStudentCardReplacement(
       status: string;
       replacement_requested_at:
         string | Date | null;
+      payment_status:
+        string;
       replacement_card_id:
         string | null;
       active_replacement_cards:
@@ -259,6 +266,17 @@ export async function completeStudentCardReplacement(
       "A formal replacement request is required before handover can be completed.",
       409,
       "CARD_REPLACEMENT_REQUEST_REQUIRED",
+    );
+  }
+
+  if (
+    row.payment_status !==
+      "PAID"
+  ) {
+    throw new CardReplacementCompletionError(
+      "The replacement fee must be marked paid before handover can be completed.",
+      409,
+      "CARD_REPLACEMENT_PAYMENT_REQUIRED",
     );
   }
 

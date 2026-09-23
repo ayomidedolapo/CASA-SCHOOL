@@ -1,4 +1,7 @@
 import {
+  randomUUID,
+} from "node:crypto";
+import {
   NextRequest,
   NextResponse,
 } from "next/server";
@@ -253,6 +256,43 @@ export async function DELETE(
       return response;
     }
 
-    throw error;
+    const incidentId =
+      randomUUID();
+
+    console.error(
+      "CASA_EARLY_DEPARTURE_CANCEL_FAILED",
+      {
+        incidentId,
+        schoolSlug:
+          slug,
+        attemptId,
+        error:
+          error instanceof Error
+            ? {
+                name:
+                  error.name,
+                message:
+                  error.message,
+                stack:
+                  error.stack,
+              }
+            : String(error),
+      },
+    );
+
+    return NextResponse.json(
+      {
+        message:
+          "CASA could not cancel this early-departure request.",
+        code:
+          "EARLY_DEPARTURE_CANCEL_FAILED",
+        incidentId,
+      },
+      {
+        status: 500,
+        headers:
+          attendanceNoStoreHeaders,
+      },
+    );
   }
 }

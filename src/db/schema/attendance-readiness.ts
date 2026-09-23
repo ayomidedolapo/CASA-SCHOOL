@@ -23,6 +23,8 @@ import {
   schoolAttendanceLifecycleStatusEnum,
   studentCardAttendanceExceptionVerificationEnum,
   studentCardReplacementCaseStatusEnum,
+  studentCardReplacementPaymentStatusEnum,
+  studentCardReplacementReasonEnum,
 } from "./attendance-readiness-enums";
 import { schools } from "./schools";
 import { schoolBranches } from "./school-operations";
@@ -359,6 +361,18 @@ export const studentCardReplacementCases =
             "CARD_REPLACEMENT_PENDING",
           )
           .notNull(),
+      replacementReason:
+        studentCardReplacementReasonEnum(
+          "replacement_reason",
+        )
+          .default("LOST")
+          .notNull(),
+      paymentStatus:
+        studentCardReplacementPaymentStatusEnum(
+          "payment_status",
+        )
+          .default("UNPAID")
+          .notNull(),
       reportedLostOn:
         date(
           "reported_lost_on",
@@ -382,6 +396,28 @@ export const studentCardReplacementCases =
           length: 240,
         },
       ),
+      paidAt:
+        timestamp(
+          "paid_at",
+          {
+            withTimezone: true,
+          },
+        ),
+      paidByMembershipId:
+        uuid(
+          "paid_by_membership_id",
+        ),
+      paymentReference:
+        varchar(
+          "payment_reference",
+          {
+            length: 120,
+          },
+        ),
+      batchEligibleOn:
+        date(
+          "batch_eligible_on",
+        ),
       replacementRequestedAt:
         timestamp(
           "replacement_requested_at",
@@ -451,6 +487,13 @@ export const studentCardReplacementCases =
         table.status,
         table.createdAt,
       ),
+      index(
+        "student_card_replacement_cases_payment_batch_idx",
+      ).on(
+        table.schoolId,
+        table.paymentStatus,
+        table.batchEligibleOn,
+      ),
       foreignKey({
         columns: [
           table.schoolId,
@@ -514,6 +557,18 @@ export const studentCardReplacementCases =
       foreignKey({
         columns: [
           table.schoolId,
+          table.paidByMembershipId,
+        ],
+        foreignColumns: [
+          schoolMemberships.schoolId,
+          schoolMemberships.id,
+        ],
+        name:
+          "student_card_replacement_cases_paid_by_fk",
+      }).onDelete("restrict"),
+      foreignKey({
+        columns: [
+          table.schoolId,
           table.completedByMembershipId,
         ],
         foreignColumns: [
@@ -540,6 +595,29 @@ export const studentCardReplacementCases =
             and ${table.replacementRequestedByMembershipId} is not null
           )
         )`,
+      ),
+      check(
+        "student_card_replacement_cases_payment_actor_check",
+        sql`(
+          (
+            ${table.paymentStatus} = 'UNPAID'
+            and ${table.paidAt} is null
+            and ${table.paidByMembershipId} is null
+            and ${table.paymentReference} is null
+            and ${table.batchEligibleOn} is null
+          )
+          or
+          (
+            ${table.paymentStatus} = 'PAID'
+            and ${table.paidAt} is not null
+            and ${table.paidByMembershipId} is not null
+            and ${table.batchEligibleOn} is not null
+          )
+        )`,
+      ),
+      check(
+        "student_card_replacement_cases_payment_reference_check",
+        sql`${table.paymentReference} is null or length(trim(${table.paymentReference})) > 0`,
       ),
       check(
         "student_card_replacement_cases_completion_actor_check",

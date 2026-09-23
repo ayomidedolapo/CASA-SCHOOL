@@ -36,6 +36,24 @@ export const studentCardReplacementCaseStatusEnum =
     ],
   );
 
+export const studentCardReplacementReasonEnum =
+  pgEnum(
+    "student_card_replacement_reason",
+    [
+      "LOST",
+      "DAMAGED",
+    ],
+  );
+
+export const studentCardReplacementPaymentStatusEnum =
+  pgEnum(
+    "student_card_replacement_payment_status",
+    [
+      "UNPAID",
+      "PAID",
+    ],
+  );
+
 export const studentCardAttendanceExceptionVerificationEnum =
   pgEnum(
     "student_card_attendance_exception_verification",

@@ -176,10 +176,13 @@ export async function GET(
             t.school_id =
               ${access.school.id}::uuid
             and (
-              mapping.branch_id =
-                any(
-                  ${visibleBranchIds}::uuid[]
+                            mapping.branch_id in (
+                select
+                  value::uuid
+                from jsonb_array_elements_text(
+                  ${JSON.stringify(visibleBranchIds)}::jsonb
                 )
+              )
               or (
                 mapping.branch_id is null
                 and ${canSeeUnassigned}

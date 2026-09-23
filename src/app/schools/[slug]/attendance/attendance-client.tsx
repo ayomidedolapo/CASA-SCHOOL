@@ -48,6 +48,8 @@ interface TodayStudent {
     string | null;
   earlyDeparturePreauthorized:
     boolean;
+  scannerCheckoutEligible:
+    boolean;
   firstCardPendingHandover:
     boolean;
   cardReplacement:
@@ -507,6 +509,12 @@ export default function AttendanceClient(
     setPendingInput,
   ] =
     useState<PendingAttendanceInput | null>(null);
+
+  const [
+    assistedCheckoutStudent,
+    setAssistedCheckoutStudent,
+  ] =
+    useState<TodayStudent | null>(null);
 
   const refreshToday =
     useCallback(
@@ -1226,6 +1234,104 @@ export default function AttendanceClient(
     }
   }
 
+  async function recordAssistedCheckout(
+    student: TodayStudent,
+    reason: string,
+  ) {
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const grant =
+        await obtainPasskeyStepUpGrant({
+          schoolSlug:
+            slug,
+          action:
+            "ASSISTED_CHECK_OUT",
+        });
+
+      const response =
+        await fetch(
+          `/api/schools/${encodeURIComponent(
+            slug,
+          )}/attendance/assisted-checkouts/${encodeURIComponent(
+            student.studentId,
+          )}`,
+          {
+            method:
+              "POST",
+            headers: {
+              "Content-Type":
+                "application/json",
+              "x-casa-passkey-step-up":
+                grant,
+            },
+            credentials:
+              "same-origin",
+            cache:
+              "no-store",
+            body:
+              JSON.stringify({
+                reason,
+                confirmStudentFaceMatch:
+                  true,
+              }),
+          },
+        );
+
+      const raw =
+        await response.text();
+
+      let body:
+        {
+          message?: string;
+          code?: string;
+          departureResult?:
+            | "EARLY"
+            | "NORMAL";
+        } =
+          {};
+
+      if (raw) {
+        try {
+          body =
+            JSON.parse(
+              raw,
+            ) as typeof body;
+        } catch {
+          body =
+            {};
+        }
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          body.message ??
+            body.code ??
+            "Assisted sign-out failed.",
+        );
+      }
+
+      setNotice(
+        body.departureResult ===
+          "EARLY"
+          ? `${studentName(student)} is SIGNED OUT as an early departure. Guardian notification was queued where configured.`
+          : `${studentName(student)} is SIGNED OUT through supervised assisted checkout. Guardian notification was queued where configured.`,
+      );
+
+      await refreshToday();
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Assisted sign-out failed.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function mutateSession(
     action:
       | "PREPARE"
@@ -1793,19 +1899,33 @@ export default function AttendanceClient(
           },
         );
 
-      const body =
-        await response.json() as {
-          code?:
-            string;
-          message?:
-            string;
-        };
+      const raw =
+        await response.text();
+
+      let body: {
+        code?: string;
+        message?: string;
+        incidentId?: string;
+      } = {};
+
+      if (raw) {
+        try {
+          body =
+            JSON.parse(raw) as
+              typeof body;
+        } catch {
+          body = {};
+        }
+      }
 
       if (!response.ok) {
+        const incident =
+          body.incidentId
+            ? ` Reference: ${body.incidentId}.`
+            : "";
+
         throw new Error(
-          body.message ??
-            body.code ??
-            "Early departure request could not be cancelled.",
+          `${body.message ?? body.code ?? "Early departure request could not be cancelled."}${incident}`,
         );
       }
 
@@ -1979,7 +2099,7 @@ export default function AttendanceClient(
       if (!response.ok) {
         throw new Error(body.message ?? body.code ?? "Late-stay authorization failed.");
       }
-      setNotice(`${body.authorized ?? selectedLateStudentIds.length} student(s) may check out after campus close until the approved time. Each checkout still requires the student's own card and biometric verification.`);
+      setNotice(`${body.authorized ?? selectedLateStudentIds.length} student(s) may check out after campus close until the approved time. Active-card students use the Scanner; students without an active card use Assisted sign-out when they actually leave.`);
       setSelectedLateStudentIds([]);
       setSelectedLateReason("");
       setSelectedLateAllowedUntil("");
@@ -2552,7 +2672,7 @@ export default function AttendanceClient(
                   styles.muted
                 }
               >
-                For a known group, select any on-campus students from the same branch, enter one reason, and authorize once with Passkey. They may be from different classes.
+                For a known group, select on-campus students from the same branch, enter one reason, and authorize once with Passkey. Authorization does not sign a student out: an eligible student must still complete Scanner checkout with their active card and face/liveness.
               </p>
             </div>
             <span
@@ -2622,9 +2742,9 @@ export default function AttendanceClient(
         <section className={styles.section}>
           <div className={styles.sectionHeader}>
             <div>
-              <h2 className={styles.sectionTitle}>Late-stay checkout</h2>
+              <h2 className={styles.sectionTitle}>After-hours stay</h2>
               <p className={styles.muted}>
-                Select only students who remain on campus, give one reason and allowed-until time, then approve the group once with Passkey. Each student still checks out with their own card and face/liveness.
+                Use this only after the daily attendance session has been closed for students who are still on campus beyond normal dismissal. Selecting a student does not sign them out. Enter the reason and allowed-until time, authorize once with Passkey, then active-card students check out on the Scanner; students without an active card use Assisted sign-out with staff face confirmation and Passkey.
               </p>
             </div>
             <span className={styles.muted}>{selectedLateStudentIds.length} selected</span>
@@ -2649,7 +2769,7 @@ export default function AttendanceClient(
               disabled={busy || selectedLateStudentIds.length === 0 || !selectedLateAllowedUntil}
               onClick={() => void authorizeSelectedLateStay()}
             >
-              Authorize late stay with Passkey
+              Authorize after-hours stay with Passkey
             </button>
           </div>
         </section>
@@ -3062,7 +3182,8 @@ export default function AttendanceClient(
                               !data?.readOnly &&
                               data?.session?.mode === "INSTRUCTIONAL" &&
                               student.presenceStatus === "ON_CAMPUS" &&
-                              data?.session?.status === "CLOSED" && (
+                              data?.session?.status === "CLOSED" &&
+                              (student.scannerCheckoutEligible ? (
                                 <label className={styles.actions}>
                                   <input
                                     type="checkbox"
@@ -3076,33 +3197,78 @@ export default function AttendanceClient(
                                       );
                                     }}
                                   />
-                                  Late stay
+                                  Select for after-hours stay
                                 </label>
-                              )}
+                              ) : (
+                                <div className={styles.actions}>
+                                  <label className={styles.actions}>
+                                    <input
+                                      type="checkbox"
+                                      disabled={busy || !selectedBranchId}
+                                      checked={selectedLateStudentIds.includes(student.studentId)}
+                                      onChange={(event) => {
+                                        setSelectedLateStudentIds((current) =>
+                                          event.target.checked
+                                            ? Array.from(new Set([...current, student.studentId]))
+                                            : current.filter((id) => id !== student.studentId),
+                                        );
+                                      }}
+                                    />
+                                    Select for after-hours stay
+                                  </label>
+                                  <button
+                                    type="button"
+                                    className={styles.secondaryButton}
+                                    disabled={busy}
+                                    onClick={() =>
+                                      setAssistedCheckoutStudent(
+                                        student,
+                                      )
+                                    }
+                                  >
+                                    Assisted sign-out
+                                  </button>
+                                </div>
+                              ))}
 
                             {canSuperviseAttendance &&
                               !data?.readOnly &&
                               data?.session?.mode === "INSTRUCTIONAL" &&
                               data?.session?.status === "OPEN" &&
                               student.presenceStatus === "ON_CAMPUS" &&
-                              (student.earlyDeparturePreauthorized ? (
-                                <span className="casa-status">Early departure authorized</span>
+                              (student.scannerCheckoutEligible ? (
+                                student.earlyDeparturePreauthorized ? (
+                                  <span className="casa-status">Early departure authorized · complete Scanner checkout</span>
+                                ) : (
+                                  <label className={styles.actions}>
+                                    <input
+                                      type="checkbox"
+                                      disabled={busy || !selectedBranchId}
+                                      checked={selectedEarlyStudentIds.includes(student.studentId)}
+                                      onChange={(event) => {
+                                        setSelectedEarlyStudentIds((current) =>
+                                          event.target.checked
+                                            ? Array.from(new Set([...current, student.studentId]))
+                                            : current.filter((id) => id !== student.studentId),
+                                        );
+                                      }}
+                                    />
+                                    Select for early departure
+                                  </label>
+                                )
                               ) : (
-                                <label className={styles.actions}>
-                                  <input
-                                    type="checkbox"
-                                    disabled={busy || !selectedBranchId}
-                                    checked={selectedEarlyStudentIds.includes(student.studentId)}
-                                    onChange={(event) => {
-                                      setSelectedEarlyStudentIds((current) =>
-                                        event.target.checked
-                                          ? Array.from(new Set([...current, student.studentId]))
-                                          : current.filter((id) => id !== student.studentId),
-                                      );
-                                    }}
-                                  />
-                                  Early departure
-                                </label>
+                                <button
+                                  type="button"
+                                  className={styles.secondaryButton}
+                                  disabled={busy}
+                                  onClick={() =>
+                                    setAssistedCheckoutStudent(
+                                      student,
+                                    )
+                                  }
+                                >
+                                  Assisted sign-out
+                                </button>
                               ))}
 
                             {canSuperviseAttendance &&
@@ -3685,6 +3851,45 @@ export default function AttendanceClient(
           </div>
         </section>
       )}
+
+      <CasaInputDialog
+        open={
+          assistedCheckoutStudent !==
+          null
+        }
+        title="Assisted sign-out"
+        message={
+          assistedCheckoutStudent
+            ? `Use this only because ${studentName(assistedCheckoutStudent)} has no active CASA card available for Scanner checkout. Physically confirm the student is present and matches the existing enrolled face profile. Passkey authorization will immediately mark the student SIGNED_OUT and queue the normal guardian departure notification.`
+            : ""
+        }
+        label="Reason"
+        initialValue="No active CASA card available for Scanner checkout"
+        minLength={3}
+        maxLength={240}
+        confirmLabel="Authorize & sign out"
+        busy={busy}
+        onCancel={() =>
+          setAssistedCheckoutStudent(
+            null,
+          )
+        }
+        onConfirm={(reason) => {
+          const student =
+            assistedCheckoutStudent;
+
+          setAssistedCheckoutStudent(
+            null,
+          );
+
+          if (student) {
+            void recordAssistedCheckout(
+              student,
+              reason,
+            );
+          }
+        }}
+      />
 
       <CasaConfirmDialog
         open={pendingConfirm !== null}

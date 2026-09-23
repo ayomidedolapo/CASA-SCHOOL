@@ -56,6 +56,10 @@ for (
     "ACTIVE",
     "PAUSED",
     "CARD_REPLACEMENT_PENDING",
+    "LOST",
+    "DAMAGED",
+    "UNPAID",
+    "PAID",
     "FACE_EXISTING_PROFILE",
   ]
 ) {
@@ -110,11 +114,19 @@ assert.match(
 );
 assert.match(
   replacement,
-  /CARD_REPLACEMENT_GRACE_EXPIRED/,
+  /CARD_REPLACEMENT_PAYMENT_REQUIRED/,
 );
 assert.match(
   replacement,
   /graceDayNumber > 3/,
+);
+assert.match(
+  replacement,
+  /payment_status/,
+);
+assert.match(
+  replacement,
+  /replacementPaid/,
 );
 assert.match(
   replacement,
