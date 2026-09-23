@@ -40,10 +40,63 @@ function stringData(payload: Record<string, unknown> | null): Record<string, str
   return result;
 }
 
+function publicAppOrigin() {
+  const configured =
+    process.env
+      .NEXT_PUBLIC_APP_URL
+      ?.trim()
+      .replace(
+        /\/+$/,
+        "",
+      );
+
+  if (configured) {
+    return configured;
+  }
+
+  const vercelHost =
+    process.env
+      .VERCEL_PROJECT_PRODUCTION_URL
+      ?.trim()
+      .replace(
+        /^https?:\/\//i,
+        "",
+      )
+      .replace(
+        /\/+$/,
+        "",
+      );
+
+  return vercelHost
+    ? `https://${vercelHost}`
+    : "https://casa-school.vercel.app";
+}
+
+function absolutePublicUrl(
+  value:
+    string | null,
+) {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    return new URL(
+      value,
+    ).toString();
+  } catch {
+    return new URL(
+      value,
+      `${publicAppOrigin()}/`,
+    ).toString();
+  }
+}
+
 export async function runGuardianPushOutbox(
   input: {
     limit?: number;
     schoolId?: string;
+    presenceEventId?: string;
   } = {},
 ) {
   const db = getDb();
@@ -60,6 +113,8 @@ export async function runGuardianPushOutbox(
     await reconcileRecentGuardianPresencePushes({
       schoolId:
         input.schoolId,
+      presenceEventId:
+        input.presenceEventId,
       lookbackMinutes:
         120,
       limit:
@@ -73,6 +128,10 @@ export async function runGuardianPushOutbox(
     input.schoolId
       ? sql`and outbox.school_id = ${input.schoolId}::uuid`
       : sql``;
+  const presenceEventFilter =
+    input.presenceEventId
+      ? sql`and outbox.presence_event_id = ${input.presenceEventId}::uuid`
+      : sql``;
 
   const claimed =
     rowsOf<PushRow>(
@@ -80,9 +139,23 @@ export async function runGuardianPushOutbox(
     with due as (
       select outbox.id
       from guardian_push_outbox outbox
+      join guardian_push_devices device
+        on device.id =
+           outbox.device_id
+       and device.school_id =
+           outbox.school_id
+       and device.student_id =
+           outbox.student_id
+       and device.guardian_id =
+           outbox.guardian_id
+       and device.firebase_installation_id =
+           outbox.firebase_installation_id
+       and device.status =
+           'ACTIVE'
       where outbox.status in ('PENDING', 'RETRY')
         and outbox.available_at <= now()
         ${schoolFilter}
+        ${presenceEventFilter}
       order by outbox.available_at asc, outbox.created_at asc
       limit ${limit}
       for update skip locked
@@ -121,8 +194,18 @@ export async function runGuardianPushOutbox(
         fid: row.firebase_installation_id,
         title: row.title,
         body: row.body,
-        iconUrl: row.icon_url,
-        clickUrl: row.click_url,
+        iconUrl:
+          absolutePublicUrl(
+            row.icon_url,
+          ) ??
+          `${publicAppOrigin()}/api/public/schools/${encodeURIComponent(
+            row.school_id,
+          )}/notification-logo`,
+        clickUrl:
+          absolutePublicUrl(
+            row.click_url,
+          ) ??
+          publicAppOrigin(),
         data: stringData(row.payload),
       });
 

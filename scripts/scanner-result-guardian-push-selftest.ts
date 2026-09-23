@@ -64,6 +64,8 @@ for (
     "device.status =",
     "on conflict do nothing",
     "queueGuardianPresencePushBestEffort",
+    "presenceEventId?: string",
+    "notification-logo",
   ]
 ) {
   requireText(
@@ -120,6 +122,31 @@ requireText(
   "schoolFilter",
   "school-scoped push filter",
 );
+requireText(
+  pushWorker,
+  "presenceEventId?: string",
+  "current-event push worker scope",
+);
+requireText(
+  pushWorker,
+  "presenceEventFilter",
+  "current-event due-row filter",
+);
+requireText(
+  pushWorker,
+  "device.status =",
+  "active push-device guard",
+);
+requireText(
+  pushWorker,
+  "absolutePublicUrl",
+  "notification icon URL normalization",
+);
+requireText(
+  pushWorker,
+  "notification-logo",
+  "school notification logo fallback",
+);
 
 const completionRoute =
   read(
@@ -135,6 +162,16 @@ requireText(
   completionRoute,
   "runGuardianPushOutbox",
   "guardian push worker dispatch",
+);
+requireText(
+  completionRoute,
+  "presenceEventId:",
+  "scan-triggered push targets current presence event",
+);
+requireText(
+  completionRoute,
+  "result.presence",
+  "scan-triggered push uses finalized presence identity",
 );
 requireText(
   completionRoute,

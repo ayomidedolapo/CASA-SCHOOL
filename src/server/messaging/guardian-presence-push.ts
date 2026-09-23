@@ -187,8 +187,10 @@ export async function queueGuardianPresencePushBestEffort(
                   recipients.student_name ||
                   ' checked out early.'
               end,
-              null,
-              null,
+              '/api/public/schools/' ||
+                recipients.school_id::text ||
+                '/notification-logo',
+              '/',
               jsonb_build_object(
                 'type',
                   ${input.eventType},
@@ -237,6 +239,7 @@ export async function queueGuardianPresencePushBestEffort(
 export async function reconcileRecentGuardianPresencePushes(
   input: {
     schoolId?: string;
+    presenceEventId?: string;
     lookbackMinutes?: number;
     limit?: number;
   } = {},
@@ -264,6 +267,10 @@ export async function reconcileRecentGuardianPresencePushes(
     const schoolFilter =
       input.schoolId
         ? sql`and event.school_id = ${input.schoolId}::uuid`
+        : sql``;
+    const presenceEventFilter =
+      input.presenceEventId
+        ? sql`and event.id = ${input.presenceEventId}::uuid`
         : sql``;
 
     const result =
@@ -318,6 +325,7 @@ export async function reconcileRecentGuardianPresencePushes(
                   interval '1 minute'
                 )
               ${schoolFilter}
+              ${presenceEventFilter}
             order by
               event.occurred_at desc
             limit ${limit}
@@ -412,8 +420,10 @@ export async function reconcileRecentGuardianPresencePushes(
                   recipients.student_name ||
                   ' checked out early.'
               end,
-              null,
-              null,
+              '/api/public/schools/' ||
+                recipients.school_id::text ||
+                '/notification-logo',
+              '/',
               jsonb_build_object(
                 'type',
                   recipients.guardian_event_type,

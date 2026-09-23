@@ -142,6 +142,9 @@ export async function POST(
           await runGuardianPushOutbox({
             schoolId:
               access.school.id,
+            presenceEventId:
+              result.presence
+                .presenceEventId,
             limit: 50,
           });
         } catch {
