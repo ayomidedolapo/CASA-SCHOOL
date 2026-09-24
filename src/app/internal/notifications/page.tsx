@@ -473,7 +473,7 @@ export default function InternalNotificationsPage() {
                               )
                             }
                           >
-                            Open context →
+                            View details →
                           </button>
                           {!item.readAt ? (
                             <button
@@ -485,7 +485,7 @@ export default function InternalNotificationsPage() {
                                 )
                               }
                             >
-                              Dismiss
+                              Mark read
                             </button>
                           ) : null}
                         </div>

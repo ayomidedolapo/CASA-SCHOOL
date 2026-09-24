@@ -61,6 +61,23 @@ export async function reconcileTerminalHealthNotifications(input?: {
         ? "ONLINE"
         : "OFFLINE";
 
+    const supersededEvent =
+      observed === "ONLINE"
+        ? "ATTENDANCE_TERMINAL_OFFLINE"
+        : "ATTENDANCE_TERMINAL_ONLINE";
+
+    // The opposite state is now historical. Keep it in history, but resolve
+    // it from unread/current attention so CASA never presents both as current.
+    await db.execute(sql`
+      update casa_in_app_notifications
+      set read_at = coalesce(read_at, now())
+      where school_id = ${terminal.school_id}::uuid
+        and audience = 'CASA_INTERNAL'
+        and event_type = ${supersededEvent}
+        and read_at is null
+        and payload ->> 'terminalId' = ${terminal.terminal_id}
+    `);
+
     const previous = rowsOf<{ observed_status: TerminalHealthStatus }>(await db.execute(sql`
       select observed_status
       from attendance_terminal_health_states
@@ -84,9 +101,6 @@ export async function reconcileTerminalHealthNotifications(input?: {
         returning terminal_id::text
       `))[0];
 
-      // Only the reconciler that won the first insert may emit an adoption
-      // transition. This keeps concurrent Platform Control / scanner requests
-      // from duplicating the same OFFLINE notification.
       if (!created || !terminal.last_seen_at || observed === "ONLINE") continue;
     } else if (previous.observed_status === observed) {
       await db.execute(sql`
@@ -112,48 +126,33 @@ export async function reconcileTerminalHealthNotifications(input?: {
     }
 
     transitions += 1;
-    const eventType = observed === "OFFLINE"
-      ? "ATTENDANCE_TERMINAL_OFFLINE"
-      : "ATTENDANCE_TERMINAL_ONLINE";
     const title = observed === "OFFLINE"
       ? `Scanner offline · ${terminal.terminal_name}`
       : `Scanner online · ${terminal.terminal_name}`;
     const body = observed === "OFFLINE"
-      ? `${terminal.school_name}${terminal.branch_name ? ` · ${terminal.branch_name}` : ""}: ${terminal.terminal_name} has not checked in for more than five minutes.`
+      ? `${terminal.school_name}${terminal.branch_name ? ` · ${terminal.branch_name}` : ""}: ${terminal.terminal_name} has not sent an authenticated heartbeat for more than five minutes.`
       : `${terminal.school_name}${terminal.branch_name ? ` · ${terminal.branch_name}` : ""}: ${terminal.terminal_name} is responding again.`;
 
     await emitCasaOperationalNotificationBestEffort({
-      event:
-        observed === "OFFLINE"
-          ? "ATTENDANCE_TERMINAL_OFFLINE"
-          : "ATTENDANCE_TERMINAL_ONLINE",
+      event: observed === "OFFLINE"
+        ? "ATTENDANCE_TERMINAL_OFFLINE"
+        : "ATTENDANCE_TERMINAL_ONLINE",
       scope: {
-        kind:
-          "SCHOOL",
-        schoolId:
-          terminal.school_id,
-        branchId:
-          terminal.branch_id,
+        kind: "SCHOOL",
+        schoolId: terminal.school_id,
+        branchId: terminal.branch_id,
       },
       title,
       body,
-      actionUrl:
-        "/internal/notifications",
-      dedupKey:
-        `terminal-health:${terminal.terminal_id}:${observed}`,
+      actionUrl: "/internal/health",
+      dedupKey: `terminal-health:${terminal.terminal_id}:${observed}`,
       payload: {
-        terminalId:
-          terminal.terminal_id,
-        terminalCode:
-          terminal.terminal_code,
-        observedStatus:
-          observed,
-        lastSeenAt:
-          terminal.last_seen_at
-            ? new Date(
-                terminal.last_seen_at,
-              ).toISOString()
-            : null,
+        terminalId: terminal.terminal_id,
+        terminalCode: terminal.terminal_code,
+        observedStatus: observed,
+        lastSeenAt: terminal.last_seen_at
+          ? new Date(terminal.last_seen_at).toISOString()
+          : null,
       },
     });
   }

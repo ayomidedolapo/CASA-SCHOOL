@@ -66,10 +66,10 @@ for (
   const marker of [
     "more notification",
     "Collapse",
-    "Dismiss notification",
+    "Hide notification from floating view",
     "notificationId",
     "20_000",
-    "Open",
+    "View details",
   ]
 ) {
   requireText(
@@ -107,12 +107,12 @@ for (
   );
   requireText(
     source,
-    "Open context",
+    "View details",
     "notification context navigation",
   );
   requireText(
     source,
-    "Dismiss",
+    "Mark read",
     "notification dismissal",
   );
 }

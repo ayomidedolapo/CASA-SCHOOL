@@ -600,7 +600,7 @@ export default function NotificationsClient(
                               )
                             }
                           >
-                            Open context →
+                            View details →
                           </button>
                           {!item.readAt ? (
                             <button
@@ -612,7 +612,7 @@ export default function NotificationsClient(
                                 )
                               }
                             >
-                              Dismiss
+                              Mark read
                             </button>
                           ) : null}
                         </div>
