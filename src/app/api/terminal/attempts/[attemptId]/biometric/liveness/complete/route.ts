@@ -1,5 +1,4 @@
 import {
-  after,
   NextRequest,
   NextResponse,
 } from "next/server";
@@ -136,28 +135,35 @@ export async function POST(
       );
     }
 
-    after(
-      async () => {
-        try {
-          await runGuardianPushOutbox({
-            schoolId:
-              access.school.id,
-            presenceEventId:
-              result.presence
-                .presenceEventId,
-            limit: 50,
-          });
-        } catch {
-          // Attendance is already committed. The worker also reconciles
-          // recent accepted events whose initial push enqueue was missed.
-        }
-      },
-    );
+    let guardianPushDelivery:
+      | Awaited<
+          ReturnType<
+            typeof runGuardianPushOutbox
+          >
+        >
+      | null =
+        null;
+
+    try {
+      guardianPushDelivery =
+        await runGuardianPushOutbox({
+          schoolId:
+            access.school.id,
+          presenceEventId:
+            result.presence
+              .presenceEventId,
+          limit: 50,
+        });
+    } catch {
+      // Attendance is authoritative. A push failure must never undo
+      // a completed check-in, sign-out, or early departure.
+    }
 
     return NextResponse.json(
       {
         presence:
           result.presence,
+        guardianPushDelivery,
         verificationImageDataUrl:
           result.verificationImageDataUrl,
         scores:

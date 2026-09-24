@@ -75,7 +75,7 @@ function loadQrScannerModule() {
 }
 
 const SCANNER_UI_REVISION =
-  "2026-09-22-r4";
+  "2026-09-24-r5";
 
 type Phase =
   | "BOOTING"
@@ -2398,16 +2398,40 @@ export default function ScannerClient() {
       ? "Signed out"
       : "Checked in";
 
+  const resultGuardianDelivery =
+    finalResult
+      ?.result
+      .guardianPushDelivery ??
+    null;
+  const resultGuardianQueued =
+    finalResult
+      ?.result
+      .presence
+      .guardianPushQueued ??
+    0;
   const resultGuardianAlert =
-    (
-      finalResult
-        ?.result
-        .presence
-        .guardianPushQueued ??
-      0
-    ) > 0
-      ? "Queued"
-      : "Not queued";
+    resultGuardianDelivery
+      ?.sent
+      ? (
+          resultGuardianDelivery
+            .retried >
+              0 ||
+          resultGuardianDelivery
+            .failed >
+              0
+            ? "Partially sent"
+            : "Sent"
+        )
+      : resultGuardianDelivery
+          ?.retried
+        ? "Retry scheduled"
+        : resultGuardianDelivery
+            ?.failed
+          ? "Delivery failed"
+          : resultGuardianQueued >
+              0
+            ? "Queued for delivery"
+            : "No guardian device";
 
   const isEarlyDepartureRetry =
     currentAttempt
@@ -2773,27 +2797,6 @@ export default function ScannerClient() {
                   }}
                 />
               </ThemeProvider>
-            </div>
-
-            <div
-              className={
-                styles.actions
-              }
-            >
-              <button
-                className={
-                  styles.secondaryButton
-                }
-                type="button"
-                onClick={
-                  () =>
-                    void cancelLiveness(
-                      true,
-                    )
-                }
-              >
-                Cancel face check
-              </button>
             </div>
           </>
         )}

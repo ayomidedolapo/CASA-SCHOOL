@@ -6,6 +6,8 @@ import {
   useState,
 } from "react";
 import {
+  getApp,
+  getApps,
   initializeApp,
 } from "firebase/app";
 import {
@@ -299,10 +301,13 @@ export default function GuardianNotificationClient(
           );
 
       const app =
-        initializeApp(
-          data.firebase
-            .config,
-        );
+        getApps().length >
+        0
+          ? getApp()
+          : initializeApp(
+              data.firebase
+                .config,
+            );
       const messaging =
         getMessaging(
           app,
@@ -320,17 +325,30 @@ export default function GuardianNotificationClient(
               ?.body ??
             "CASA school notification";
 
+          const icon =
+            payload.data
+              ?.casaIconUrl ??
+            data.school
+              .logoUrl ??
+            undefined;
+          const clickUrl =
+            payload.data
+              ?.casaClickUrl ??
+            window.location
+              .origin;
+
           void serviceWorker
             .showNotification(
               title,
               {
                 body,
-                icon:
-                  data.school.logoUrl ??
-                  undefined,
+                icon,
                 badge:
-                  data.school.logoUrl ??
-                  undefined,
+                  icon,
+                data: {
+                  url:
+                    clickUrl,
+                },
               },
             );
         },

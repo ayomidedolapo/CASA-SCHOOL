@@ -952,3 +952,9 @@
     padding-bottom: 6px;
   }
 }
+/* M45: students cannot cancel an accepted QR face-verification ceremony.
+   Error recovery remains controlled by CASA callbacks. */
+.livenessFrame :global(.amplify-liveness-cancel-button) {
+  display: none !important;
+  pointer-events: none !important;
+}

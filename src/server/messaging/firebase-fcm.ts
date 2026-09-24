@@ -306,8 +306,32 @@ export async function sendFcmToFid(
                 body:
                   input.body,
               },
-              data:
-                input.data ?? {},
+              data: {
+                ...(
+                  input.data ??
+                  {}
+                ),
+                casaTitle:
+                  input.title,
+                casaBody:
+                  input.body,
+                ...(
+                  input.iconUrl
+                    ? {
+                        casaIconUrl:
+                          input.iconUrl,
+                      }
+                    : {}
+                ),
+                ...(
+                  input.clickUrl
+                    ? {
+                        casaClickUrl:
+                          input.clickUrl,
+                      }
+                    : {}
+                ),
+              },
               webpush: {
                 headers: {
                   TTL:

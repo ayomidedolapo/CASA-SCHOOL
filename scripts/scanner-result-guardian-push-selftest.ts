@@ -153,10 +153,10 @@ const completionRoute =
     "src/app/api/terminal/attempts/[attemptId]/biometric/liveness/complete/route.ts",
   );
 
-requireText(
+rejectText(
   completionRoute,
   "after(",
-  "post-response push dispatch",
+  "push dispatch must complete before scanner result",
 );
 requireText(
   completionRoute,
@@ -172,6 +172,11 @@ requireText(
   completionRoute,
   "result.presence",
   "scan-triggered push uses finalized presence identity",
+);
+requireText(
+  completionRoute,
+  "guardianPushDelivery",
+  "scanner response includes actual push delivery outcome",
 );
 requireText(
   completionRoute,
@@ -204,6 +209,11 @@ requireText(
   contracts,
   "guardianPushQueued:",
   "scanner guardian push count",
+);
+requireText(
+  contracts,
+  "guardianPushDelivery:",
+  "scanner push delivery contract",
 );
 requireText(
   contracts,
@@ -246,6 +256,21 @@ rejectText(
   ".filter(Boolean).join(\" · \")",
   "final compact detail presentation",
 );
+rejectText(
+  scanner,
+  "Cancel face check",
+  "student liveness cancel control",
+);
+requireText(
+  scanner,
+  "guardianPushDelivery",
+  "scanner delivery-result presentation",
+);
+requireText(
+  scanner,
+  "2026-09-24-r5",
+  "scanner M45 UI revision",
+);
 
 const scannerCss =
   read(
@@ -260,12 +285,85 @@ for (
     ".verificationPhoto",
     ".resultFade",
     "@keyframes casaResultFade",
+    "amplify-liveness-cancel-button",
   ]
 ) {
   requireText(
     scannerCss,
     marker,
     "scanner result presentation",
+  );
+}
+
+const globalReceiver =
+  read(
+    "src/app/casa-foreground-notifications.tsx",
+  );
+
+for (
+  const marker of [
+    "onMessage",
+    "showNotification",
+    "casaIconUrl",
+    "casaClickUrl",
+    "Notification.permission",
+  ]
+) {
+  requireText(
+    globalReceiver,
+    marker,
+    "global foreground guardian push receiver",
+  );
+}
+
+const rootLayout =
+  read(
+    "src/app/layout.tsx",
+  );
+
+requireText(
+  rootLayout,
+  "CasaForegroundNotifications",
+  "global foreground receiver mount",
+);
+
+const firebaseSender =
+  read(
+    "src/server/messaging/firebase-fcm.ts",
+  );
+
+for (
+  const marker of [
+    "casaTitle",
+    "casaBody",
+    "casaIconUrl",
+    "casaClickUrl",
+  ]
+) {
+  requireText(
+    firebaseSender,
+    marker,
+    "FCM display metadata",
+  );
+}
+
+const messagingWorker =
+  read(
+    "src/app/firebase-messaging-sw.js/route.ts",
+  );
+
+for (
+  const marker of [
+    "data.casaTitle",
+    "data.casaBody",
+    "data.casaIconUrl",
+    "data.casaClickUrl",
+  ]
+) {
+  requireText(
+    messagingWorker,
+    marker,
+    "background guardian push rendering",
   );
 }
 

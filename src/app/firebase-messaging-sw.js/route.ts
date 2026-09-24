@@ -40,17 +40,38 @@ firebase.initializeApp(${config});
 const messaging = firebase.messaging();
 messaging.onBackgroundMessage((payload) => {
   const n = payload.notification || {};
-  const web = payload.webpush && payload.webpush.notification ? payload.webpush.notification : {};
-  self.registration.showNotification(n.title || "CASA", {
-    body: n.body || "",
-    icon: web.icon,
-    badge: web.badge,
-    data: {
-      url: payload.fcmOptions && payload.fcmOptions.link
+  const data = payload.data || {};
+  const web =
+    payload.webpush && payload.webpush.notification
+      ? payload.webpush.notification
+      : {};
+  const icon =
+    data.casaIconUrl ||
+    web.icon;
+  const clickUrl =
+    data.casaClickUrl ||
+    (
+      payload.fcmOptions && payload.fcmOptions.link
         ? payload.fcmOptions.link
-        : "/guardian-notifications"
+        : "/"
+    );
+
+  self.registration.showNotification(
+    n.title || data.casaTitle || "CASA",
+    {
+      body:
+        n.body ||
+        data.casaBody ||
+        "School attendance update.",
+      icon,
+      badge:
+        icon,
+      data: {
+        url:
+          clickUrl
+      }
     }
-  });
+  );
 });
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();

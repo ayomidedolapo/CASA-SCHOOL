@@ -137,6 +137,20 @@ export interface ScannerPresenceResult {
     replayed:
       boolean;
   };
+  guardianPushDelivery:
+    | {
+        reconciled:
+          number;
+        claimed:
+          number;
+        sent:
+          number;
+        retried:
+          number;
+        failed:
+          number;
+      }
+    | null;
   verificationImageDataUrl:
     string | null;
   scores: {
