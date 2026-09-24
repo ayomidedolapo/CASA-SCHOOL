@@ -32,6 +32,11 @@ const releaseSchema =
         .regex(
           /^\d{4}-\d{2}-\d{2}$/,
         ),
+    branchId:
+      z.string()
+        .uuid()
+        .nullable()
+        .optional(),
     limit:
       z.number()
         .int()
@@ -76,10 +81,40 @@ export async function GET(
       );
     }
 
+    const branchId =
+      request.nextUrl.searchParams.get(
+        "branchId",
+      );
+
+    if (
+      branchId &&
+      !z.string()
+        .uuid()
+        .safeParse(
+          branchId,
+        )
+        .success
+    ) {
+      return NextResponse.json(
+        {
+          message:
+            "Invalid branch filter.",
+        },
+        {
+          status: 400,
+          headers:
+            casaInternalNoStoreHeaders,
+        },
+      );
+    }
+
     const batches =
       await listReplacementBatchGroups({
         schoolId:
           schoolId ??
+          null,
+        branchId:
+          branchId ??
           null,
       });
 
@@ -145,6 +180,9 @@ export async function POST(
           body.data.schoolId,
         batchEligibleOn:
           body.data.batchEligibleOn,
+        branchId:
+          body.data.branchId ??
+          null,
         limit:
           body.data.limit,
         origin:
@@ -164,6 +202,9 @@ export async function POST(
       metadata: {
         batchEligibleOn:
           body.data.batchEligibleOn,
+        branchId:
+          body.data.branchId ??
+          null,
         requested:
           result.requested,
         produced:

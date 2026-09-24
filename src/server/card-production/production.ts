@@ -1122,6 +1122,15 @@ export async function listCentralProductionJobs(
       string | null;
     branchId?:
       string | null;
+    category?:
+      | "FIRST_CARD"
+      | "REPLACEMENT"
+      | "OTHER"
+      | null;
+    exportableOnly?:
+      boolean;
+    includeScheduled?:
+      boolean;
     limit:
       number;
     origin:
@@ -1164,6 +1173,69 @@ export async function listCentralProductionJobs(
     );
   }
 
+  if (
+    input.category ===
+      "FIRST_CARD"
+  ) {
+    conditions.push(
+      eq(
+        studentCardProductionJobs.productionAuthority,
+        "SCHOOL_ENROLLMENT_AUTO_ISSUE",
+      ),
+    );
+  } else if (
+    input.category ===
+      "REPLACEMENT"
+  ) {
+    conditions.push(
+      eq(
+        studentCardProductionJobs.productionAuthority,
+        "CASA_INTERNAL_REPLACEMENT",
+      ),
+    );
+  } else if (
+    input.category ===
+      "OTHER"
+  ) {
+    conditions.push(
+      sql`${studentCardProductionJobs.productionAuthority} not in ('SCHOOL_ENROLLMENT_AUTO_ISSUE', 'CASA_INTERNAL_REPLACEMENT')`,
+    );
+  }
+
+  if (
+    !input.includeScheduled
+  ) {
+    conditions.push(
+      sql`(
+        ${studentCardProductionJobs.status} = 'PRINTED'::student_card_production_status
+        or ${studentCardProductionJobs.queuedAt} <= now()
+      )`,
+    );
+  }
+
+  conditions.push(
+    sql`(
+      ${studentCardProductionJobs.status} = 'PRINTED'::student_card_production_status
+      or ${studentIdentityCards.status} = 'READY_FOR_ACTIVATION'::student_identity_card_status
+    )`,
+  );
+
+  if (
+    input.exportableOnly
+  ) {
+    conditions.push(
+      sql`(
+        ${studentCardProductionJobs.status} in (
+          'READY'::student_card_production_status,
+          'EXPORTED'::student_card_production_status
+        )
+        and ${studentIdentityCards.status} =
+          'READY_FOR_ACTIVATION'::student_identity_card_status
+        and ${studentCardProductionJobs.queuedAt} <= now()
+      )`,
+    );
+  }
+
   const rows =
     await db
       .select({
@@ -1177,6 +1249,10 @@ export async function listCentralProductionJobs(
           studentCardProductionJobs.cardId,
         status:
           studentCardProductionJobs.status,
+        productionAuthority:
+          studentCardProductionJobs.productionAuthority,
+        cardStatus:
+          studentIdentityCards.status,
         publicAccessKey:
           studentCardProductionJobs.publicAccessKey,
         publicLinkRevision:
@@ -1208,6 +1284,19 @@ export async function listCentralProductionJobs(
           studentCardProductionJobs.templateId,
         ),
       )
+      .innerJoin(
+        studentIdentityCards,
+        and(
+          eq(
+            studentIdentityCards.schoolId,
+            studentCardProductionJobs.schoolId,
+          ),
+          eq(
+            studentIdentityCards.id,
+            studentCardProductionJobs.cardId,
+          ),
+        ),
+      )
       .where(
         conditions.length > 0
           ? and(
@@ -1227,6 +1316,14 @@ export async function listCentralProductionJobs(
   return rows.map(
     (row) => ({
       ...row,
+      category:
+        row.productionAuthority ===
+          "SCHOOL_ENROLLMENT_AUTO_ISSUE"
+          ? "FIRST_CARD" as const
+          : row.productionAuthority ===
+              "CASA_INTERNAL_REPLACEMENT"
+            ? "REPLACEMENT" as const
+            : "OTHER" as const,
       publicUrl:
         publicCardUrl(
           input.origin,
@@ -1275,6 +1372,17 @@ export async function markProductionJobPrinted(
             'READY'::student_card_production_status,
             'EXPORTED'::student_card_production_status,
             'PRINTED'::student_card_production_status
+          )
+          and exists (
+            select 1
+            from student_identity_cards card
+            where
+              card.school_id =
+                student_card_production_jobs.school_id
+              and card.id =
+                student_card_production_jobs.card_id
+              and card.status =
+                'READY_FOR_ACTIVATION'::student_identity_card_status
           )
         returning
           id,
@@ -1487,8 +1595,20 @@ export async function markJobsExported(
           selected.id
         and j.status in (
           'READY'::student_card_production_status,
-          'EXPORTED'::student_card_production_status,
-          'PRINTED'::student_card_production_status
+          'EXPORTED'::student_card_production_status
+        )
+        and j.queued_at <=
+          ${now}::timestamptz
+        and exists (
+          select 1
+          from student_identity_cards card
+          where
+            card.school_id =
+              j.school_id
+            and card.id =
+              j.card_id
+            and card.status =
+              'READY_FOR_ACTIVATION'::student_identity_card_status
         )
       returning
         j.id,

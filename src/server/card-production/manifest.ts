@@ -69,6 +69,10 @@ export async function buildCardProductionManifest(
           Date;
         templateVersion:
           string;
+        category:
+          "FIRST_CARD" |
+          "REPLACEMENT" |
+          "OTHER";
       }>;
     exportDate:
       string;
@@ -185,6 +189,13 @@ export async function buildCardProductionManifest(
     },
     {
       header:
+        "Card Type",
+      key:
+        "category",
+      width: 20,
+    },
+    {
+      header:
         "Production Status",
       key:
         "status",
@@ -252,6 +263,14 @@ export async function buildCardProductionManifest(
           job.publicUrl,
         templateVersion:
           job.templateVersion,
+        category:
+          job.category ===
+            "FIRST_CARD"
+            ? "NEW STUDENT / FIRST CARD"
+            : job.category ===
+                "REPLACEMENT"
+              ? "REPLACEMENT"
+              : "OTHER / REISSUE",
         status:
           job.status,
         queuedAt:
@@ -278,7 +297,7 @@ export async function buildCardProductionManifest(
 
   sheet.autoFilter = {
     from: "A1",
-    to: "N1",
+    to: "O1",
   };
 
   const value =

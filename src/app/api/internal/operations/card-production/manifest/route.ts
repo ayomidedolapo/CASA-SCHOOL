@@ -10,7 +10,7 @@ import { casaInternalAuthErrorResponse, casaInternalNoStoreHeaders } from "@/ser
 import { writeCasaInternalAudit } from "@/server/internal/onboarding";
 
 export const dynamic = "force-dynamic";
-const bodySchema = z.object({ status: z.enum(["READY", "EXPORTED", "PRINTED"]).nullable().optional(), schoolId: z.string().uuid().nullable().optional(), branchId: z.string().uuid().nullable().optional(), limit: z.number().int().min(1).max(5000).default(1000) });
+const bodySchema = z.object({ status: z.enum(["READY", "EXPORTED", "PRINTED"]).nullable().optional(), category: z.enum(["FIRST_CARD", "REPLACEMENT", "OTHER"]).nullable().optional(), schoolId: z.string().uuid().nullable().optional(), branchId: z.string().uuid().nullable().optional(), limit: z.number().int().min(1).max(5000).default(1000) });
 function rowsOf<T>(result: unknown): T[] { if (Array.isArray(result)) return result as T[]; if (result && typeof result === "object" && "rows" in result && Array.isArray((result as { rows?: unknown }).rows)) return (result as { rows: T[] }).rows; return []; }
 
 export async function POST(request: NextRequest) {
@@ -18,7 +18,8 @@ export async function POST(request: NextRequest) {
     const access = await requireCasaCapability("CARD_PRODUCTION_ADMIN");
     const body = bodySchema.safeParse(await request.json().catch(() => ({})));
     if (!body.success) return NextResponse.json({ message: "Invalid production manifest request." }, { status: 400, headers: casaInternalNoStoreHeaders });
-    const jobs = await listCentralProductionJobs({ status: body.data.status ?? null, schoolId: body.data.schoolId ?? null, limit: body.data.limit, origin: request.nextUrl.origin });
+    if (body.data.status === "PRINTED") return NextResponse.json({ message: "Printed card history cannot be exported into a new production manifest." }, { status: 409, headers: casaInternalNoStoreHeaders });
+    const jobs = await listCentralProductionJobs({ status: body.data.status ?? null, category: body.data.category ?? null, schoolId: body.data.schoolId ?? null, branchId: body.data.branchId ?? null, exportableOnly: true, limit: body.data.limit, origin: request.nextUrl.origin });
     const ids = jobs.map((job) => job.studentId);
     const db = getDb();
     const branchRows = ids.length === 0 ? [] : rowsOf<{ student_id: string; branch_id: string | null; branch_name: string | null }>(await db.execute(sql`
@@ -42,7 +43,7 @@ export async function POST(request: NextRequest) {
     const exportDate = new Date().toISOString().slice(0, 10);
     const workbook = await buildCardProductionManifest({ jobs: exportJobs, exportDate });
     await markJobsExported(exportJobs.map((job) => job.id));
-    await writeCasaInternalAudit({ access, schoolId: body.data.schoolId ?? undefined, action: "CARD_PRODUCTION_MANIFEST_EXPORTED", subjectType: "CARD_PRODUCTION_MANIFEST", metadata: { status: body.data.status ?? null, branchId: body.data.branchId ?? null, jobCount: exportJobs.length, exportDate } });
+    await writeCasaInternalAudit({ access, schoolId: body.data.schoolId ?? undefined, action: "CARD_PRODUCTION_MANIFEST_EXPORTED", subjectType: "CARD_PRODUCTION_MANIFEST", metadata: { status: body.data.status ?? null, category: body.data.category ?? null, branchId: body.data.branchId ?? null, jobCount: exportJobs.length, exportDate } });
     return new NextResponse(new Uint8Array(workbook), { status: 200, headers: { "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Content-Disposition": `attachment; filename="casa-card-production-${exportDate}.xlsx"`, "Cache-Control": "no-store" } });
   } catch (error) {
     const response = casaInternalAuthErrorResponse(error);

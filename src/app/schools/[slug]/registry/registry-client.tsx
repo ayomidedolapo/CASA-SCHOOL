@@ -634,6 +634,8 @@ export function RegistryClient({
         await request<{
           cardProvisioning?: {
             status?: string;
+            scheduledFor?:
+              string | null;
           };
         }>(
           `/students/${selectedStudentId}/enrollments`,
@@ -678,11 +680,20 @@ export function RegistryClient({
         enrollmentResult
           .cardProvisioning
           ?.status;
+      const scheduledFor =
+        enrollmentResult
+          .cardProvisioning
+          ?.scheduledFor ??
+        null;
 
       setNotice(
         cardStatus ===
-          "CREATED"
-          ? "Student enrollment and arrival method saved. CASA created the first digital card automatically."
+          "CREATED" &&
+        scheduledFor
+          ? `Student enrollment saved. The first permanent card is scheduled for term-end production on ${scheduledFor}. Until physical handover and activation, the School Technician/Admin should use supervised first-card check-in and assisted sign-out.`
+          : cardStatus ===
+              "CREATED"
+          ? "Student enrollment and arrival method saved. CASA created the first digital card automatically and queued it for production."
           : cardStatus ===
               "ALREADY_PRESENT"
             ? "Student enrollment and arrival method saved. The student already has a current card."

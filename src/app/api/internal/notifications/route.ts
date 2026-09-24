@@ -65,8 +65,92 @@ export async function GET() {
       order by notification.created_at desc
       limit 100
     `));
-    const unread = notifications.filter((row) => !(row as { readAt?: unknown }).readAt).length;
-    return NextResponse.json({ notifications, unread }, { headers });
+    const normalized =
+      notifications.map(
+        (row) => {
+          const item =
+            row as {
+              schoolId?:
+                string | null;
+              eventType?:
+                string;
+              actionUrl?:
+                string | null;
+            };
+          const eventType =
+            item.eventType ??
+            "";
+          const current =
+            item.actionUrl;
+
+          let actionUrl =
+            current;
+
+          if (
+            !actionUrl ||
+            actionUrl ===
+              "/internal/notifications"
+          ) {
+            if (
+              eventType.startsWith(
+                "CARD_",
+              )
+            ) {
+              actionUrl =
+                "/internal/card-production";
+            } else if (
+              eventType.includes(
+                "TERMINAL",
+              ) ||
+              eventType.startsWith(
+                "PLATFORM_",
+              )
+            ) {
+              actionUrl =
+                "/internal/health";
+            } else if (
+              item.schoolId
+            ) {
+              actionUrl =
+                `/internal/schools/${encodeURIComponent(
+                  item.schoolId,
+                )}`;
+            } else {
+              actionUrl =
+                "/internal";
+            }
+          }
+
+          return {
+            ...(
+              row as Record<
+                string,
+                unknown
+              >
+            ),
+            actionUrl,
+          };
+        },
+      );
+
+    const unread =
+      normalized.filter(
+        (row) =>
+          !(row as {
+            readAt?: unknown;
+          }).readAt,
+      ).length;
+
+    return NextResponse.json(
+      {
+        notifications:
+          normalized,
+        unread,
+      },
+      {
+        headers,
+      },
+    );
   } catch (error) {
     const response = authError(error);
     if (response) return response;

@@ -69,6 +69,8 @@ export async function queueGuardianPresencePushBestEffort(
                 as school_id,
               school.name
                 as school_name,
+              school.timezone
+                as school_timezone,
               student.id
                 as student_id,
               concat_ws(
@@ -104,6 +106,7 @@ export async function queueGuardianPresencePushBestEffort(
             select
               context.school_id,
               context.school_name,
+              context.school_timezone,
               context.student_id,
               context.student_name,
               context.occurred_at,
@@ -177,15 +180,33 @@ export async function queueGuardianPresencePushBestEffort(
                   'STUDENT_CHECKED_IN'
                   then
                     recipients.student_name ||
-                    ' checked in.'
+                    ' has gotten to school at ' ||
+                    to_char(
+                      recipients.occurred_at at time zone
+                        recipients.school_timezone,
+                      'HH24:MI'
+                    ) ||
+                    '.'
                 when ${input.eventType} =
                   'STUDENT_SIGNED_OUT'
                   then
                     recipients.student_name ||
-                    ' signed out.'
+                    ' has left school at ' ||
+                    to_char(
+                      recipients.occurred_at at time zone
+                        recipients.school_timezone,
+                      'HH24:MI'
+                    ) ||
+                    '.'
                 else
                   recipients.student_name ||
-                  ' checked out early.'
+                  ' has left school early at ' ||
+                  to_char(
+                    recipients.occurred_at at time zone
+                      recipients.school_timezone,
+                    'HH24:MI'
+                  ) ||
+                  '.'
               end,
               '/api/public/schools/' ||
                 recipients.school_id::text ||
@@ -211,7 +232,26 @@ export async function queueGuardianPresencePushBestEffort(
               now(),
               now()
             from recipients
-            on conflict do nothing
+            on conflict (
+              school_id,
+              presence_event_id,
+              device_id
+            )
+            where
+              presence_event_id is not null
+            do update set
+              title =
+                excluded.title,
+              body =
+                excluded.body,
+              icon_url =
+                excluded.icon_url,
+              click_url =
+                excluded.click_url,
+              payload =
+                excluded.payload,
+              updated_at =
+                now()
             returning id
           )
           select
@@ -281,6 +321,8 @@ export async function reconcileRecentGuardianPresencePushes(
               event.school_id,
               school.name
                 as school_name,
+              school.timezone
+                as school_timezone,
               event.student_id,
               concat_ws(
                 ' ',
@@ -334,6 +376,7 @@ export async function reconcileRecentGuardianPresencePushes(
             select
               context.school_id,
               context.school_name,
+              context.school_timezone,
               context.student_id,
               context.student_name,
               context.attendance_record_id,
@@ -410,15 +453,33 @@ export async function reconcileRecentGuardianPresencePushes(
                   'STUDENT_CHECKED_IN'
                   then
                     recipients.student_name ||
-                    ' checked in.'
+                    ' has gotten to school at ' ||
+                    to_char(
+                      recipients.occurred_at at time zone
+                        recipients.school_timezone,
+                      'HH24:MI'
+                    ) ||
+                    '.'
                 when recipients.guardian_event_type =
                   'STUDENT_SIGNED_OUT'
                   then
                     recipients.student_name ||
-                    ' signed out.'
+                    ' has left school at ' ||
+                    to_char(
+                      recipients.occurred_at at time zone
+                        recipients.school_timezone,
+                      'HH24:MI'
+                    ) ||
+                    '.'
                 else
                   recipients.student_name ||
-                  ' checked out early.'
+                  ' has left school early at ' ||
+                  to_char(
+                    recipients.occurred_at at time zone
+                      recipients.school_timezone,
+                    'HH24:MI'
+                  ) ||
+                  '.'
               end,
               '/api/public/schools/' ||
                 recipients.school_id::text ||
@@ -444,7 +505,26 @@ export async function reconcileRecentGuardianPresencePushes(
               now(),
               now()
             from recipients
-            on conflict do nothing
+            on conflict (
+              school_id,
+              presence_event_id,
+              device_id
+            )
+            where
+              presence_event_id is not null
+            do update set
+              title =
+                excluded.title,
+              body =
+                excluded.body,
+              icon_url =
+                excluded.icon_url,
+              click_url =
+                excluded.click_url,
+              payload =
+                excluded.payload,
+              updated_at =
+                now()
             returning id
           )
           select

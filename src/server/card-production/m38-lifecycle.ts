@@ -34,6 +34,9 @@ import {
   assertCardStorageConfigured,
   deletePrivateCardObjectsBestEffort,
 } from "./storage";
+import {
+  resolveFirstCardQueueSchedule,
+} from "./scheduled-card-policy";
 
 function rowsOf<T>(
   value: unknown,
@@ -181,6 +184,8 @@ export type FirstCardProvisioningResult =
         string;
       publicUrl:
         string;
+      scheduledFor:
+        string | null;
     }
   | {
       status:
@@ -254,6 +259,16 @@ export async function ensureFirstStudentCardForEnrollment(
         "NO_ACTIVE_ENROLLMENT",
     };
   }
+
+  const queueSchedule =
+    await resolveFirstCardQueueSchedule({
+      schoolId:
+        input.access.school.id,
+      enrollmentId:
+        input.enrollmentId,
+      timezone:
+        input.access.school.timezone,
+    });
 
   const existing =
     rowsOf<{
@@ -503,7 +518,7 @@ export async function ensureFirstStudentCardForEnrollment(
               ${artifacts.preview},
               ${snapshotJson}::jsonb,
               'READY'::student_card_production_status,
-              ${now}::timestamptz,
+              ${queueSchedule.queueAt}::timestamptz,
               ${now}::timestamptz,
               ${now}::timestamptz
             from inserted_card
@@ -601,6 +616,8 @@ export async function ensureFirstStudentCardForEnrollment(
           input.origin,
           publicAccessKey,
         ),
+      scheduledFor:
+        queueSchedule.scheduledFor,
     };
   } catch (error) {
     if (artifacts) {

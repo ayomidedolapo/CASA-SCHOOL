@@ -157,6 +157,8 @@ export async function listReplacementBatchGroups(
   input: {
     schoolId:
       string | null;
+    branchId:
+      string | null;
   },
 ) {
   return rowsOf<{
@@ -170,11 +172,31 @@ export async function listReplacementBatchGroups(
       number;
     due:
       boolean;
+    students:
+      Array<{
+        case_id: string;
+        student_id:
+          string;
+        student_name:
+          string;
+        casa_student_id:
+          string;
+        branch_id:
+          string | null;
+        branch_name:
+          string | null;
+        class_name:
+          string | null;
+        replacement_reason:
+          "LOST" |
+          "DAMAGED";
+      }>;
   }>(
     await getDb()
       .execute(sql`
         select
-          replacement.school_id,
+          replacement.school_id::text
+            as school_id,
           school.name
             as school_name,
           replacement.batch_eligible_on::text
@@ -187,13 +209,99 @@ export async function listReplacementBatchGroups(
                 now() at time zone
                   school.timezone
               )::date
-          ) as due
+          ) as due,
+          jsonb_agg(
+            jsonb_build_object(
+              'case_id',
+                replacement.id::text,
+              'student_id',
+                student.id::text,
+              'student_name',
+                concat_ws(
+                  ' ',
+                  student.first_name,
+                  nullif(
+                    student.middle_name,
+                    ''
+                  ),
+                  student.last_name
+                ),
+              'casa_student_id',
+                student.casa_student_id,
+              'branch_id',
+                current_class.branch_id,
+              'branch_name',
+                current_class.branch_name,
+              'class_name',
+                current_class.class_name,
+              'replacement_reason',
+                replacement.replacement_reason::text
+            )
+            order by
+              student.last_name,
+              student.first_name,
+              student.casa_student_id
+          ) as students
         from student_card_replacement_cases
           replacement
         join schools
           school
           on school.id =
              replacement.school_id
+        join students
+          student
+          on student.school_id =
+             replacement.school_id
+         and student.id =
+             replacement.student_id
+        left join lateral (
+          select
+            branch.id::text
+              as branch_id,
+            branch.name
+              as branch_name,
+            concat_ws(
+              ' ',
+              level.name,
+              arm.name
+            ) as class_name
+          from student_enrollments
+            enrollment
+          join class_arms arm
+            on arm.school_id =
+               enrollment.school_id
+           and arm.id =
+               enrollment.class_arm_id
+          join class_levels level
+            on level.school_id =
+               arm.school_id
+           and level.id =
+               arm.class_level_id
+          left join school_branch_class_arms
+            branch_arm
+            on branch_arm.school_id =
+               enrollment.school_id
+           and branch_arm.class_arm_id =
+               enrollment.class_arm_id
+          left join school_branches
+            branch
+            on branch.school_id =
+               enrollment.school_id
+           and branch.id =
+               branch_arm.branch_id
+          where
+            enrollment.school_id =
+              replacement.school_id
+            and enrollment.student_id =
+              replacement.student_id
+            and enrollment.status =
+              'ACTIVE'::student_enrollment_status
+          order by
+            enrollment.starts_on desc,
+            enrollment.created_at desc
+          limit 1
+        ) current_class
+          on true
         where
           replacement.status =
             'CARD_REPLACEMENT_PENDING'::student_card_replacement_case_status
@@ -208,6 +316,12 @@ export async function listReplacementBatchGroups(
               is null
             or replacement.school_id =
                ${input.schoolId}::uuid
+          )
+          and (
+            ${input.branchId}::text
+              is null
+            or current_class.branch_id =
+               ${input.branchId}
           )
         group by
           replacement.school_id,
@@ -721,6 +835,8 @@ export async function releaseDueReplacementBatch(
   input: {
     schoolId: string;
     batchEligibleOn: string;
+    branchId:
+      string | null;
     origin: string;
     limit: number;
   },
@@ -755,6 +871,29 @@ export async function releaseDueReplacementBatch(
               )::date
             and replacement.replacement_card_id
               is null
+            and (
+              ${input.branchId}::text
+                is null
+              or exists (
+                select 1
+                from student_enrollments enrollment
+                join school_branch_class_arms
+                  branch_arm
+                  on branch_arm.school_id =
+                     enrollment.school_id
+                 and branch_arm.class_arm_id =
+                     enrollment.class_arm_id
+                where
+                  enrollment.school_id =
+                    replacement.school_id
+                  and enrollment.student_id =
+                    replacement.student_id
+                  and enrollment.status =
+                    'ACTIVE'::student_enrollment_status
+                  and branch_arm.branch_id =
+                    ${input.branchId}::uuid
+              )
+            )
           order by
             replacement.created_at asc,
             replacement.id asc
@@ -799,6 +938,8 @@ export async function releaseDueReplacementBatch(
       input.schoolId,
     batchEligibleOn:
       input.batchEligibleOn,
+    branchId:
+      input.branchId,
     requested:
       caseIds.length,
     produced:

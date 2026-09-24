@@ -14,6 +14,7 @@ export type CasaOperationalCategory =
   | "BIOMETRIC"
   | "GUARDIAN_DELIVERY"
   | "SECURITY_ACCESS"
+  | "SCHOOL_OPERATIONS"
   | "PLATFORM_HEALTH";
 
 export const CASA_OPERATIONAL_EVENT_CATALOG = {
@@ -58,6 +59,12 @@ export const CASA_OPERATIONAL_EVENT_CATALOG = {
     severity: "WARNING",
     category: "SECURITY_ACCESS",
     dedupeSeconds: 900,
+  },
+  SCHOOL_ACTIVITY: {
+    eventType: "SCHOOL_ACTIVITY",
+    severity: "INFO",
+    category: "SCHOOL_OPERATIONS",
+    dedupeSeconds: 604800,
   },
   ATTENDANCE_TERMINAL_OFFLINE: {
     eventType: "ATTENDANCE_TERMINAL_OFFLINE",
@@ -444,6 +451,28 @@ export async function emitCasaAuditOperationalNotificationBestEffort(
       "Privileged access changed";
     body =
       "A CASA or school privileged-access change was completed.";
+  }
+
+  if (
+    !event &&
+    input.schoolId
+  ) {
+    event =
+      "SCHOOL_ACTIVITY";
+    title =
+      input.action
+        .replaceAll(
+          "_",
+          " ",
+        )
+        .toLowerCase()
+        .replace(
+          /^./,
+          (value) =>
+            value.toUpperCase(),
+        );
+    body =
+      "A school operation was completed in CASA. Open the school context for the related record.";
   }
 
   if (!event) {
