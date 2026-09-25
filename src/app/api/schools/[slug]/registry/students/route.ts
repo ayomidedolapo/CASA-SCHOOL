@@ -4,6 +4,7 @@ import {
   count,
   eq,
   ilike,
+  inArray,
   ne,
   or,
 } from "drizzle-orm";
@@ -73,31 +74,27 @@ export async function GET(
         }>;
 
     if (
-      operationalBranches.length !==
-      1
+      operationalBranches.length ===
+      0
     ) {
       return NextResponse.json(
         {
           message:
-            operationalBranches.length ===
-            0
-              ? "No operational campus is assigned to this administrator."
-              : "This administrator is assigned to more than one campus. Student registration requires one unambiguous operating campus.",
+            "No operational campus is available for this Registry operator.",
         },
         {
-          status:
-            operationalBranches.length ===
-            0
-              ? 403
-              : 409,
+          status: 403,
           headers:
             registryNoStoreHeaders,
         },
       );
     }
 
-    const operationalBranch =
-      operationalBranches[0];
+    const operationalBranchIds =
+      operationalBranches.map(
+        (branch) =>
+          branch.id,
+      );
 
     const searchParams =
       request.nextUrl
@@ -169,10 +166,16 @@ export async function GET(
           students.status,
           "ARCHIVED",
         ),
-        eq(
-          students.homeBranchId,
-          operationalBranch.id,
-        ),
+        operationalBranchIds.length ===
+          1
+          ? eq(
+              students.homeBranchId,
+              operationalBranchIds[0],
+            )
+          : inArray(
+              students.homeBranchId,
+              operationalBranchIds,
+            ),
       );
 
     const whereCondition =
@@ -334,14 +337,29 @@ export async function GET(
               ),
             ),
         },
-        registrationCampus: {
-          id:
-            operationalBranch.id,
-          name:
-            operationalBranch.name,
-          isHeadquarters:
-            operationalBranch.is_headquarters,
-        },
+        registrationCampus:
+          operationalBranches.length ===
+          1
+            ? {
+                id:
+                  operationalBranches[0].id,
+                name:
+                  operationalBranches[0].name,
+                isHeadquarters:
+                  operationalBranches[0].is_headquarters,
+              }
+            : null,
+        registrationCampuses:
+          operationalBranches.map(
+            (branch) => ({
+              id:
+                branch.id,
+              name:
+                branch.name,
+              isHeadquarters:
+                branch.is_headquarters,
+            }),
+          ),
       },
       {
         headers:
@@ -389,31 +407,27 @@ export async function POST(
         }>;
 
     if (
-      operationalBranches.length !==
-      1
+      operationalBranches.length ===
+      0
     ) {
       return NextResponse.json(
         {
           message:
-            operationalBranches.length ===
-            0
-              ? "No operational campus is assigned to this administrator."
-              : "This administrator is assigned to more than one campus. Student registration requires one unambiguous operating campus.",
+            "No operational campus is available for this Registry operator.",
         },
         {
-          status:
-            operationalBranches.length ===
-            0
-              ? 403
-              : 409,
+          status: 403,
           headers:
             registryNoStoreHeaders,
         },
       );
     }
 
-    const operationalBranch =
-      operationalBranches[0];
+    const defaultOperationalBranch =
+      operationalBranches.length ===
+      1
+        ? operationalBranches[0]
+        : null;
 
     let body:
       unknown;
@@ -460,6 +474,35 @@ export async function POST(
                   issue.message,
               }),
             ),
+        },
+        {
+          status: 400,
+          headers:
+            registryNoStoreHeaders,
+        },
+      );
+    }
+
+    const requestedBranchId =
+      parsed.data.branchId ??
+      null;
+    const operationalBranch =
+      requestedBranchId
+        ? operationalBranches.find(
+            (branch) =>
+              branch.id ===
+              requestedBranchId,
+          ) ?? null
+        : defaultOperationalBranch;
+
+    if (!operationalBranch) {
+      return NextResponse.json(
+        {
+          message:
+            operationalBranches.length >
+            1
+              ? "Select the campus where this student belongs."
+              : "The selected campus is not available to this Registry operator.",
         },
         {
           status: 400,

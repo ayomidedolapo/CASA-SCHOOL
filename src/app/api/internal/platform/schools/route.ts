@@ -9,6 +9,7 @@ import { normalizeLoginIdentifier } from "@/server/auth/identifier";
 import { requireCasaSuperAdmin } from "@/server/internal/authorization";
 import { casaInternalAuthErrorResponse, casaInternalNoStoreHeaders } from "@/server/internal/http";
 import { writeCasaInternalAudit } from "@/server/internal/onboarding";
+import { sendAccountAccessEmail } from "@/server/messaging/account-access-email";
 
 export const dynamic="force-dynamic";
 const bodySchema=z.object({name:z.string().trim().min(2).max(200),slug:z.string().trim().toLowerCase().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(80),timezone:z.string().trim().min(3).max(64).default("Africa/Lagos"),headquarters:z.object({name:z.string().trim().min(1).max(120),code:z.string().trim().toUpperCase().regex(/^[A-Z0-9]+(?:-[A-Z0-9]+)*$/).max(32),address:z.string().trim().max(1000).nullable().optional()}),owner:z.object({fullName:z.string().trim().min(2).max(200),email:z.string().trim().email().max(320)})});
@@ -48,6 +49,18 @@ export async function POST(request:NextRequest){
   await client.transaction(statements);
   await writeCasaInternalAudit({access,schoolId,action:"INTERNAL_SCHOOL_REGISTERED",subjectType:"SCHOOL",subjectId:schoolId,metadata:{slug:parsed.data.slug,headquartersId:branchId,ownerUserId:userId,ownerExistingIdentity:Boolean(user),ownerSetupRequired:needsSetup}});
   const origin=new URL(request.url).origin;
-  return NextResponse.json({school:{id:schoolId,slug:parsed.data.slug,name:parsed.data.name},headquarters:{id:branchId,name:parsed.data.headquarters.name,code:parsed.data.headquarters.code},owner:{userId,fullName:user?.full_name??parsed.data.owner.fullName,email:identity.value,existingIdentity:Boolean(user),setup:rawToken?{url:`${origin}/account/setup?token=${encodeURIComponent(rawToken)}`,expiresAt}:null}},{status:201,headers:casaInternalNoStoreHeaders});
+  const setup=rawToken?{url:`${origin}/account/setup?token=${encodeURIComponent(rawToken)}`,expiresAt}:null;
+  const emailDelivery=await sendAccountAccessEmail({
+   email:identity.value,
+   recipientName:user?.full_name??parsed.data.owner.fullName,
+   organizationName:parsed.data.name,
+   actionLabel:setup?"Set up School Owner access":"Sign in to CASA",
+   actionUrl:setup?.url??`${origin}/login?school=${encodeURIComponent(parsed.data.slug)}`,
+   expiresAt:setup?.expiresAt??null,
+   context:setup
+    ?`${parsed.data.name} has been registered on CASA. Use this private link to set up your School Owner account.`
+    :`${parsed.data.name} has been registered on CASA and your existing CASA identity has been granted School Owner access.`
+  });
+  return NextResponse.json({school:{id:schoolId,slug:parsed.data.slug,name:parsed.data.name},headquarters:{id:branchId,name:parsed.data.headquarters.name,code:parsed.data.headquarters.code},emailDelivery,owner:{userId,fullName:user?.full_name??parsed.data.owner.fullName,email:identity.value,existingIdentity:Boolean(user),setup}},{status:201,headers:casaInternalNoStoreHeaders});
  }catch(error){const response=casaInternalAuthErrorResponse(error);if(response)return response;console.error("CASA school registration failed",error);return NextResponse.json({message:"CASA could not register this school. The request was not accepted as a completed school registration."},{status:500,headers:casaInternalNoStoreHeaders})}
 }

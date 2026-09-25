@@ -157,6 +157,13 @@ export function RegistryClient({
       RegistrationCampus |
       null
     >(null);
+  const [
+    registrationCampuses,
+    setRegistrationCampuses,
+  ] =
+    useState<
+      RegistrationCampus[]
+    >([]);
   const [busy, setBusy] =
     useState(false);
   const [notice, setNotice] =
@@ -284,7 +291,10 @@ export function RegistryClient({
           total: number;
         };
         registrationCampus:
-          RegistrationCampus;
+          RegistrationCampus |
+          null;
+        registrationCampuses:
+          RegistrationCampus[];
       }>(
         `/students?q=${encodeURIComponent(
           query,
@@ -297,6 +307,9 @@ export function RegistryClient({
       );
       setRegistrationCampus(
         body.registrationCampus,
+      );
+      setRegistrationCampuses(
+        body.registrationCampuses,
       );
     },
     [query, request],
@@ -345,7 +358,10 @@ export function RegistryClient({
           total: number;
         };
         registrationCampus:
-          RegistrationCampus;
+          RegistrationCampus |
+          null;
+        registrationCampuses:
+          RegistrationCampus[];
       }>(
         `/students?q=${encodeURIComponent(
           query,
@@ -377,6 +393,9 @@ export function RegistryClient({
           );
           setRegistrationCampus(
             studentBody.registrationCampus,
+          );
+          setRegistrationCampuses(
+            studentBody.registrationCampuses,
           );
           setGuardians(
             guardianBody.guardians,
@@ -509,6 +528,9 @@ export function RegistryClient({
         {
           method: "POST",
           body: JSON.stringify({
+            branchId:
+              registrationCampus?.id ??
+              null,
             admissionNumber:
               form.get(
                 "admissionNumber",
@@ -1711,13 +1733,60 @@ export function RegistryClient({
                   <span>
                     Campus
                   </span>
-                  <div className="casa-field flex min-h-11 items-center bg-black/[0.035]">
-                    {registrationCampus
-                      ? `${registrationCampus.name}${registrationCampus.isHeadquarters ? " · HQ" : ""}`
-                      : "Campus scope unavailable"}
-                  </div>
+                  {registrationCampuses.length >
+                  1 ? (
+                    <select
+                      className="casa-field"
+                      name="branchId"
+                      required
+                      value={
+                        registrationCampus?.id ??
+                        ""
+                      }
+                      onChange={(event) => {
+                        const next =
+                          registrationCampuses.find(
+                            (campus) =>
+                              campus.id ===
+                              event.target.value,
+                          ) ?? null;
+                        setRegistrationCampus(
+                          next,
+                        );
+                      }}
+                    >
+                      <option
+                        value=""
+                        disabled
+                      >
+                        Select campus
+                      </option>
+                      {registrationCampuses.map(
+                        (campus) => (
+                          <option
+                            key={campus.id}
+                            value={campus.id}
+                          >
+                            {campus.name}
+                            {campus.isHeadquarters
+                              ? " · HQ"
+                              : ""}
+                          </option>
+                        ),
+                      )}
+                    </select>
+                  ) : (
+                    <div className="casa-field flex min-h-11 items-center bg-black/[0.035]">
+                      {registrationCampus
+                        ? `${registrationCampus.name}${registrationCampus.isHeadquarters ? " · HQ" : ""}`
+                        : "Campus scope unavailable"}
+                    </div>
+                  )}
                   <span className="mt-1 text-[10px] leading-4 text-black/45">
-                    CASA assigns the campus from the signed-in administrator&apos;s operating scope. It cannot be changed during student registration.
+                    {registrationCampuses.length >
+                    1
+                      ? "Choose the campus where this student belongs. Only campuses available to your account are shown."
+                      : "CASA assigns the only campus available to this account automatically."}
                   </span>
                 </div>
 
