@@ -26,7 +26,7 @@ import {
   registryAuthErrorResponse,
   registryDatabaseErrorResponse,
   registryNoStoreHeaders,
-  requireRegistryAdmin,
+  requireRegistryOperator,
 } from "@/server/registry/http";
 import {
   studentCreateSchema,
@@ -63,7 +63,7 @@ export async function GET(
     const visibility =
       await listVisibleBranches(slug);
     const access =
-      await requireRegistryAdmin(slug);
+      await requireRegistryOperator(slug);
     const operationalBranches =
       visibility.branches as
         Array<{
@@ -379,7 +379,7 @@ export async function POST(
     const visibility =
       await listVisibleBranches(slug);
     const access =
-      await requireRegistryAdmin(slug);
+      await requireRegistryOperator(slug);
     const operationalBranches =
       visibility.branches as
         Array<{

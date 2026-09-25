@@ -122,6 +122,24 @@ export default function MyClassClient(
       slug,
     )}/teacher`;
 
+  async function signOut() {
+    await fetch(
+      "/api/auth/logout",
+      {
+        method:
+          "POST",
+        credentials:
+          "same-origin",
+      },
+    );
+
+    window.location.assign(
+      `/login?school=${encodeURIComponent(
+        slug,
+      )}`,
+    );
+  }
+
   const selected =
     useMemo(
       () =>
@@ -348,6 +366,15 @@ export default function MyClassClient(
             >
               Account security
             </Link>
+            <button
+              type="button"
+              className="border-b border-black"
+              onClick={() =>
+                void signOut()
+              }
+            >
+              Sign out
+            </button>
           </nav>
         </header>
 

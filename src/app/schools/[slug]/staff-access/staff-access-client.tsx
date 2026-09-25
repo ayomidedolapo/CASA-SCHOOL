@@ -58,8 +58,12 @@ type JsonBody = {
   sessions?: AcademicOptions["sessions"];
   classArms?: AcademicOptions["classArms"];
   assignments?: Assignment[];
-  temporaryPassword?: string | null;
   reusedIdentity?: boolean;
+  emailDelivery?: string;
+  setup?: {
+    url: string;
+    expiresAt: string;
+  } | null;
 };
 
 export default function StaffAccessClient(
@@ -146,10 +150,15 @@ export default function StaffAccessClient(
     useState("");
 
   const [
-    temporaryPassword,
-    setTemporaryPassword,
+    accessSetup,
+    setAccessSetup,
   ] =
-    useState<string | null>(
+    useState<{
+      name: string;
+      url: string;
+      expiresAt: string;
+      emailDelivery: string;
+    } | null>(
       null,
     );
 
@@ -161,6 +170,7 @@ export default function StaffAccessClient(
       name: string;
       url: string;
       expiresAt: string;
+      emailDelivery: string;
     } | null>(
       null,
     );
@@ -432,7 +442,7 @@ export default function StaffAccessClient(
     setNotice(
       "",
     );
-    setTemporaryPassword(
+    setAccessSetup(
       null,
     );
     setBusy(
@@ -474,14 +484,25 @@ export default function StaffAccessClient(
         );
       }
 
-      setTemporaryPassword(
-        body.temporaryPassword ??
-          null,
+      setAccessSetup(
+        body.setup
+          ? {
+              name:
+                fullName,
+              url:
+                body.setup.url,
+              expiresAt:
+                body.setup.expiresAt,
+              emailDelivery:
+                body.emailDelivery ??
+                "UNKNOWN",
+            }
+          : null,
       );
 
       setNotice(
         body.message ??
-          "Staff access created.",
+          "Staff access created and email delivery attempted.",
       );
 
       setFullName(
@@ -693,6 +714,7 @@ export default function StaffAccessClient(
             url: string;
             expiresAt: string;
           };
+          emailDelivery?: string;
         };
 
       if (!response.ok) {
@@ -712,6 +734,9 @@ export default function StaffAccessClient(
         name: person.fullName,
         url: body.setup.url,
         expiresAt: body.setup.expiresAt,
+        emailDelivery:
+          body.emailDelivery ??
+          "UNKNOWN",
       });
     } catch (caught) {
       setError(
@@ -777,6 +802,26 @@ export default function StaffAccessClient(
           </div>
         ) : null}
 
+        {accessSetup ? (
+          <div
+            className="mt-6 border-l-2 border-black bg-black/5 px-4 py-3 text-sm"
+            role="status"
+          >
+            <strong>
+              Account setup / {accessSetup.name}
+            </strong>
+            <p className="mt-2 text-xs text-black/55">
+              Email delivery: {accessSetup.emailDelivery}
+            </p>
+            <p className="mt-2 break-all font-mono text-xs">
+              {accessSetup.url}
+            </p>
+            <p className="mt-2 text-xs text-black/55">
+              Private fallback copy. CASA emails this setup link automatically when Gmail delivery succeeds.
+            </p>
+          </div>
+        ) : null}
+
         {recovery ? (
           <div
             className="mt-6 border-l-2 border-black bg-black/5 px-4 py-3 text-sm"
@@ -785,27 +830,16 @@ export default function StaffAccessClient(
             <strong>
               Password recovery / {recovery.name}
             </strong>
+            <p className="mt-2 text-xs text-black/55">
+              Email delivery: {recovery.emailDelivery}
+            </p>
             <p className="mt-2 break-all font-mono text-xs">
               {recovery.url}
             </p>
             <p className="mt-2 text-xs text-black/55">
-              Single-use link. Expires after 24 hours.
+              Single-use link. Expires after 24 hours. Use this copy only if email delivery did not complete.
             </p>
           </div>
-        ) : null}
-
-        {temporaryPassword ? (
-          <section className="mt-6 border-2 border-black bg-black p-5 text-white">
-            <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-white/55">
-              Show once / temporary password
-            </p>
-            <p className="mt-3 break-all font-mono text-lg font-semibold">
-              {temporaryPassword}
-            </p>
-            <p className="mt-3 max-w-xl text-xs leading-5 text-white/60">
-              Give this directly to the staff member. CASA will force them to replace it after first sign-in. It is not stored in readable form.
-            </p>
-          </section>
         ) : null}
 
         <div className="mt-10 grid gap-10 xl:grid-cols-[minmax(0,1fr)_minmax(340px,0.48fr)]">
@@ -854,56 +888,58 @@ export default function StaffAccessClient(
                         </p>
                       </div>
 
-                      {!person.roles.includes(
-                        "OWNER",
-                      ) &&
-                      (
-                        !person.roles.includes(
-                          "ADMIN",
-                        ) ||
-                        canCreateAdmin
-                      ) ? (
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() =>
-                            void createRecovery(
-                              person,
-                            )
-                          }
-                          className="mt-3 border-b border-black font-mono text-[9px] font-semibold uppercase tracking-[0.1em] disabled:cursor-not-allowed disabled:opacity-30"
-                        >
-                          Password recovery
-                        </button>
-                      ) : null}
+                      <div className="mt-4 flex flex-wrap gap-3 sm:justify-end">
+                        {!person.roles.includes(
+                          "OWNER",
+                        ) &&
+                        (
+                          !person.roles.includes(
+                            "ADMIN",
+                          ) ||
+                          canCreateAdmin
+                        ) ? (
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() =>
+                              void createRecovery(
+                                person,
+                              )
+                            }
+                            className="border border-black/25 px-3 py-2 font-mono text-[9px] font-semibold uppercase tracking-[0.1em] disabled:cursor-not-allowed disabled:opacity-30"
+                          >
+                            Password recovery
+                          </button>
+                        ) : null}
 
-                      {!person.roles.includes(
-                        "OWNER",
-                      ) ? (
-                        <button
-                          type="button"
-                          disabled={
-                            busy ||
-                            (
-                              person.roles.includes(
-                                "ADMIN",
-                              ) &&
-                              !canCreateAdmin
-                            )
-                          }
-                          onClick={() =>
-                            void updateMembershipStatus(
-                              person,
-                            )
-                          }
-                          className="mt-3 border-b border-black font-mono text-[9px] font-semibold uppercase tracking-[0.1em] disabled:cursor-not-allowed disabled:opacity-30"
-                        >
-                          {person.membershipStatus ===
-                          "ACTIVE"
-                            ? "Suspend access"
-                            : "Reactivate access"}
-                        </button>
-                      ) : null}
+                        {!person.roles.includes(
+                          "OWNER",
+                        ) ? (
+                          <button
+                            type="button"
+                            disabled={
+                              busy ||
+                              (
+                                person.roles.includes(
+                                  "ADMIN",
+                                ) &&
+                                !canCreateAdmin
+                              )
+                            }
+                            onClick={() =>
+                              void updateMembershipStatus(
+                                person,
+                              )
+                            }
+                            className="border border-black/25 px-3 py-2 font-mono text-[9px] font-semibold uppercase tracking-[0.1em] disabled:cursor-not-allowed disabled:opacity-30"
+                          >
+                            {person.membershipStatus ===
+                            "ACTIVE"
+                              ? "Suspend access"
+                              : "Reactivate access"}
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
                   </article>
                 ),

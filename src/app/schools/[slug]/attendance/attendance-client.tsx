@@ -2,9 +2,13 @@
 
 import Link from "next/link";
 import {
+  useSearchParams,
+} from "next/navigation";
+import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -323,6 +327,26 @@ export default function AttendanceClient(
     }>;
   },
 ) {
+  const searchParams =
+    useSearchParams();
+  const requestedStudentId =
+    searchParams.get(
+      "studentId",
+    ) ??
+    "";
+  const requestedQuery =
+    searchParams.get(
+      "q",
+    ) ??
+    "";
+  const requestedBranchId =
+    searchParams.get(
+      "branchId",
+    ) ??
+    "";
+  const deepLinkHandled =
+    useRef(false);
+
   const [
     data,
     setData,
@@ -352,7 +376,14 @@ export default function AttendanceClient(
     setSelectedBranchId,
   ] =
     useState(
-      branches[0]?.id ?? "",
+      branches.some(
+        (branch) =>
+          branch.id ===
+          requestedBranchId,
+      )
+        ? requestedBranchId
+        : branches[0]?.id ??
+          "",
     );
 
   const [
@@ -418,7 +449,9 @@ export default function AttendanceClient(
     query,
     setQuery,
   ] =
-    useState("");
+    useState(
+      requestedQuery,
+    );
 
   const [
     view,
@@ -1518,6 +1551,51 @@ export default function AttendanceClient(
       setHistoryBusy(false);
     }
   }
+
+  useEffect(
+    () => {
+      if (
+        deepLinkHandled.current ||
+        !requestedStudentId ||
+        !data
+      ) {
+        return;
+      }
+
+      const target =
+        data.students.find(
+          (student) =>
+            student.studentId ===
+            requestedStudentId,
+        );
+
+      if (!target) {
+        return;
+      }
+
+      deepLinkHandled.current =
+        true;
+      const openTimer =
+        window.setTimeout(
+          () => {
+            void openStudentHistory(
+              target,
+            );
+          },
+          0,
+        );
+
+      return () => {
+        window.clearTimeout(
+          openTimer,
+        );
+      };
+    },
+    [
+      data,
+      requestedStudentId,
+    ],
+  );
 
   async function rebindSessionPolicy(
     reason?: string,

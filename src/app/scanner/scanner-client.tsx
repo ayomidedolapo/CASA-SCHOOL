@@ -1106,6 +1106,11 @@ export default function ScannerClient() {
     setProvisioning,
   ] =
     useState(false);
+  const [
+    setupQrOpen,
+    setSetupQrOpen,
+  ] =
+    useState(false);
 
   const resetTimer =
     useRef<
@@ -2549,6 +2554,73 @@ export default function ScannerClient() {
               styles.form
             }
           >
+            <button
+              className={
+                styles.button
+              }
+              type="button"
+              disabled={
+                provisioning
+              }
+              onClick={() =>
+                setSetupQrOpen(
+                  (
+                    value,
+                  ) =>
+                    !value,
+                )
+              }
+            >
+              {setupQrOpen
+                ? "Close setup camera"
+                : "Scan setup QR"}
+            </button>
+
+            {setupQrOpen ? (
+              <QrCamera
+                onDecoded={
+                  (
+                    payload,
+                  ) => {
+                    if (
+                      isTerminalCredentialShape(
+                        payload,
+                      )
+                    ) {
+                      setProvisionValue(
+                        payload,
+                      );
+                      setSetupQrOpen(
+                        false,
+                      );
+                      setMessage(
+                        "Setup QR read. Click Provision this device.",
+                      );
+                    } else {
+                      setSetupQrOpen(
+                        false,
+                      );
+                      setMessage(
+                        "That QR code is not a CASA scanner setup credential.",
+                      );
+                    }
+                  }
+                }
+                onFailure={
+                  (
+                    failure,
+                  ) => {
+                    setSetupQrOpen(
+                      false,
+                    );
+                    setMessage(
+                      failure,
+                    );
+                  }
+                }
+              />
+            ) : null}
+
             <input
               className={
                 styles.input
@@ -2597,7 +2669,7 @@ export default function ScannerClient() {
                 styles.message
               }
             >
-              The terminal credential stays in this device&apos;s private browser storage and is never placed in the URL. When this browser offers CASA as an installable app, the native install action appears automatically.
+              Scan the one-time setup QR issued by the School Technician. Manual credential paste remains available only as a fallback. The credential stays in this device&apos;s private browser storage and is never placed in the URL.
             </p>
           </div>
         )}

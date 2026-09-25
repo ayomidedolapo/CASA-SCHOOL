@@ -5,6 +5,8 @@ import "./globals.css";
 
 import CasaForegroundNotifications from "./casa-foreground-notifications";
 import CasaInAppNotificationStack from "./casa-in-app-notification-stack";
+import CasaNetworkStatus from "./casa-network-status";
+import CasaSessionActivityGuard from "./casa-session-activity-guard";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -40,6 +42,8 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
+        <CasaNetworkStatus />
+        <CasaSessionActivityGuard />
         <CasaForegroundNotifications />
         <CasaInAppNotificationStack />
         {children}

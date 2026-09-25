@@ -1030,13 +1030,20 @@ export function RegistryClient({
                           }
                           onClick={() => {
                             if (
-                              !selected
+                              selected
                             ) {
+                              setSelectedStudentId(
+                                null,
+                              );
                               setStudentDetail(
                                 null,
                               );
+                              return;
                             }
 
+                            setStudentDetail(
+                              null,
+                            );
                             setSelectedStudentId(
                               student.id,
                             );
@@ -1195,7 +1202,11 @@ export function RegistryClient({
                     className="casa-button-secondary text-center"
                     href={`/schools/${encodeURIComponent(
                       school.slug,
-                    )}/technician`}
+                    )}/technician?studentId=${encodeURIComponent(
+                      selectedStudent.id,
+                    )}&q=${encodeURIComponent(
+                      selectedStudent.casaStudentId,
+                    )}`}
                   >
                     Face / identity
                   </Link>
@@ -1203,7 +1214,11 @@ export function RegistryClient({
                     className="casa-button-secondary text-center"
                     href={`/schools/${encodeURIComponent(
                       school.slug,
-                    )}/attendance`}
+                    )}/attendance?studentId=${encodeURIComponent(
+                      selectedStudent.id,
+                    )}&q=${encodeURIComponent(
+                      selectedStudent.casaStudentId,
+                    )}${selectedStudent.homeBranchId ? `&branchId=${encodeURIComponent(selectedStudent.homeBranchId)}` : ""}`}
                   >
                     Attendance
                   </Link>

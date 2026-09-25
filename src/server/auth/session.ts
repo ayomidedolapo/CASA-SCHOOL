@@ -22,6 +22,8 @@ import {
 
 const SESSION_MAX_AGE_SECONDS =
   7 * 24 * 60 * 60;
+export const SESSION_IDLE_TIMEOUT_SECONDS =
+  30 * 60;
 
 function getSessionCookieName(): string {
   return process.env.NODE_ENV === "production"
@@ -36,6 +38,7 @@ export interface CurrentAuthSession {
   email: string | null;
   phone: string | null;
   expiresAt: Date;
+  lastSeenAt: Date;
 }
 
 export async function createAuthSession(
@@ -55,6 +58,7 @@ export async function createAuthSession(
     userId,
     tokenHash,
     expiresAt,
+    lastSeenAt: new Date(),
   });
 
   return { token, expiresAt };
@@ -99,6 +103,11 @@ export async function getCurrentAuthSession(): Promise<
 
   const tokenHash = hashSessionToken(token);
   const db = getDb();
+  const idleCutoff =
+    new Date(
+      Date.now() -
+        SESSION_IDLE_TIMEOUT_SECONDS * 1000,
+    );
 
   const rows = await withTransientDatabaseReadRetry(() =>
     db
@@ -109,6 +118,7 @@ export async function getCurrentAuthSession(): Promise<
         email: users.email,
         phone: users.phone,
         expiresAt: authSessions.expiresAt,
+        lastSeenAt: authSessions.lastSeenAt,
       })
       .from(authSessions)
       .innerJoin(users, eq(authSessions.userId, users.id))
@@ -117,6 +127,7 @@ export async function getCurrentAuthSession(): Promise<
           eq(authSessions.tokenHash, tokenHash),
           isNull(authSessions.revokedAt),
           gt(authSessions.expiresAt, new Date()),
+          gt(authSessions.lastSeenAt, idleCutoff),
           eq(users.status, "ACTIVE"),
         ),
       )
@@ -124,6 +135,46 @@ export async function getCurrentAuthSession(): Promise<
   );
 
   return rows[0] ?? null;
+}
+
+export async function touchCurrentAuthSession(): Promise<
+  CurrentAuthSession | null
+> {
+  const session =
+    await getCurrentAuthSession();
+
+  if (!session) {
+    return null;
+  }
+
+  const now =
+    new Date();
+  const db =
+    getDb();
+
+  await db
+    .update(authSessions)
+    .set({
+      lastSeenAt:
+        now,
+    })
+    .where(
+      and(
+        eq(
+          authSessions.id,
+          session.sessionId,
+        ),
+        isNull(
+          authSessions.revokedAt,
+        ),
+      ),
+    );
+
+  return {
+    ...session,
+    lastSeenAt:
+      now,
+  };
 }
 
 export async function revokeCurrentAuthSession(): Promise<void> {

@@ -3,6 +3,10 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import {
+  useSearchParams,
+} from "next/navigation";
+import QRCode from "qrcode";
+import {
   useCallback,
   useEffect,
   useMemo,
@@ -236,6 +240,21 @@ export default function TechnicianClient(
     schoolName: string;
   },
 ) {
+  const searchParams =
+    useSearchParams();
+  const requestedStudentId =
+    searchParams.get(
+      "studentId",
+    ) ??
+    "";
+  const requestedQuery =
+    searchParams.get(
+      "q",
+    ) ??
+    "";
+  const deepLinkHandled =
+    useRef(false);
+
   const [
     students,
     setStudents,
@@ -371,6 +390,13 @@ export default function TechnicianClient(
   ] =
     useState<
       OneTimeCredential | null
+    >(null);
+  const [
+    terminalSetupQr,
+    setTerminalSetupQr,
+  ] =
+    useState<
+      string | null
     >(null);
 
   const [
@@ -658,7 +684,7 @@ export default function TechnicianClient(
             void Promise.all([
               loadStudents(
                 1,
-                "",
+                requestedQuery,
               ),
               loadTerminals(),
               loadBranches(),
@@ -704,6 +730,100 @@ export default function TechnicianClient(
       loadStudents,
       loadTerminals,
       loadBranches,
+      requestedQuery,
+    ],
+  );
+
+  useEffect(
+    () => {
+      if (
+        deepLinkHandled.current ||
+        !requestedStudentId
+      ) {
+        return;
+      }
+
+      const target =
+        students.find(
+          (student) =>
+            student.id ===
+            requestedStudentId,
+        );
+
+      if (!target) {
+        return;
+      }
+
+      deepLinkHandled.current =
+        true;
+      void chooseStudent(
+        target,
+      );
+    },
+    [
+      students,
+      requestedStudentId,
+    ],
+  );
+
+  useEffect(
+    () => {
+      let cancelled =
+        false;
+
+      if (!oneTimeCredential) {
+        const clear =
+          window.setTimeout(
+            () => {
+              setTerminalSetupQr(
+                null,
+              );
+            },
+            0,
+          );
+
+        return () => {
+          window.clearTimeout(
+            clear,
+          );
+        };
+      }
+
+      void QRCode.toDataURL(
+        oneTimeCredential.token,
+        {
+          width:
+            320,
+          margin:
+            2,
+          errorCorrectionLevel:
+            "M",
+        },
+      ).then(
+        (value) => {
+          if (!cancelled) {
+            setTerminalSetupQr(
+              value,
+            );
+          }
+        },
+      ).catch(
+        () => {
+          if (!cancelled) {
+            setTerminalSetupQr(
+              null,
+            );
+          }
+        },
+      );
+
+      return () => {
+        cancelled =
+          true;
+      };
+    },
+    [
+      oneTimeCredential,
     ],
   );
 
@@ -1559,11 +1679,6 @@ export default function TechnicianClient(
           Attendance operations
         </Link>
         <Link
-          href="/scanner"
-        >
-          Attendance terminal
-        </Link>
-        <Link
           href="/security/passkeys"
         >
           Account security
@@ -2189,17 +2304,43 @@ export default function TechnicianClient(
                     styles.small
                   }
                 >
-                  Transfer this directly to {oneTimeCredential.terminalName}. CASA will not be able to reconstruct it later. Do not put it in school spreadsheets, chat groups, URLs, or analytics.
+                  On {oneTimeCredential.terminalName}, open the CASA Scanner and choose Scan setup QR. CASA will not be able to reconstruct this credential later.
                 </p>
-                <div
-                  className={
-                    styles.credentialValue
-                  }
-                >
-                  {
-                    oneTimeCredential.token
-                  }
-                </div>
+                {terminalSetupQr ? (
+                  <img
+                    src={
+                      terminalSetupQr
+                    }
+                    alt="One-time CASA scanner setup QR"
+                    className="mx-auto my-4 h-auto w-full max-w-[280px] bg-white p-3"
+                  />
+                ) : (
+                  <p
+                    className={
+                      styles.small
+                    }
+                  >
+                    Preparing setup QR...
+                  </p>
+                )}
+                <details>
+                  <summary
+                    className={
+                      styles.small
+                    }
+                  >
+                    Manual credential fallback
+                  </summary>
+                  <div
+                    className={
+                      styles.credentialValue
+                    }
+                  >
+                    {
+                      oneTimeCredential.token
+                    }
+                  </div>
+                </details>
                 <div
                   className={
                     styles.actionRow

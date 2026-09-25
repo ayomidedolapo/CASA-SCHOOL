@@ -499,8 +499,33 @@ export default function TemplateDesigner({ schools, templates }: { schools: Arra
   }
 
   async function save() {
-    if (!schoolId || !front || !back) {
-      setError("Choose a school and upload both card sides.");
+    if (!schoolId) {
+      setError("Choose a school.");
+      return;
+    }
+
+    const currentSchoolTemplate =
+      templates.find(
+        (template) =>
+          template.school_id ===
+            schoolId &&
+          template.status !==
+            "RETIRED",
+      ) ??
+      null;
+
+    if (
+      !editingTemplateId &&
+      currentSchoolTemplate
+    ) {
+      setError(
+        "An ID card has already been created for this organization. Proceed to the card template below to edit the card template.",
+      );
+      return;
+    }
+
+    if (!front || !back) {
+      setError("Upload both card sides.");
       return;
     }
     const qr = fields.find((field): field is QrField => field.kind === "QR");
@@ -521,7 +546,7 @@ export default function TemplateDesigner({ schools, templates }: { schools: Arra
       const versionLabel = editingTemplateId && editingTemplateStatus === "ACTIVE" ? nextRevisionLabel(version) : version.trim();
       if (!versionLabel) throw new Error("Enter a template version.");
       const endpoint = updateDraft ? `/api/internal/operations/templates/${encodeURIComponent(editingTemplateId!)}` : "/api/internal/operations/templates";
-      const response = await fetch(endpoint, { method: updateDraft ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ schoolId, versionLabel, frontSourceKey, backSourceKey, layout, activate: true }) });
+      const response = await fetch(endpoint, { method: updateDraft ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ schoolId, versionLabel, frontSourceKey, backSourceKey, layout, activate: true, supersedesTemplateId: editingTemplateId && editingTemplateStatus === "ACTIVE" ? editingTemplateId : null }) });
       const body = await response.json().catch(() => ({})) as {
         message?: string;
         template?: {

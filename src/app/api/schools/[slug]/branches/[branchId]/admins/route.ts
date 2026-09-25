@@ -33,6 +33,9 @@ import {
   schoolOperationsErrorResponse,
   schoolOperationsNoStoreHeaders,
 } from "@/server/school-operations/http";
+import {
+  sendAccountAccessEmail,
+} from "@/server/messaging/account-access-email";
 
 export const dynamic = "force-dynamic";
 
@@ -515,8 +518,44 @@ export async function POST(
         request.url,
       ).origin;
 
+    const setup =
+      rawToken
+        ? {
+            url:
+              `${origin}/account/setup?token=${encodeURIComponent(
+                rawToken,
+              )}`,
+            expiresAt,
+          }
+        : null;
+    const emailDelivery =
+      await sendAccountAccessEmail({
+        email:
+          identity.value,
+        recipientName:
+          user?.full_name ??
+          body.data.fullName,
+        organizationName:
+          access.school.name,
+        actionLabel:
+          setup
+            ? "Set up Branch Admin access"
+            : "Sign in to CASA",
+        actionUrl:
+          setup?.url ??
+          `${origin}/login?school=${encodeURIComponent(
+            slug,
+          )}`,
+        expiresAt:
+          setup?.expiresAt ??
+          null,
+        context:
+          `${access.school.name} granted you Branch Admin access for ${branch.name}.`,
+      });
+
     return NextResponse.json(
       {
+        emailDelivery,
         assignment: {
           membershipId,
           branchId,
@@ -530,16 +569,7 @@ export async function POST(
             identity.value,
           existingIdentity:
             Boolean(user),
-          setup:
-            rawToken
-              ? {
-                  url:
-                    `${origin}/account/setup?token=${encodeURIComponent(
-                      rawToken,
-                    )}`,
-                  expiresAt,
-                }
-              : null,
+          setup,
         },
       },
       {

@@ -63,6 +63,11 @@ const schema =
     activate:
       z.boolean()
         .default(false),
+    supersedesTemplateId:
+      z.string()
+        .uuid()
+        .optional()
+        .nullable(),
   });
 
 function rowsOf<T>(
@@ -190,6 +195,70 @@ export async function POST(
 
     const data =
       parsed.data;
+    const db =
+      getDb();
+    const currentTemplate =
+      rowsOf<{
+        id: string;
+      }>(
+        await db.execute(sql`
+          select id
+          from student_card_templates
+          where
+            school_id =
+              ${data.schoolId}::uuid
+            and status::text in (
+              'ACTIVE',
+              'DRAFT'
+            )
+          order by
+            case
+              when status::text = 'ACTIVE' then 0
+              else 1
+            end,
+            created_at desc
+          limit 1
+        `),
+      )[0];
+
+    if (
+      currentTemplate &&
+      currentTemplate.id !==
+        data.supersedesTemplateId
+    ) {
+      return NextResponse.json(
+        {
+          message:
+            "An ID card has already been created for this organization. Proceed to the card template below to edit the card template.",
+          existingTemplateId:
+            currentTemplate.id,
+        },
+        {
+          status:
+            409,
+          headers:
+            casaInternalNoStoreHeaders,
+        },
+      );
+    }
+
+    if (
+      !currentTemplate &&
+      data.supersedesTemplateId
+    ) {
+      return NextResponse.json(
+        {
+          message:
+            "The card template being edited is no longer the current organization template. Reload Card Templates and try again.",
+        },
+        {
+          status:
+            409,
+          headers:
+            casaInternalNoStoreHeaders,
+        },
+      );
+    }
 
     if (
       [
@@ -246,8 +315,6 @@ export async function POST(
       );
     }
 
-    const db =
-      getDb();
     const duplicate =
       rowsOf<{
         id: string;

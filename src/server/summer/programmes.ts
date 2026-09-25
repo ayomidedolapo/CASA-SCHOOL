@@ -1,7 +1,12 @@
 import { sql } from "drizzle-orm";
 import { getDb } from "@/db";
-import type { SchoolAccess } from "@/server/auth/authorization";
-import { requireBranchAccess } from "@/server/school-operations/operations";
+import {
+  SchoolAccessDeniedError,
+  type SchoolAccess,
+} from "@/server/auth/authorization";
+import {
+  listVisibleBranches,
+} from "@/server/school-operations/operations";
 
 export type SummerAttendanceStatus = "PRESENT" | "LATE" | "ABSENT";
 
@@ -15,8 +20,51 @@ export class SummerProgrammeError extends Error {
   constructor(message:string, public readonly status:number, public readonly code:string){ super(message); this.name="SummerProgrammeError"; }
 }
 
-export async function requireSummerBranchAccess(slug:string, branchId:string){
-  return requireBranchAccess(slug, branchId);
+export async function requireSummerBranchAccess(
+  slug: string,
+  branchId: string,
+) {
+  const visibility =
+    await listVisibleBranches(
+      slug,
+    );
+  const access =
+    visibility.access;
+
+  if (
+    !access.roles.some(
+      (role) =>
+        role === "OWNER" ||
+        role === "ADMIN" ||
+        role === "SCHOOL_TECHNICIAN",
+    )
+  ) {
+    throw new SchoolAccessDeniedError();
+  }
+
+  const branch =
+    (
+      visibility.branches as
+        Array<{
+          id: string;
+          name: string;
+        }>
+    ).find(
+      (candidate) =>
+        candidate.id ===
+        branchId,
+    );
+
+  if (!branch) {
+    throw new SchoolAccessDeniedError();
+  }
+
+  return {
+    access,
+    branch,
+    organizationAdmin:
+      visibility.organizationAdmin,
+  };
 }
 
 export async function listSummerProgrammes(access:SchoolAccess, branchId:string){

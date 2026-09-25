@@ -1,7 +1,7 @@
 "use client";
 
 import {
-  FormEvent,
+  type FormEvent,
   useCallback,
   useEffect,
   useMemo,
@@ -20,8 +20,7 @@ type Programme = {
   starts_on: string;
   ends_on: string;
   status: string;
-  participant_count: number;
-  teacher_count: number;
+  participant_count?: number;
 };
 
 type StudentOption = {
@@ -31,446 +30,880 @@ type StudentOption = {
   full_name: string;
 };
 
-type Participant = {
+type RosterRow = {
   participant_id: string;
+  student_id: string | null;
   full_name: string;
   is_guest: boolean;
-  attendance_status: string | null;
   guest_guardian_name: string | null;
+  attendance_status:
+    | "PRESENT"
+    | "LATE"
+    | "ABSENT"
+    | null;
+  checked_in_at: string | null;
+  checked_out_at: string | null;
 };
 
-const days = [
-  { v: 1, l: "Mon" },
-  { v: 2, l: "Tue" },
-  { v: 3, l: "Wed" },
-  { v: 4, l: "Thu" },
-  { v: 5, l: "Fri" },
-  { v: 6, l: "Sat" },
-  { v: 0, l: "Sun" },
-];
+export default function SummerClient(
+  {
+    slug,
+    branches,
+  }: {
+    slug: string;
+    branches: Branch[];
+  },
+) {
+  const [
+    branchId,
+    setBranchId,
+  ] =
+    useState(
+      branches[0]?.id ??
+        "",
+    );
+  const [
+    programmes,
+    setProgrammes,
+  ] =
+    useState<Programme[]>(
+      [],
+    );
+  const [
+    programmeId,
+    setProgrammeId,
+  ] =
+    useState("");
+  const [
+    roster,
+    setRoster,
+  ] =
+    useState<RosterRow[]>(
+      [],
+    );
+  const [
+    studentOptions,
+    setStudentOptions,
+  ] =
+    useState<StudentOption[]>(
+      [],
+    );
+  const [
+    selectedStudentId,
+    setSelectedStudentId,
+  ] =
+    useState("");
+  const [
+    busy,
+    setBusy,
+  ] =
+    useState(false);
+  const [
+    notice,
+    setNotice,
+  ] =
+    useState("");
+  const [
+    error,
+    setError,
+  ] =
+    useState("");
 
-export default function SummerClient({
-  slug,
-  branches,
-}: {
-  slug: string;
-  branches: Branch[];
-}) {
-  const [branchId, setBranchId] = useState(branches[0]?.id ?? "");
-  const [programmes, setProgrammes] = useState<Programme[]>([]);
-  const [programmeId, setProgrammeId] = useState("");
-  const [roster, setRoster] = useState<Participant[]>([]);
-  const [studentOptions, setStudentOptions] = useState<StudentOption[]>([]);
-  const [studentId, setStudentId] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
-  const endpoint = `/api/schools/${encodeURIComponent(slug)}/summer`;
+  const base =
+    `/api/schools/${encodeURIComponent(
+      slug,
+    )}/summer`;
 
-  const fetchSummer = useCallback(async () => {
-    if (!branchId) {
-      return {
-        programmes: [] as Programme[],
-        roster: [] as Participant[],
-        studentOptions: [] as StudentOption[],
-      };
-    }
-
-    const query = new URLSearchParams({ branchId });
-    if (programmeId) {
-      query.set("programmeId", programmeId);
-    }
-
-    const response = await fetch(`${endpoint}?${query}`, {
-      cache: "no-store",
-    });
-    const body = await response.json();
-    if (!response.ok) {
-      throw new Error(body.message ?? "Summer could not be loaded.");
-    }
-
-    return {
-      programmes: (body.programmes ?? []) as Programme[],
-      roster: (body.roster ?? []) as Participant[],
-      studentOptions: (body.studentOptions ?? []) as StudentOption[],
-    };
-  }, [branchId, endpoint, programmeId]);
-
-  const load = useCallback(async () => {
-    const next = await fetchSummer();
-    setProgrammes(next.programmes);
-    setRoster(next.roster);
-    setStudentOptions(next.studentOptions);
-  }, [fetchSummer]);
-
-  useEffect(() => {
-    let active = true;
-    void fetchSummer()
-      .then((next) => {
-        if (!active) {
+  const load =
+    useCallback(
+      async (
+        targetProgrammeId =
+          programmeId,
+      ) => {
+        if (
+          !branchId
+        ) {
+          setProgrammes([]);
+          setRoster([]);
+          setStudentOptions([]);
           return;
         }
-        setProgrammes(next.programmes);
-        setRoster(next.roster);
-        setStudentOptions(next.studentOptions);
-      })
-      .catch((cause) => {
-        if (active) {
-          setError(
-            cause instanceof Error ? cause.message : "Summer could not be loaded.",
+
+        const params =
+          new URLSearchParams({
+            branchId,
+          });
+
+        if (
+          targetProgrammeId
+        ) {
+          params.set(
+            "programmeId",
+            targetProgrammeId,
           );
         }
-      });
 
-    return () => {
-      active = false;
-    };
-  }, [fetchSummer]);
+        const response =
+          await fetch(
+            `${base}?${params.toString()}`,
+            {
+              cache:
+                "no-store",
+              credentials:
+                "same-origin",
+            },
+          );
+        const body =
+          await response.json()
+            .catch(
+              () =>
+                ({}),
+            ) as {
+              message?: string;
+              programmes?: Programme[];
+              roster?: RosterRow[];
+              studentOptions?: StudentOption[];
+            };
 
-  async function post(body: unknown) {
+        if (
+          !response.ok
+        ) {
+          throw new Error(
+            body.message ??
+              "Summer programme could not be loaded.",
+          );
+        }
+
+        const nextProgrammes =
+          body.programmes ??
+          [];
+        setProgrammes(
+          nextProgrammes,
+        );
+        setStudentOptions(
+          body.studentOptions ??
+            [],
+        );
+
+        const nextProgrammeId =
+          targetProgrammeId &&
+          nextProgrammes.some(
+            (
+              programme,
+            ) =>
+              programme.id ===
+              targetProgrammeId,
+          )
+            ? targetProgrammeId
+            : nextProgrammes[0]
+                ?.id ??
+              "";
+
+        if (
+          nextProgrammeId !==
+            programmeId
+        ) {
+          setProgrammeId(
+            nextProgrammeId,
+          );
+        }
+
+        if (
+          nextProgrammeId ===
+            targetProgrammeId
+        ) {
+          setRoster(
+            body.roster ??
+              [],
+          );
+        } else if (
+          nextProgrammeId
+        ) {
+          const nextParams =
+            new URLSearchParams({
+              branchId,
+              programmeId:
+                nextProgrammeId,
+            });
+          const nextResponse =
+            await fetch(
+              `${base}?${nextParams.toString()}`,
+              {
+                cache:
+                  "no-store",
+                credentials:
+                  "same-origin",
+              },
+            );
+          const nextBody =
+            await nextResponse.json()
+              .catch(
+                () =>
+                  ({}),
+              ) as {
+                roster?: RosterRow[];
+              };
+          setRoster(
+            nextBody.roster ??
+              [],
+          );
+        } else {
+          setRoster([]);
+        }
+      },
+      [
+        base,
+        branchId,
+        programmeId,
+      ],
+    );
+
+  useEffect(
+    () => {
+      const timer =
+        window.setTimeout(
+          () => {
+            void load()
+              .catch(
+                (
+                  caught,
+                ) =>
+                  setError(
+                    caught instanceof
+                      Error
+                      ? caught.message
+                      : "Summer programme could not be loaded.",
+                  ),
+              );
+          },
+          0,
+        );
+
+      return () => {
+        window.clearTimeout(
+          timer,
+        );
+      };
+    },
+    [
+      branchId,
+      load,
+    ],
+  );
+
+  const selectedProgramme =
+    useMemo(
+      () =>
+        programmes.find(
+          (
+            programme,
+          ) =>
+            programme.id ===
+            programmeId,
+        ) ??
+        null,
+      [
+        programmes,
+        programmeId,
+      ],
+    );
+
+  async function action(
+    payload:
+      Record<
+        string,
+        unknown
+      >,
+    success:
+      string,
+  ) {
     setBusy(true);
     setError("");
-    setMessage("");
+    setNotice("");
+
     try {
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const responseBody = await response.json();
-      if (!response.ok) {
-        throw new Error(responseBody.message ?? "Summer action failed.");
+      const response =
+        await fetch(
+          base,
+          {
+            method:
+              "POST",
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+            credentials:
+              "same-origin",
+            body:
+              JSON.stringify({
+                branchId,
+                ...payload,
+              }),
+          },
+        );
+      const body =
+        await response.json()
+          .catch(
+            () =>
+              ({}),
+          ) as {
+            message?: string;
+            result?: {
+              id?: string;
+            };
+          };
+
+      if (
+        !response.ok
+      ) {
+        throw new Error(
+          body.message ??
+            "Summer action failed.",
+        );
       }
-      setMessage("Saved.");
-      await load();
-    } catch (cause) {
+
+      setNotice(
+        success,
+      );
+      await load(
+        String(
+          payload.programmeId ??
+            body.result?.id ??
+            programmeId,
+        ),
+      );
+    } catch (
+      caught
+    ) {
       setError(
-        cause instanceof Error ? cause.message : "Summer action failed.",
+        caught instanceof
+          Error
+          ? caught.message
+          : "Summer action failed.",
       );
     } finally {
       setBusy(false);
     }
   }
 
-  async function create(event: FormEvent<HTMLFormElement>) {
+  async function createProgramme(
+    event:
+      FormEvent<HTMLFormElement>,
+  ) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const operatingDays = days
-      .filter((day) => form.get(`day-${day.v}`) === "on")
-      .map((day) => day.v);
+    const form =
+      new FormData(
+        event.currentTarget,
+      );
 
-    await post({
-      action: "CREATE_PROGRAMME",
-      branchId,
-      name: form.get("name"),
-      startsOn: form.get("startsOn"),
-      endsOn: form.get("endsOn"),
-      operatingDays,
-      checkInOpens: form.get("checkInOpens"),
-      expectedArrival: form.get("expectedArrival"),
-      checkInCloses: form.get("checkInCloses"),
-      dismissalTime: form.get("dismissalTime"),
-      checkoutCloses: form.get("checkoutCloses"),
-    });
+    await action(
+      {
+        action:
+          "CREATE_PROGRAMME",
+        name:
+          form.get(
+            "name",
+          ),
+        startsOn:
+          form.get(
+            "startsOn",
+          ),
+        endsOn:
+          form.get(
+            "endsOn",
+          ),
+        operatingDays:
+          [
+            1,
+            2,
+            3,
+            4,
+            5,
+          ],
+        checkInOpens:
+          form.get(
+            "checkInOpens",
+          ),
+        expectedArrival:
+          form.get(
+            "expectedArrival",
+          ),
+        checkInCloses:
+          form.get(
+            "checkInCloses",
+          ),
+        dismissalTime:
+          form.get(
+            "dismissalTime",
+          ),
+        checkoutCloses:
+          form.get(
+            "checkoutCloses",
+          ),
+      },
+      "Summer programme created.",
+    );
   }
-
-  async function addGuest(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!selected) return;
-    const form = new FormData(event.currentTarget);
-    await post({
-      action: "ADD_GUEST",
-      branchId,
-      programmeId: selected.id,
-      fullName: form.get("guestFullName"),
-      sex: String(form.get("guestSex") ?? "").trim() || null,
-      guardianName: form.get("guardianName"),
-      guardianPhone: String(form.get("guardianPhone") ?? "").trim() || null,
-      guardianEmail: String(form.get("guardianEmail") ?? "").trim() || null,
-      notificationsEnabled: form.get("notificationsEnabled") === "on",
-    });
-    event.currentTarget.reset();
-  }
-
-  const selected = useMemo(
-    () => programmes.find((programme) => programme.id === programmeId) ?? null,
-    [programmes, programmeId],
-  );
 
   return (
     <div className="mx-auto max-w-[1500px] px-5 py-7 sm:px-8">
-      {error && (
-        <div className="mb-4 border border-red-800 bg-red-50 p-3 text-sm text-red-800">
+      {notice ? (
+        <div className="mb-5 border border-black bg-[#e8f2ec] p-4 text-sm">
+          {notice}
+        </div>
+      ) : null}
+      {error ? (
+        <div className="mb-5 border border-[#8b221d] bg-[#f6e8e6] p-4 text-sm text-[#7e1d18]">
           {error}
         </div>
-      )}
-      {message && (
-        <div className="mb-4 border border-black bg-white p-3 text-sm">
-          {message}
-        </div>
-      )}
+      ) : null}
 
-      <section className="mb-6 border border-black bg-white p-5 sm:p-6">
-        <p className="casa-kicker text-black/40">
-          How Summer registration works
-        </p>
-        <div className="mt-4 grid gap-4 md:grid-cols-3">
-          <div>
-            <strong className="text-sm">1 Â· Create the programme</strong>
-            <p className="mt-1 text-xs leading-5 text-black/50">
-              Choose the campus, Summer dates, operating days and attendance times.
-            </p>
-          </div>
-          <div>
-            <strong className="text-sm">2 Â· Register participants</strong>
-            <p className="mt-1 text-xs leading-5 text-black/50">
-              Add existing CASA students or Summer-only guests. Summer registration does not change a normal class enrollment or issue a new ID card.
-            </p>
-          </div>
-          <div>
-            <strong className="text-sm">3 Â· Run Summer attendance</strong>
-            <p className="mt-1 text-xs leading-5 text-black/50">
-              Authorized campus staff mark attendance for the selected programme. Card scanning remains optional.
-            </p>
-          </div>
-        </div>
-      </section>
+      <section className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
+        <aside className="border border-black bg-white p-5">
+          <p className="casa-kicker text-black/45">
+            Summer operations
+          </p>
+          <p className="mt-2 text-xs leading-5 text-black/50">
+            Admins and School Technicians register the Summer roster and attendance. Teachers do not need a special Summer assignment.
+          </p>
 
-      <div className="grid gap-6 xl:grid-cols-[420px_1fr]">
-        <aside className="space-y-5">
-          <section className="border border-black bg-white p-5">
-            <p className="casa-kicker text-black/40">Campus</p>
+          <label className="casa-label mt-5">
+            <span>Campus</span>
             <select
-              className="casa-field mt-3"
-              value={branchId}
-              onChange={(event) => {
-                setBranchId(event.target.value);
-                setProgrammeId("");
-              }}
+              className="casa-field"
+              value={
+                branchId
+              }
+              onChange={
+                (
+                  event,
+                ) => {
+                  setBranchId(
+                    event.target.value,
+                  );
+                  setProgrammeId(
+                    "",
+                  );
+                }
+              }
             >
-              {branches.map((branch) => (
-                <option key={branch.id} value={branch.id}>
-                  {branch.name}
-                  {branch.isHeadquarters ? " · HQ" : ""}
-                </option>
-              ))}
+              {branches.map(
+                (
+                  branch,
+                ) => (
+                  <option
+                    key={
+                      branch.id
+                    }
+                    value={
+                      branch.id
+                    }
+                  >
+                    {branch.name}
+                  </option>
+                ),
+              )}
             </select>
-            <p className="mt-3 text-xs text-black/50">
-              No terminal is required. This workspace is scoped to the campus
-              you can operate.
-            </p>
-          </section>
+          </label>
+
+          <label className="casa-label mt-4">
+            <span>Summer programme</span>
+            <select
+              className="casa-field"
+              value={
+                programmeId
+              }
+              onChange={
+                (
+                  event,
+                ) => {
+                  const value =
+                    event.target.value;
+                  setProgrammeId(
+                    value,
+                  );
+                  void load(
+                    value,
+                  );
+                }
+              }
+            >
+              <option value="">
+                Select programme
+              </option>
+              {programmes.map(
+                (
+                  programme,
+                ) => (
+                  <option
+                    key={
+                      programme.id
+                    }
+                    value={
+                      programme.id
+                    }
+                  >
+                    {programme.name}
+                  </option>
+                ),
+              )}
+            </select>
+          </label>
 
           <form
-            onSubmit={create}
-            className="border border-black bg-white p-5"
+            className="mt-7 border-t border-black pt-5"
+            onSubmit={
+              createProgramme
+            }
           >
-            <p className="casa-kicker text-black/40">New Summer programme</p>
-            <h2 className="mt-2 text-xl font-semibold">
-              Set dates and attendance times
-            </h2>
-            <div className="mt-4 grid gap-3">
+            <p className="font-semibold">
+              Create Summer programme
+            </p>
+            <label className="casa-label mt-4">
+              <span>Name</span>
               <input
                 className="casa-field"
                 name="name"
-                placeholder="2026 Summer Lessons"
                 required
+                placeholder="2026 Summer School"
               />
-              <div className="grid grid-cols-2 gap-3">
-                <label className="casa-label">
-                  <span>Starts</span>
-                  <input
-                    className="casa-field"
-                    type="date"
-                    name="startsOn"
-                    required
-                  />
-                </label>
-                <label className="casa-label">
-                  <span>Ends</span>
-                  <input
-                    className="casa-field"
-                    type="date"
-                    name="endsOn"
-                    required
-                  />
-                </label>
-              </div>
-
-              <div>
-                <span className="casa-label">Operating days</span>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {days.map((day) => (
-                    <label
-                      key={day.v}
-                      className="border border-black/20 px-2 py-1 text-xs"
-                    >
-                      <input
-                        className="mr-1"
-                        type="checkbox"
-                        name={`day-${day.v}`}
-                        defaultChecked={day.v >= 1 && day.v <= 5}
-                      />
-                      {day.l}
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              {[
-                ["checkInOpens", "Check-in opens"],
-                ["expectedArrival", "Expected arrival"],
-                ["checkInCloses", "Check-in closes"],
-                ["dismissalTime", "Dismissal"],
-                ["checkoutCloses", "Checkout closes"],
-              ].map(([name, label]) => (
-                <label key={name} className="casa-label">
-                  <span>{label}</span>
-                  <input
-                    className="casa-field"
-                    type="time"
-                    name={name}
-                    required
-                  />
-                </label>
-              ))}
+            </label>
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <label className="casa-label">
+                <span>Starts</span>
+                <input
+                  className="casa-field"
+                  type="date"
+                  name="startsOn"
+                  required
+                />
+              </label>
+              <label className="casa-label">
+                <span>Ends</span>
+                <input
+                  className="casa-field"
+                  type="date"
+                  name="endsOn"
+                  required
+                />
+              </label>
             </div>
-
+            {[
+              [
+                "checkInOpens",
+                "Check-in opens",
+                "08:00",
+              ],
+              [
+                "expectedArrival",
+                "Expected arrival",
+                "09:00",
+              ],
+              [
+                "checkInCloses",
+                "Check-in closes",
+                "10:00",
+              ],
+              [
+                "dismissalTime",
+                "Dismissal",
+                "14:00",
+              ],
+              [
+                "checkoutCloses",
+                "Checkout closes",
+                "16:00",
+              ],
+            ].map(
+              (
+                [
+                  name,
+                  label,
+                  value,
+                ],
+              ) => (
+                <label
+                  key={
+                    name
+                  }
+                  className="casa-label mt-3"
+                >
+                  <span>
+                    {label}
+                  </span>
+                  <input
+                    className="casa-field"
+                    name={
+                      name
+                    }
+                    type="time"
+                    defaultValue={
+                      value
+                    }
+                    required
+                  />
+                </label>
+              ),
+            )}
             <button
-              disabled={busy}
-              className="casa-button-primary mt-4"
+              className="casa-button mt-5 w-full"
+              disabled={
+                busy ||
+                !branchId
+              }
             >
-              Create Summer programme
+              Create programme
             </button>
           </form>
         </aside>
 
-        <section className="border border-black bg-white">
-          <div className="border-b border-black p-5">
-            <p className="casa-kicker text-black/40">Programmes</p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {programmes.map((programme) => (
-                <button
-                  key={programme.id}
-                  type="button"
-                  onClick={() => setProgrammeId(programme.id)}
-                  className={`border px-3 py-2 text-sm ${
-                    programmeId === programme.id
-                      ? "border-black bg-black text-white"
-                      : "border-black/20"
-                  }`}
-                >
-                  {programme.name} · {programme.participant_count} participants
-                </button>
-              ))}
-            </div>
-          </div>
+        <div className="space-y-6">
+          <section className="border border-black bg-white p-5">
+            <p className="casa-kicker text-black/45">
+              Summer roster
+            </p>
+            <h2 className="mt-2 text-2xl font-semibold">
+              {selectedProgramme
+                ?.name ??
+                "Select a programme"}
+            </h2>
 
-          {selected ? (
-            <>
-              <div className="border-b border-black/15 p-5">
-                <h2 className="text-2xl font-semibold">{selected.name}</h2>
-                <p className="mt-1 text-sm text-black/50">
-                  {selected.starts_on} → {selected.ends_on} · {selected.status}
-                </p>
-                <p className="mt-2 text-xs text-black/50">
-                  Teachers or authorized campus staff mark attendance here.
-                  Terminal/card scanning is optional, never required.
-                </p>
-              </div>
-
-              <div className="grid gap-4 border-b border-black/15 p-5 lg:grid-cols-2">
-                <div className="border border-black/15 p-4">
-                  <p className="casa-kicker text-black/40">Register school student</p>
+            {programmeId ? (
+              <div className="mt-5 grid gap-5 lg:grid-cols-2">
+                <div>
+                  <p className="font-semibold">
+                    Add enrolled student
+                  </p>
                   <div className="mt-3 flex gap-2">
-                    <select className="casa-field" value={studentId} onChange={(event) => setStudentId(event.target.value)}>
-                      <option value="">Choose student</option>
-                      {studentOptions.map((student) => (
-                        <option key={student.id} value={student.id}>
-                          {student.full_name} · {student.casa_student_id}
-                        </option>
-                      ))}
+                    <select
+                      className="casa-field"
+                      value={
+                        selectedStudentId
+                      }
+                      onChange={
+                        (
+                          event,
+                        ) =>
+                          setSelectedStudentId(
+                            event.target.value,
+                          )
+                      }
+                    >
+                      <option value="">
+                        Select student
+                      </option>
+                      {studentOptions.map(
+                        (
+                          student,
+                        ) => (
+                          <option
+                            key={
+                              student.id
+                            }
+                            value={
+                              student.id
+                            }
+                          >
+                            {student.full_name} · {student.casa_student_id}
+                          </option>
+                        ),
+                      )}
                     </select>
-                    <button type="button" disabled={busy || !studentId} className="casa-button-primary shrink-0" onClick={() => void post({ action: "ADD_STUDENT", branchId, programmeId: selected.id, studentId })}>
+                    <button
+                      type="button"
+                      className="casa-button"
+                      disabled={
+                        busy ||
+                        !selectedStudentId
+                      }
+                      onClick={() =>
+                        void action(
+                          {
+                            action:
+                              "ADD_STUDENT",
+                            programmeId,
+                            studentId:
+                              selectedStudentId,
+                          },
+                          "Student added to Summer.",
+                        )
+                      }
+                    >
                       Add
                     </button>
                   </div>
-                  <p className="mt-2 text-xs leading-5 text-black/45">Only active students currently enrolled in this campus are listed. Adding them here registers them for this Summer programme only; their normal class/session enrollment and permanent ID card are unchanged.</p>
                 </div>
 
-                <form onSubmit={addGuest} className="border border-black/15 p-4">
-                  <p className="casa-kicker text-black/40">Register Summer-only guest</p>
-                  <p className="mt-2 text-xs leading-5 text-black/45">
-                    Use this for a child attending Summer who is not in the school registry. This does not create a normal academic enrollment or ID card.
+                <form
+                  onSubmit={
+                    (
+                      event,
+                    ) => {
+                      event.preventDefault();
+                      const form =
+                        new FormData(
+                          event.currentTarget,
+                        );
+                      void action(
+                        {
+                          action:
+                            "ADD_GUEST",
+                          programmeId,
+                          fullName:
+                            form.get(
+                              "fullName",
+                            ),
+                          sex:
+                            form.get(
+                              "sex",
+                            ) ||
+                            null,
+                          guardianName:
+                            form.get(
+                              "guardianName",
+                            ),
+                          guardianPhone:
+                            form.get(
+                              "guardianPhone",
+                            ) ||
+                            null,
+                          guardianEmail:
+                            form.get(
+                              "guardianEmail",
+                            ) ||
+                            null,
+                          notificationsEnabled:
+                            true,
+                        },
+                        "Guest student registered for Summer.",
+                      );
+                    }
+                  }
+                >
+                  <p className="font-semibold">
+                    Register guest student
                   </p>
-                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                    <input className="casa-field sm:col-span-2" name="guestFullName" placeholder="Student full name" required />
-                    <select className="casa-field" name="guestSex" defaultValue=""><option value="">Sex (optional)</option><option value="F">Female</option><option value="M">Male</option></select>
-                    <input className="casa-field" name="guardianName" placeholder="Guardian name" required />
-                    <input className="casa-field" name="guardianPhone" placeholder="Guardian phone" />
-                    <input className="casa-field" name="guardianEmail" type="email" placeholder="Guardian email" />
-                  </div>
-                  <label className="mt-3 flex items-center gap-2 text-xs"><input type="checkbox" name="notificationsEnabled" defaultChecked /> Guardian notifications enabled</label>
-                  <button disabled={busy} className="casa-button-primary mt-3">Add guest</button>
+                  <label className="casa-label mt-3">
+                    <span>Student name</span>
+                    <input className="casa-field" name="fullName" required />
+                  </label>
+                  <label className="casa-label mt-3">
+                    <span>Sex / optional</span>
+                    <input className="casa-field" name="sex" />
+                  </label>
+                  <label className="casa-label mt-3">
+                    <span>Guardian name</span>
+                    <input className="casa-field" name="guardianName" required />
+                  </label>
+                  <label className="casa-label mt-3">
+                    <span>Guardian phone / optional</span>
+                    <input className="casa-field" name="guardianPhone" />
+                  </label>
+                  <label className="casa-label mt-3">
+                    <span>Guardian email / optional</span>
+                    <input className="casa-field" type="email" name="guardianEmail" />
+                  </label>
+                  <button className="casa-button mt-4" disabled={busy}>
+                    Register guest
+                  </button>
                 </form>
               </div>
+            ) : (
+              <p className="mt-4 text-sm text-black/45">
+                Choose or create a Summer programme first.
+              </p>
+            )}
+          </section>
 
+          <section className="border border-black bg-white">
+            <div className="border-b border-black p-5">
+              <p className="casa-kicker text-black/45">
+                Today
+              </p>
+              <h2 className="mt-2 text-2xl font-semibold">
+                Summer attendance
+              </h2>
+            </div>
+            {roster.length ===
+            0 ? (
+              <p className="p-5 text-sm text-black/45">
+                No Summer participants yet.
+              </p>
+            ) : (
               <div className="divide-y divide-black/15">
-                {roster.length === 0 ? (
-                  <p className="p-6 text-sm text-black/45">
-                    No Summer participants yet. Add an existing campus student or register a guest above.
-                  </p>
-                ) : (
-                  roster.map((participant) => (
-                    <div
-                      key={participant.participant_id}
-                      className="grid gap-3 p-4 sm:grid-cols-[1fr_auto]"
+                {roster.map(
+                  (
+                    participant,
+                  ) => (
+                    <article
+                      key={
+                        participant.participant_id
+                      }
+                      className="grid gap-3 p-5 md:grid-cols-[1fr_auto] md:items-center"
                     >
                       <div>
                         <p className="font-semibold">
                           {participant.full_name}
-                          {participant.is_guest ? " · Guest" : ""}
                         </p>
-                        <p className="text-xs text-black/45">
-                          {participant.attendance_status ?? "Not marked"}
+                        <p className="mt-1 text-xs text-black/45">
+                          {participant.is_guest
+                            ? "Guest student"
+                            : "Enrolled CASA student"}
+                          {" · "}
+                          {participant.attendance_status ??
+                            "Not marked"}
                         </p>
                       </div>
-
-                      <div className="flex gap-2">
-                        {(["PRESENT", "LATE", "ABSENT"] as const).map(
-                          (status) => (
+                      <div className="flex flex-wrap gap-2">
+                        {(
+                          [
+                            "PRESENT",
+                            "LATE",
+                            "ABSENT",
+                          ] as const
+                        ).map(
+                          (
+                            status,
+                          ) => (
                             <button
-                              disabled={busy}
-                              key={status}
-                              onClick={() =>
-                                void post({
-                                  action: "MARK_ATTENDANCE",
-                                  branchId,
-                                  programmeId: selected.id,
-                                  participantId: participant.participant_id,
-                                  status,
-                                  note: null,
-                                })
+                              key={
+                                status
                               }
-                              className="border border-black px-3 py-2 text-xs"
+                              type="button"
+                              className="casa-button"
+                              disabled={
+                                busy ||
+                                !programmeId
+                              }
+                              onClick={() =>
+                                void action(
+                                  {
+                                    action:
+                                      "MARK_ATTENDANCE",
+                                    programmeId,
+                                    participantId:
+                                      participant.participant_id,
+                                    status,
+                                    note:
+                                      null,
+                                  },
+                                  `${participant.full_name} marked ${status.toLowerCase()}.`,
+                                )
+                              }
                             >
-                              {status[0] + status.slice(1).toLowerCase()}
+                              {status}
                             </button>
                           ),
                         )}
                       </div>
-                    </div>
-                  ))
+                    </article>
+                  ),
                 )}
               </div>
-            </>
-          ) : (
-            <p className="p-8 text-sm text-black/45">
-              Create or select a Summer programme.
-            </p>
-          )}
-        </section>
-      </div>
+            )}
+          </section>
+        </div>
+      </section>
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import {
+  createHash,
   randomBytes,
   randomUUID,
 } from "node:crypto";
@@ -12,6 +13,7 @@ import {
   eq,
   inArray,
   isNull,
+  sql,
 } from "drizzle-orm";
 import {
   z,
@@ -35,6 +37,9 @@ import {
 import {
   hashPassword,
 } from "@/server/auth/password";
+import {
+  sendAccountAccessEmail,
+} from "@/server/messaging/account-access-email";
 
 export const dynamic =
   "force-dynamic";
@@ -71,6 +76,131 @@ const createSchema =
         "SCHOOL_TECHNICIAN",
       ]),
   });
+
+async function deliverSchoolStaffAccess(
+  input: {
+    db:
+      ReturnType<
+        typeof getDb
+      >;
+    request:
+      NextRequest;
+    userId:
+      string;
+    fullName:
+      string;
+    email:
+      string;
+    schoolName:
+      string;
+    needsSetup:
+      boolean;
+  },
+) {
+  const origin =
+    new URL(
+      input.request.url,
+    ).origin;
+  let setup:
+    {
+      url:
+        string;
+      expiresAt:
+        string;
+    } |
+    null =
+      null;
+
+  if (
+    input.needsSetup
+  ) {
+    const raw =
+      randomBytes(32)
+        .toString(
+          "base64url",
+        );
+    const hash =
+      createHash(
+        "sha256",
+      )
+        .update(
+          raw,
+        )
+        .digest(
+          "hex",
+        );
+    const expiresAt =
+      new Date(
+        Date.now() +
+          24 * 60 * 60 *
+            1000,
+      );
+
+    await input.db.execute(sql`
+      update casa_account_setup_tokens
+      set used_at = now()
+      where
+        user_id =
+          ${input.userId}::uuid
+        and used_at is null
+    `);
+
+    await input.db.execute(sql`
+      insert into casa_account_setup_tokens(
+        user_id,
+        token_hash,
+        purpose,
+        created_by_internal_membership_id,
+        expires_at
+      )
+      values(
+        ${input.userId}::uuid,
+        ${hash},
+        'SCHOOL_OWNER',
+        null,
+        ${expiresAt.toISOString()}::timestamptz
+      )
+    `);
+
+    setup = {
+      url:
+        `${origin}/account/setup?token=${encodeURIComponent(
+          raw,
+        )}`,
+      expiresAt:
+        expiresAt.toISOString(),
+    };
+  }
+
+  const emailDelivery =
+    await sendAccountAccessEmail({
+      email:
+        input.email,
+      recipientName:
+        input.fullName,
+      organizationName:
+        input.schoolName,
+      actionLabel:
+        setup
+          ? "Set up CASA access"
+          : "Sign in to CASA",
+      actionUrl:
+        setup?.url ??
+        `${origin}/login`,
+      expiresAt:
+        setup?.expiresAt ??
+        null,
+      context:
+        setup
+          ? `${input.schoolName} created CASA access for you. Use the private link below to choose your password.`
+          : `${input.schoolName} granted you CASA access. Sign in with your existing CASA credentials.`,
+    });
+
+  return {
+    setup,
+    emailDelivery,
+  };
+}
 
 function authErrorResponse(
   error:
@@ -620,20 +750,43 @@ export async function POST(
         await roleInsert;
       }
 
+      const delivery =
+        await deliverSchoolStaffAccess({
+          db,
+          request,
+          userId:
+            existingUser.id,
+          fullName:
+            existingUser.fullName,
+          email,
+          schoolName:
+            access.school.name,
+          needsSetup:
+            Boolean(
+              temporaryPassword,
+            ),
+        });
+
       return NextResponse.json(
         {
           created:
             true,
           reusedIdentity:
             true,
-          temporaryPassword,
+          temporaryPassword:
+            null,
           membershipId,
           userId:
             existingUser.id,
+          setup:
+            delivery.setup,
+          emailDelivery:
+            delivery.emailDelivery,
           message:
-            temporaryPassword
-              ? "Existing CASA identity linked. A temporary password was created because the identity had no usable CASA sign-in credential; it must be replaced after first sign-in."
-              : "Existing CASA identity linked. The staff member should sign in with their existing CASA password or Passkey.",
+            delivery.emailDelivery ===
+              "SENT"
+              ? "Staff access created. CASA emailed the required access link to the staff member."
+              : "Staff access created. Email delivery did not complete; use the returned private fallback link where setup is required.",
         },
         {
           status:
@@ -720,17 +873,39 @@ export async function POST(
           }),
     ]);
 
+    const delivery =
+      await deliverSchoolStaffAccess({
+        db,
+        request,
+        userId,
+        fullName:
+          body.data.fullName,
+        email,
+        schoolName:
+          access.school.name,
+        needsSetup:
+          true,
+      });
+
     return NextResponse.json(
       {
         created:
           true,
         reusedIdentity:
           false,
-        temporaryPassword,
+        temporaryPassword:
+          null,
         membershipId,
         userId,
+        setup:
+          delivery.setup,
+        emailDelivery:
+          delivery.emailDelivery,
         message:
-          "Staff account created. Give the temporary password directly to the staff member once; CASA will require them to replace it after first sign-in.",
+          delivery.emailDelivery ===
+            "SENT"
+            ? "Staff account created. CASA emailed the private setup link to the staff member."
+            : "Staff account created. Email delivery did not complete; use the returned private setup link as fallback.",
       },
       {
         status:

@@ -9,6 +9,7 @@ import { normalizeLoginIdentifier } from "@/server/auth/identifier";
 import { requireCasaSuperAdmin } from "@/server/internal/authorization";
 import { casaInternalAuthErrorResponse, casaInternalNoStoreHeaders } from "@/server/internal/http";
 import { writeCasaInternalAudit } from "@/server/internal/onboarding";
+import { sendAccountAccessEmail } from "@/server/messaging/account-access-email";
 export const dynamic="force-dynamic";
 const schema=z.object({fullName:z.string().trim().min(2).max(200),email:z.string().trim().email().max(320),role:z.enum(["CASA_SUPER_ADMIN","CASA_TEAM"])});
 function rowsOf<T>(r:unknown):T[]{if(Array.isArray(r))return r as T[];if(r&&typeof r==="object"&&"rows" in r&&Array.isArray((r as {rows?:unknown}).rows))return (r as {rows:T[]}).rows;return []}
@@ -45,6 +46,8 @@ export async function POST(request:NextRequest){
   await client.transaction(statements);
   await writeCasaInternalAudit({access,action:"INTERNAL_ACCOUNT_CREATED",subjectType:"CASA_INTERNAL_MEMBERSHIP",subjectId:membershipId,metadata:{userId,role:parsed.data.role,existingIdentity:Boolean(existing),setupRequired:needsSetup}});
   const origin=new URL(request.url).origin;
-  return NextResponse.json({membership:{id:membershipId,userId,role:parsed.data.role,status:"ACTIVE",fullName:existing?.full_name??parsed.data.fullName,email:identity.value},existingIdentity:Boolean(existing),setup:rawToken?{url:`${origin}/account/setup?token=${encodeURIComponent(rawToken)}`,expiresAt}:null},{status:201,headers:casaInternalNoStoreHeaders});
+  const setup=rawToken?{url:`${origin}/account/setup?token=${encodeURIComponent(rawToken)}`,expiresAt}:null;
+  const emailDelivery=await sendAccountAccessEmail({email:identity.value,recipientName:existing?.full_name??parsed.data.fullName,organizationName:"CASA",actionLabel:setup?"Set up CASA Team access":"Sign in to CASA Platform Control",actionUrl:setup?.url??`${origin}/internal/login`,expiresAt:setup?.expiresAt??null,context:setup?"CASA created an internal Platform Control account for you. Use the private link below to choose your password.":"Your existing CASA identity has been granted Platform Control access."});
+  return NextResponse.json({membership:{id:membershipId,userId,role:parsed.data.role,status:"ACTIVE",fullName:existing?.full_name??parsed.data.fullName,email:identity.value},existingIdentity:Boolean(existing),emailDelivery,setup},{status:201,headers:casaInternalNoStoreHeaders});
  }catch(error){const r=casaInternalAuthErrorResponse(error);if(r)return r;console.error("CASA internal account creation failed",error);return NextResponse.json({message:"CASA could not create this team account. No partial account should be used; try again after checking the server log."},{status:500,headers:casaInternalNoStoreHeaders})}
 }

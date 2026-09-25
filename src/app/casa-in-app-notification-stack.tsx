@@ -224,7 +224,7 @@ export default function CasaInAppNotificationStack() {
     <aside
       ref={asideRef}
       aria-label="CASA notifications"
-      className={`pointer-events-none fixed z-[120] w-[min(390px,calc(100vw-2rem))] ${position ? "" : "right-4 top-4"}`}
+      className={`pointer-events-none fixed z-[120] w-[min(390px,calc(100vw-2rem))] ${position ? "" : "right-4 top-[calc(1rem+var(--casa-network-banner-height,0px))]"}`}
       style={position ? { left: position.left, top: position.top } : undefined}
     >
       <div className="pointer-events-auto mb-1 flex items-center justify-end gap-2">
