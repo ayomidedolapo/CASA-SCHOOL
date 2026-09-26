@@ -308,6 +308,7 @@ export default function AttendanceClient(
     slug,
     schoolName,
     canManage,
+    canManageSessions,
     canManageLifecycle,
     canViewOrganization,
     canSuperviseAttendance,
@@ -316,6 +317,7 @@ export default function AttendanceClient(
     slug: string;
     schoolName: string;
     canManage: boolean;
+    canManageSessions: boolean;
     canManageLifecycle: boolean;
     canViewOrganization: boolean;
     canSuperviseAttendance: boolean;
@@ -826,7 +828,10 @@ export default function AttendanceClient(
           () => {
             void refreshToday();
             void refreshLifecycle();
-            if (canManage && selectedBranchId) {
+            if (
+              canManageSessions &&
+              selectedBranchId
+            ) {
               void refreshPolicies();
             }
           },
@@ -858,7 +863,7 @@ export default function AttendanceClient(
       refreshToday,
       refreshLifecycle,
       refreshPolicies,
-      canManage,
+      canManageSessions,
       selectedBranchId,
     ],
   );
@@ -2529,7 +2534,7 @@ export default function AttendanceClient(
           }
         </span>
 
-        {canManage && !data?.readOnly && (
+        {canManageSessions && !data?.readOnly && (
           <div className={styles.actions}>
             {!data?.session && (
               <>
@@ -2589,14 +2594,16 @@ export default function AttendanceClient(
                 >
                   Open today
                 </button>
-                <button
-                  type="button"
-                  className={styles.secondaryButton}
-                  disabled={busy}
-                  onClick={() => void rebindSessionPolicy()}
-                >
-                  Use current policy
-                </button>
+                {canManage && (
+                  <button
+                    type="button"
+                    className={styles.secondaryButton}
+                    disabled={busy}
+                    onClick={() => void rebindSessionPolicy()}
+                  >
+                    Use current policy
+                  </button>
+                )}
               </>
             )}
 
@@ -2610,14 +2617,16 @@ export default function AttendanceClient(
                 >
                   Close today
                 </button>
-                <button
-                  type="button"
-                  className={styles.secondaryButton}
-                  disabled={busy}
-                  onClick={() => void rebindSessionPolicy()}
-                >
-                  Use current policy
-                </button>
+                {canManage && (
+                  <button
+                    type="button"
+                    className={styles.secondaryButton}
+                    disabled={busy}
+                    onClick={() => void rebindSessionPolicy()}
+                  >
+                    Use current policy
+                  </button>
+                )}
               </>
             )}
 

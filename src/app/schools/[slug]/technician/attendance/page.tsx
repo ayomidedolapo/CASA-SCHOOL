@@ -6,10 +6,14 @@ import Link from "next/link";
 
 import {
   AuthRequiredError,
+  SchoolAccessDeniedError,
   requireSchoolRole,
 } from "@/server/auth/authorization";
+import {
+  listVisibleBranches,
+} from "@/server/school-operations/operations";
 
-import TechnicianAttendanceClient from "./technician-attendance-client";
+import AttendanceClient from "../../attendance/attendance-client";
 
 interface PageProps {
   params: Promise<{
@@ -21,18 +25,40 @@ export default async function TechnicianAttendancePage({
   params,
 }: PageProps) {
   const { slug } = await params;
-  let access: Awaited<ReturnType<typeof requireSchoolRole>>;
+  let access:
+    Awaited<
+      ReturnType<
+        typeof requireSchoolRole
+      >
+    >;
+  let visibility:
+    Awaited<
+      ReturnType<
+        typeof listVisibleBranches
+      >
+    >;
 
   try {
     access =
       await requireSchoolRole(
-      slug,
-      [
-        "OWNER",
-        "ADMIN",
-        "SCHOOL_TECHNICIAN",
-      ],
+        slug,
+        [
+          "OWNER",
+          "ADMIN",
+          "SCHOOL_TECHNICIAN",
+        ],
       );
+    visibility =
+      await listVisibleBranches(
+        slug,
+      );
+
+    if (
+      visibility.branches.length ===
+      0
+    ) {
+      throw new SchoolAccessDeniedError();
+    }
   } catch (error) {
     if (error instanceof AuthRequiredError) {
       const next =
@@ -78,16 +104,72 @@ export default async function TechnicianAttendancePage({
       </header>
 
       <div className="mx-auto w-full max-w-[1700px] bg-white">
-        <TechnicianAttendanceClient
-        slug={slug}
-        canManageLifecycle={
-          access.roles.some(
-            (role) =>
-              role === "OWNER" ||
-              role === "ADMIN",
-          )
-        }
-      />
+        <AttendanceClient
+          slug={slug}
+          schoolName={
+            access.school.name
+          }
+          canManage={
+            access.roles.some(
+              (role) =>
+                role === "OWNER" ||
+                role === "ADMIN",
+            )
+          }
+          canManageSessions={
+            true
+          }
+          canManageLifecycle={
+            access.roles.some(
+              (role) =>
+                role === "OWNER" ||
+                role === "ADMIN",
+            )
+          }
+          canViewOrganization={
+            false
+          }
+          canSuperviseAttendance={
+            true
+          }
+          branches={
+            visibility.branches.map(
+              (branch) => ({
+                id: String(
+                  (
+                    branch as {
+                      id: unknown;
+                    }
+                  ).id,
+                ),
+                name: String(
+                  (
+                    branch as {
+                      name: unknown;
+                    }
+                  ).name,
+                ),
+                code: String(
+                  (
+                    branch as {
+                      code: unknown;
+                    }
+                  ).code,
+                ),
+                isHeadquarters:
+                  Boolean(
+                    (
+                      branch as {
+                        is_headquarters?:
+                          unknown;
+                      }
+                    )
+                      .is_headquarters,
+                  ),
+              }),
+            )
+          }
+        />
       </div>
     </main>
   );

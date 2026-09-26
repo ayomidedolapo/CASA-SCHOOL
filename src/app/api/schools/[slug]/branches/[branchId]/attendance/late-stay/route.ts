@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { attendanceNoStoreHeaders } from "@/server/attendance/http";
 import { authorizeLateStay } from "@/server/attendance/late-stay";
-import { requireBranchAccess } from "@/server/school-operations/operations";
+import { requireBranchAttendanceOperatorAccess } from "@/server/school-operations/operations";
 import { schoolOperationsErrorResponse } from "@/server/school-operations/http";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +17,7 @@ const bodySchema = z.object({
 export async function POST(request: NextRequest, context: RouteContext) {
   const { slug, branchId } = await context.params;
   try {
-    const branchAccess = await requireBranchAccess(slug, branchId);
+    const branchAccess = await requireBranchAttendanceOperatorAccess(slug, branchId);
     const parsed = bodySchema.safeParse(await request.json().catch(() => null));
     if (!parsed.success) {
       return NextResponse.json({ message: "Invalid late-stay authorization request." }, { status: 400, headers: attendanceNoStoreHeaders });

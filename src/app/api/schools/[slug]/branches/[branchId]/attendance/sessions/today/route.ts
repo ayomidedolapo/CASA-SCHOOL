@@ -8,7 +8,7 @@ import {
   reopenBranchAttendanceSession,
 } from "@/server/attendance/branch-session";
 import { requirePasskeyStepUpGrant } from "@/server/auth/passkey-step-up";
-import { requireBranchAccess } from "@/server/school-operations/operations";
+import { requireBranchAttendanceOperatorAccess } from "@/server/school-operations/operations";
 import {
   schoolOperationsErrorResponse,
   schoolOperationsNoStoreHeaders,
@@ -34,7 +34,7 @@ export async function POST(request: NextRequest, context: Context) {
   }
 
   try {
-    const { access } = await requireBranchAccess(slug, branchId);
+    const { access } = await requireBranchAttendanceOperatorAccess(slug, branchId);
 
     if (parsed.data.action === "REOPEN") {
       await requirePasskeyStepUpGrant({

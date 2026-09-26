@@ -170,6 +170,64 @@ export async function requireBranchAccess(
 
   throw new SchoolAccessDeniedError();
 }
+export async function requireBranchAttendanceOperatorAccess(
+  schoolSlug: string,
+  branchId: string,
+) {
+  const visibility =
+    await listVisibleBranches(
+      schoolSlug,
+    );
+
+  const allowedRole =
+    visibility.access.roles.some(
+      (role) =>
+        role === "OWNER" ||
+        role === "ADMIN" ||
+        role ===
+          "SCHOOL_TECHNICIAN",
+    );
+
+  if (!allowedRole) {
+    throw new SchoolAccessDeniedError();
+  }
+
+  const branch =
+    (
+      visibility.branches as
+        Array<{
+          id: string;
+          name: string;
+          code: string;
+          address: string | null;
+          is_headquarters: boolean;
+          status:
+            | "ACTIVE"
+            | "INACTIVE";
+        }>
+    ).find(
+      (candidate) =>
+        candidate.id ===
+        branchId,
+    );
+
+  if (!branch) {
+    throw new SchoolAccessDeniedError();
+  }
+
+  return {
+    access:
+      visibility.access,
+    branch,
+    organizationAdmin:
+      visibility.organizationAdmin,
+    technician:
+      visibility.access.roles.includes(
+        "SCHOOL_TECHNICIAN",
+      ),
+  };
+}
+
 export async function listVisibleBranches(
   schoolSlug: string,
 ) {

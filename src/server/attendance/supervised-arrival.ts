@@ -6,7 +6,7 @@ import {
   type SchoolAccess,
 } from "@/server/auth/authorization";
 import {
-  requireBranchAccess,
+  requireBranchAttendanceOperatorAccess,
 } from "@/server/school-operations/operations";
 
 import {
@@ -112,7 +112,7 @@ export async function requireStudentBranchAttendanceAuthority(
     date: clock.date,
   });
 
-  return requireBranchAccess(
+  return requireBranchAttendanceOperatorAccess(
     schoolSlug,
     branchId,
   );

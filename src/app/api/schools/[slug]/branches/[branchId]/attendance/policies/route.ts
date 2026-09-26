@@ -6,7 +6,10 @@ import {
   createBranchAttendancePolicyVersion,
   listBranchAttendancePolicies,
 } from "@/server/attendance/branch-policy-management";
-import { requireBranchAccess } from "@/server/school-operations/operations";
+import {
+  requireBranchAccess,
+  requireBranchAttendanceOperatorAccess,
+} from "@/server/school-operations/operations";
 import { schoolOperationsErrorResponse } from "@/server/school-operations/http";
 
 export const dynamic = "force-dynamic";
@@ -53,7 +56,7 @@ const policySchema = z.object({
 export async function GET(_request: NextRequest, context: RouteContext) {
   const { slug, branchId } = await context.params;
   try {
-    const branchAccess = await requireBranchAccess(slug, branchId);
+    const branchAccess = await requireBranchAttendanceOperatorAccess(slug, branchId);
     const policies = await listBranchAttendancePolicies(branchAccess.access.school.id, branchId);
     return NextResponse.json({ policies }, { headers: attendanceNoStoreHeaders });
   } catch (error) {

@@ -79,15 +79,51 @@ async function canAuthorizeBranch(
   if (
     hasOrganizationAuthority(
       input.access,
-    ) ||
-    isSchoolTechnician(
-      input.access,
     )
   ) {
     return true;
   }
 
   const db = getDb();
+
+  if (
+    isSchoolTechnician(
+      input.access,
+    )
+  ) {
+    const technicianResult =
+      await db.execute(sql`
+        select
+          assignment.id
+        from school_branch_staff_assignments
+          assignment
+        join school_branches branch
+          on branch.school_id =
+             assignment.school_id
+         and branch.id =
+             assignment.branch_id
+        where
+          assignment.school_id =
+            ${input.access.school.id}::uuid
+          and assignment.branch_id =
+            ${input.branchId}::uuid
+          and assignment.membership_id =
+            ${input.access.membership.id}::uuid
+          and assignment.is_active = true
+          and branch.status =
+            'ACTIVE'::school_branch_status
+        limit 1
+      `);
+
+    return (
+      rowsOf<{
+        id: string;
+      }>(
+        technicianResult,
+      ).length === 1
+    );
+  }
+
   const result =
     await db.execute(sql`
       select
