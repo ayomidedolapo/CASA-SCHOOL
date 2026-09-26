@@ -22,7 +22,7 @@ export async function PATCH(request:NextRequest,{params}:{params:Promise<{school
   }else{
    await client.transaction([
     client`update schools set status='ACTIVE'::school_status where id=${schoolId}::uuid`,
-    client`update school_branches b set status=case when s.was_active then 'ACTIVE' else 'INACTIVE' end from casa_school_suspension_branch_state s where s.school_id=${schoolId}::uuid and s.branch_id=b.id`,
+    client`update school_branches b set status=case when s.was_active then 'ACTIVE'::school_branch_status else 'INACTIVE'::school_branch_status end, updated_at=now() from casa_school_suspension_branch_state s where s.school_id=${schoolId}::uuid and s.branch_id=b.id`,
     client`delete from casa_school_suspension_branch_state where school_id=${schoolId}::uuid`
    ]);
   }

@@ -434,9 +434,26 @@ export async function requireTeacherStudentInClass(
 export async function listTeacherClassAssignments(
   access:
     SchoolAccess,
+  branchIds:
+    string[],
 ) {
+  if (
+    branchIds.length ===
+    0
+  ) {
+    return [];
+  }
+
   const db =
     getDb();
+  const branchScope =
+    sql.join(
+      branchIds.map(
+        (branchId) =>
+          sql`${branchId}::uuid`,
+      ),
+      sql`, `,
+    );
 
   const result =
     await db.execute(sql`
@@ -507,6 +524,8 @@ export async function listTeacherClassAssignments(
       where
         assignment.school_id =
           ${access.school.id}::uuid
+        and branch_map.branch_id
+          in (${branchScope})
       order by
         assignment.is_active desc,
         academic_session.starts_on desc,
@@ -532,10 +551,31 @@ export async function setTeacherClassAssignment(
       string;
     active:
       boolean;
+    branchIds:
+      string[];
   },
 ) {
+  if (
+    input.branchIds.length ===
+    0
+  ) {
+    throw new TeacherMyClassError(
+      "No operational campus is available for this assignment.",
+      403,
+      "TEACHER_ASSIGNMENT_BRANCH_SCOPE_REQUIRED",
+    );
+  }
+
   const db =
     getDb();
+  const branchScope =
+    sql.join(
+      input.branchIds.map(
+        (branchId) =>
+          sql`${branchId}::uuid`,
+      ),
+      sql`, `,
+    );
 
   if (
     input.active
@@ -609,6 +649,8 @@ export async function setTeacherClassAssignment(
               true
             and branch.status =
               'ACTIVE'::school_branch_status
+            and branch_map.branch_id
+              in (${branchScope})
           limit 1
         )
         insert into
@@ -711,6 +753,18 @@ export async function setTeacherClassAssignment(
           ${input.academicSessionId}::uuid
         and class_arm_id =
           ${input.classArmId}::uuid
+        and exists (
+          select 1
+          from school_branch_class_arms
+            scope_map
+          where
+            scope_map.school_id =
+              school_teacher_class_assignments.school_id
+            and scope_map.class_arm_id =
+              school_teacher_class_assignments.class_arm_id
+            and scope_map.branch_id
+              in (${branchScope})
+        )
         and is_active =
           true
       returning

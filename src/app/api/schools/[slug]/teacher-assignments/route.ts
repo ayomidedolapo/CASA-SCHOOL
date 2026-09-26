@@ -8,6 +8,9 @@ import {
   requireSchoolRole,
 } from "@/server/auth/authorization";
 import {
+  listVisibleBranches,
+} from "@/server/school-operations/operations";
+import {
   listTeacherClassAssignments,
   setTeacherClassAssignment,
 } from "@/server/teacher/my-class";
@@ -48,9 +51,25 @@ export async function GET(
         ],
       );
 
+    const visibility =
+      await listVisibleBranches(
+        slug,
+      );
+    const branchIds =
+      (
+        visibility.branches as
+          Array<{
+            id: string;
+          }>
+      ).map(
+        (branch) =>
+          branch.id,
+      );
+
     const assignments =
       await listTeacherClassAssignments(
         access,
+        branchIds,
       );
 
     return NextResponse.json(
@@ -136,9 +155,25 @@ export async function POST(
       );
     }
 
+    const visibility =
+      await listVisibleBranches(
+        slug,
+      );
+    const branchIds =
+      (
+        visibility.branches as
+          Array<{
+            id: string;
+          }>
+      ).map(
+        (branch) =>
+          branch.id,
+      );
+
     const assignment =
       await setTeacherClassAssignment({
         access,
+        branchIds,
         ...parsed.data,
       });
 

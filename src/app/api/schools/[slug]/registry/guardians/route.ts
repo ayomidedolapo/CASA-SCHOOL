@@ -25,6 +25,9 @@ import {
 import {
   guardianCreateSchema,
 } from "@/server/registry/validation";
+import {
+  listVisibleBranches,
+} from "@/server/school-operations/operations";
 
 export const dynamic = "force-dynamic";
 
@@ -44,7 +47,78 @@ export async function GET(
   try {
     const access =
       await requireRegistryOperator(slug);
+    const visibility =
+      await listVisibleBranches(
+        slug,
+      );
+    const visibleBranchIds =
+      (
+        visibility.branches as
+          Array<{
+            id: string;
+          }>
+      ).map(
+        (branch) =>
+          branch.id,
+      );
     const db = getDb();
+
+    if (
+      visibleBranchIds.length ===
+      0
+    ) {
+      return NextResponse.json(
+        {
+          guardians: [],
+          total: 0,
+        },
+        {
+          headers:
+            registryNoStoreHeaders,
+        },
+      );
+    }
+
+    const branchScope =
+      sql.join(
+        visibleBranchIds.map(
+          (branchId) =>
+            sql`${branchId}::uuid`,
+        ),
+        sql`, `,
+      );
+    const guardianBranchCondition =
+      sql<boolean>`(
+        exists (
+          select 1
+          from student_guardians
+            visible_link
+          join students
+            visible_student
+            on visible_student.school_id =
+               visible_link.school_id
+           and visible_student.id =
+               visible_link.student_id
+          where
+            visible_link.school_id =
+              ${access.school.id}::uuid
+            and visible_link.guardian_id =
+              ${guardians.id}
+            and visible_student.home_branch_id
+              in (${branchScope})
+        )
+        or not exists (
+          select 1
+          from student_guardians
+            any_link
+          where
+            any_link.school_id =
+              ${access.school.id}::uuid
+            and any_link.guardian_id =
+              ${guardians.id}
+        )
+      )`;
+
     const q =
       request.nextUrl.searchParams
         .get("q")
@@ -75,11 +149,15 @@ export async function GET(
               guardians.schoolId,
               access.school.id,
             ),
+            guardianBranchCondition,
             searchCondition,
           )
-        : eq(
-            guardians.schoolId,
-            access.school.id,
+        : and(
+            eq(
+              guardians.schoolId,
+              access.school.id,
+            ),
+            guardianBranchCondition,
           );
 
     const rows = await db
@@ -110,6 +188,11 @@ export async function GET(
             distinct device.id
           )::int as active_notification_devices
         from student_guardians sg
+        join students student
+          on student.school_id =
+             sg.school_id
+         and student.id =
+             sg.student_id
         join guardian_push_devices device
           on device.school_id =
              sg.school_id
@@ -118,6 +201,8 @@ export async function GET(
         where
           sg.school_id =
             ${access.school.id}::uuid
+          and student.home_branch_id
+            in (${branchScope})
           and sg.receives_notifications = true
           and device.status = 'ACTIVE'
         group by
@@ -196,9 +281,12 @@ export async function GET(
       })
       .from(guardians)
       .where(
-        eq(
-          guardians.schoolId,
-          access.school.id,
+        and(
+          eq(
+            guardians.schoolId,
+            access.school.id,
+          ),
+          guardianBranchCondition,
         ),
       );
 
