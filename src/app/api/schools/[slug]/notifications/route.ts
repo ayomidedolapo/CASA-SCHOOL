@@ -21,116 +21,114 @@ function authError(error: unknown) {
   return null;
 }
 
+async function hasActiveBranchAdminScope(
+  schoolId: string,
+  membershipId: string,
+) {
+  const rows = rowsOf<{ id: string }>(
+    await getDb().execute(sql`
+      select assignment.id::text as id
+      from school_branch_admin_assignments assignment
+      join school_branches branch
+        on branch.school_id = assignment.school_id
+       and branch.id = assignment.branch_id
+      where assignment.school_id = ${schoolId}::uuid
+        and assignment.membership_id = ${membershipId}::uuid
+        and assignment.is_active = true
+        and branch.status = 'ACTIVE'::school_branch_status
+      limit 1
+    `),
+  );
+
+  return rows.length > 0;
+}
+
 export async function GET(_request: NextRequest, context: { params: Promise<{ slug: string }> }) {
   const { slug } = await context.params;
   try {
     const access = await requireSchoolAccess(slug);
     await reconcileSchoolMemberNotifications({
       slug,
-      schoolId:
-        access.school.id,
-      membershipId:
-        access.membership.id,
+      schoolId: access.school.id,
+      membershipId: access.membership.id,
     });
     const db = getDb();
+    const branchScoped = await hasActiveBranchAdminScope(
+      access.school.id,
+      access.membership.id,
+    );
+
     const notifications = rowsOf(await db.execute(sql`
       select
-        id::text,
-        branch_id::text as "branchId",
-        event_type as "eventType",
-        title,
-        body,
-        action_url as "actionUrl",
-        payload,
-        read_at as "readAt",
-        created_at as "createdAt"
-      from casa_in_app_notifications
-      where school_id = ${access.school.id}::uuid
-        and recipient_school_membership_id = ${access.membership.id}::uuid
-      order by created_at desc
+        notification.id::text,
+        notification.branch_id::text as "branchId",
+        notification.event_type as "eventType",
+        notification.title,
+        notification.body,
+        notification.action_url as "actionUrl",
+        notification.payload,
+        notification.read_at as "readAt",
+        notification.created_at as "createdAt"
+      from casa_in_app_notifications notification
+      where notification.school_id = ${access.school.id}::uuid
+        and notification.recipient_school_membership_id = ${access.membership.id}::uuid
+        and (
+          ${!branchScoped}
+          or notification.branch_id is null
+          or exists (
+            select 1
+            from school_branch_admin_assignments assignment
+            join school_branches branch
+              on branch.school_id = assignment.school_id
+             and branch.id = assignment.branch_id
+            where assignment.school_id = ${access.school.id}::uuid
+              and assignment.membership_id = ${access.membership.id}::uuid
+              and assignment.is_active = true
+              and branch.status = 'ACTIVE'::school_branch_status
+              and assignment.branch_id = notification.branch_id
+          )
+        )
+      order by notification.created_at desc
       limit 100
     `));
+
     const normalized =
       notifications.map(
         (row) => {
           const item =
             row as {
-              eventType?:
-                string;
-              actionUrl?:
-                string | null;
+              eventType?: string;
+              actionUrl?: string | null;
             };
-          const eventType =
-            item.eventType ??
-            "";
-          let actionUrl =
-            item.actionUrl;
+          const eventType = item.eventType ?? "";
+          let actionUrl = item.actionUrl;
 
           if (
             !actionUrl ||
-            actionUrl ===
-              `/schools/${slug}/notifications`
+            actionUrl === `/schools/${slug}/notifications`
           ) {
-            if (
-              eventType.includes(
-                "ATTENDANCE",
-              )
-            ) {
-              actionUrl =
-                `/schools/${encodeURIComponent(
-                  slug,
-                )}/attendance`;
+            if (eventType.includes("ATTENDANCE")) {
+              actionUrl = `/schools/${encodeURIComponent(slug)}/attendance`;
             } else if (
-              eventType.includes(
-                "TERMINAL",
-              ) ||
-              eventType.includes(
-                "SCANNER",
-              )
+              eventType.includes("TERMINAL") ||
+              eventType.includes("SCANNER")
             ) {
-              actionUrl =
-                `/schools/${encodeURIComponent(
-                  slug,
-                )}/technician`;
+              actionUrl = `/schools/${encodeURIComponent(slug)}/technician`;
             } else if (
-              eventType.includes(
-                "GUARDIAN",
-              ) ||
-              eventType.includes(
-                "BIOMETRIC",
-              ) ||
-              eventType.includes(
-                "STUDENT",
-              )
+              eventType.includes("GUARDIAN") ||
+              eventType.includes("BIOMETRIC") ||
+              eventType.includes("STUDENT")
             ) {
-              actionUrl =
-                `/schools/${encodeURIComponent(
-                  slug,
-                )}/registry`;
-            } else if (
-              eventType.includes(
-                "PROGRESSION",
-              )
-            ) {
-              actionUrl =
-                `/schools/${encodeURIComponent(
-                  slug,
-                )}/academic`;
+              actionUrl = `/schools/${encodeURIComponent(slug)}/registry`;
+            } else if (eventType.includes("PROGRESSION")) {
+              actionUrl = `/schools/${encodeURIComponent(slug)}/academic`;
             } else {
-              actionUrl =
-                `/schools/${encodeURIComponent(
-                  slug,
-                )}/audit`;
+              actionUrl = `/schools/${encodeURIComponent(slug)}/audit`;
             }
           }
 
           return {
-            ...(
-              row as Record<
-                string,
-                unknown
-              >
-            ),
+            ...(row as Record<string, unknown>),
             actionUrl,
           };
         },
@@ -146,13 +144,10 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ sl
 
     return NextResponse.json(
       {
-        notifications:
-          normalized,
+        notifications: normalized,
         unread,
       },
-      {
-        headers,
-      },
+      { headers },
     );
   } catch (error) {
     const response = authError(error);
@@ -169,24 +164,63 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ s
     const access = await requireSchoolAccess(slug);
     const parsed = patchSchema.safeParse(await request.json().catch(() => null));
     if (!parsed.success) return NextResponse.json({ message: "Invalid notification update." }, { status: 400, headers });
+
     const db = getDb();
+    const branchScoped = await hasActiveBranchAdminScope(
+      access.school.id,
+      access.membership.id,
+    );
+
     if (parsed.data.markAllRead) {
       await db.execute(sql`
-        update casa_in_app_notifications
-        set read_at = coalesce(read_at, now())
-        where school_id = ${access.school.id}::uuid
-          and recipient_school_membership_id = ${access.membership.id}::uuid
-          and read_at is null
+        update casa_in_app_notifications notification
+        set read_at = coalesce(notification.read_at, now())
+        where notification.school_id = ${access.school.id}::uuid
+          and notification.recipient_school_membership_id = ${access.membership.id}::uuid
+          and notification.read_at is null
+          and (
+            ${!branchScoped}
+            or notification.branch_id is null
+            or exists (
+              select 1
+              from school_branch_admin_assignments assignment
+              join school_branches branch
+                on branch.school_id = assignment.school_id
+               and branch.id = assignment.branch_id
+              where assignment.school_id = ${access.school.id}::uuid
+                and assignment.membership_id = ${access.membership.id}::uuid
+                and assignment.is_active = true
+                and branch.status = 'ACTIVE'::school_branch_status
+                and assignment.branch_id = notification.branch_id
+            )
+          )
       `);
     } else if (parsed.data.notificationId) {
       await db.execute(sql`
-        update casa_in_app_notifications
-        set read_at = coalesce(read_at, now())
-        where id = ${parsed.data.notificationId}::uuid
-          and school_id = ${access.school.id}::uuid
-          and recipient_school_membership_id = ${access.membership.id}::uuid
+        update casa_in_app_notifications notification
+        set read_at = coalesce(notification.read_at, now())
+        where notification.id = ${parsed.data.notificationId}::uuid
+          and notification.school_id = ${access.school.id}::uuid
+          and notification.recipient_school_membership_id = ${access.membership.id}::uuid
+          and (
+            ${!branchScoped}
+            or notification.branch_id is null
+            or exists (
+              select 1
+              from school_branch_admin_assignments assignment
+              join school_branches branch
+                on branch.school_id = assignment.school_id
+               and branch.id = assignment.branch_id
+              where assignment.school_id = ${access.school.id}::uuid
+                and assignment.membership_id = ${access.membership.id}::uuid
+                and assignment.is_active = true
+                and branch.status = 'ACTIVE'::school_branch_status
+                and assignment.branch_id = notification.branch_id
+            )
+          )
       `);
     }
+
     return NextResponse.json({ ok: true }, { headers });
   } catch (error) {
     const response = authError(error);

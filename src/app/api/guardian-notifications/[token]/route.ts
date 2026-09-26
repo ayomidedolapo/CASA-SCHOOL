@@ -199,7 +199,7 @@ export async function GET(
         logoUrl:
           `/api/public/schools/${encodeURIComponent(
             row.school_id,
-          )}/notification-logo`,
+          )}/notification-logo${row.branch_id ? `?branchId=${encodeURIComponent(row.branch_id)}` : ""}`,
       },
       branch: {
         id:
@@ -417,7 +417,7 @@ export async function POST(
       iconUrl:
         `${origin}/api/public/schools/${encodeURIComponent(
           link.school_id,
-        )}/notification-logo`,
+        )}/notification-logo${link.branch_id ? `?branchId=${encodeURIComponent(link.branch_id)}` : ""}`,
       clickUrl:
         origin,
       data: {

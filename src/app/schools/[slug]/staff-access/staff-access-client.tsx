@@ -17,6 +17,16 @@ type StaffRow = {
   membershipStatus: string;
   role: string;
   activePasskeys: number;
+  branchId: string | null;
+  branchName: string | null;
+  legacyUnassigned: boolean;
+};
+
+type BranchScope = {
+  id: string;
+  name: string;
+  code: string;
+  isHeadquarters: boolean;
 };
 
 type AcademicOptions = {
@@ -58,6 +68,8 @@ type JsonBody = {
   sessions?: AcademicOptions["sessions"];
   classArms?: AcademicOptions["classArms"];
   assignments?: Assignment[];
+  branches?: BranchScope[];
+  organizationAdmin?: boolean;
   reusedIdentity?: boolean;
   emailDelivery?: string;
   setup?: {
@@ -87,6 +99,20 @@ export default function StaffAccessClient(
     useState<StaffRow[]>(
       [],
     );
+
+  const [
+    branches,
+    setBranches,
+  ] =
+    useState<BranchScope[]>(
+      [],
+    );
+
+  const [
+    selectedBranchId,
+    setSelectedBranchId,
+  ] =
+    useState("");
 
   const [
     academic,
@@ -295,6 +321,25 @@ export default function StaffAccessClient(
             [],
         );
 
+        const nextBranches =
+          staffBody.branches ??
+          [];
+        setBranches(
+          nextBranches,
+        );
+        setSelectedBranchId(
+          (current) =>
+            current &&
+            nextBranches.some(
+              (branch) =>
+                branch.id ===
+                current,
+            )
+              ? current
+              : nextBranches[0]?.id ??
+                "",
+        );
+
         setAcademic({
           sessions:
             academicBody.sessions ??
@@ -365,6 +410,10 @@ export default function StaffAccessClient(
                 number;
               roles:
                 string[];
+              branchNames:
+                string[];
+              legacyUnassigned:
+                boolean;
             }
           >();
 
@@ -387,6 +436,19 @@ export default function StaffAccessClient(
                 row.role,
               );
             }
+            if (
+              row.branchName &&
+              !existing.branchNames.includes(
+                row.branchName,
+              )
+            ) {
+              existing.branchNames.push(
+                row.branchName,
+              );
+            }
+            existing.legacyUnassigned =
+              existing.legacyUnassigned ||
+              row.legacyUnassigned;
           } else {
             byMembership.set(
               row.membershipId,
@@ -406,6 +468,14 @@ export default function StaffAccessClient(
                 roles: [
                   row.role,
                 ],
+                branchNames:
+                  row.branchName
+                    ? [
+                        row.branchName,
+                      ]
+                    : [],
+                legacyUnassigned:
+                  row.legacyUnassigned,
               },
             );
           }
@@ -465,6 +535,8 @@ export default function StaffAccessClient(
                 fullName,
                 email,
                 role,
+                branchId:
+                  selectedBranchId,
               }),
           },
         );
@@ -599,6 +671,74 @@ export default function StaffAccessClient(
     }
   }
 
+  async function assignLegacyBranch(
+    person: {
+      membershipId: string;
+      fullName: string;
+    },
+  ) {
+    if (!selectedBranchId) {
+      setError(
+        "Select a campus first.",
+      );
+      return;
+    }
+
+    setError("");
+    setNotice("");
+    setBusy(true);
+
+    try {
+      const response =
+        await fetch(
+          `${base}/staff-access/${encodeURIComponent(
+            person.membershipId,
+          )}`,
+          {
+            method:
+              "PATCH",
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+            body:
+              JSON.stringify({
+                action:
+                  "ASSIGN_BRANCH",
+                branchId:
+                  selectedBranchId,
+              }),
+          },
+        );
+      const body =
+        (await response
+          .json()
+          .catch(
+            () => ({}),
+          )) as JsonBody;
+
+      if (!response.ok) {
+        throw new Error(
+          body.message ??
+            "Unable to assign campus.",
+        );
+      }
+
+      setNotice(
+        `${person.fullName} was assigned to the selected campus.`,
+      );
+      await load();
+    } catch (error) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Unable to assign campus.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function updateMembershipStatus(
     person: {
       membershipId:
@@ -640,6 +780,8 @@ export default function StaffAccessClient(
             },
             body:
               JSON.stringify({
+                action:
+                  "SET_STATUS",
                 status:
                   nextStatus,
               }),
@@ -886,9 +1028,32 @@ export default function StaffAccessClient(
                         <p className="mt-1">
                           {person.membershipStatus} · {person.activePasskeys} active Passkey{person.activePasskeys === 1 ? "" : "s"}
                         </p>
+                        <p className="mt-1">
+                          {person.branchNames.length > 0
+                            ? person.branchNames.join(" · ")
+                            : person.legacyUnassigned
+                              ? "Needs campus assignment"
+                              : "Organization-wide"}
+                        </p>
                       </div>
 
                       <div className="mt-4 flex flex-wrap gap-3 sm:justify-end">
+                        {person.legacyUnassigned &&
+                        selectedBranchId ? (
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() =>
+                              void assignLegacyBranch(
+                                person,
+                              )
+                            }
+                            className="border border-black/25 px-3 py-2 font-mono text-[9px] font-semibold uppercase tracking-[0.1em] disabled:cursor-not-allowed disabled:opacity-30"
+                          >
+                            Assign campus
+                          </button>
+                        ) : null}
+
                         {!person.roles.includes(
                           "OWNER",
                         ) &&
@@ -1005,6 +1170,44 @@ export default function StaffAccessClient(
 
               <label className="casa-label mt-4">
                 <span>
+                  Campus
+                </span>
+                <select
+                  required
+                  value={
+                    selectedBranchId
+                  }
+                  onChange={(
+                    event,
+                  ) =>
+                    setSelectedBranchId(
+                      event.target.value,
+                    )
+                  }
+                  className="casa-field"
+                >
+                  {branches.map(
+                    (branch) => (
+                      <option
+                        key={
+                          branch.id
+                        }
+                        value={
+                          branch.id
+                        }
+                      >
+                        {branch.name}
+                        {branch.isHeadquarters
+                          ? " · HQ"
+                          : ""}
+                      </option>
+                    ),
+                  )}
+                </select>
+              </label>
+
+              <label className="casa-label mt-4">
+                <span>
                   School role
                 </span>
                 <select
@@ -1042,7 +1245,8 @@ export default function StaffAccessClient(
               <button
                 type="submit"
                 disabled={
-                  busy
+                  busy ||
+                  !selectedBranchId
                 }
                 className="casa-button mt-5 w-full"
               >

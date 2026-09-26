@@ -80,7 +80,9 @@ export async function GET(
       .execute(sql`
         select
           school.name as school_name,
-          school.id as school_id
+          school.id as school_id,
+          link.branch_id
+            as branch_id
         from guardian_push_enrollment_links link
         join schools school
           on school.id =
@@ -98,6 +100,8 @@ export async function GET(
         string;
       school_id:
         string;
+      branch_id:
+        string | null;
     }>(
       result,
     )[0];
@@ -113,6 +117,16 @@ export async function GET(
 
   const name =
     `${row.school_name} Notifications`;
+  const iconUrl =
+    `/api/public/schools/${encodeURIComponent(
+      row.school_id,
+    )}/notification-logo${
+      row.branch_id
+        ? `?branchId=${encodeURIComponent(
+            row.branch_id,
+          )}`
+        : ""
+    }`;
 
   return NextResponse.json(
     {
@@ -144,9 +158,7 @@ export async function GET(
       icons: [
         {
           src:
-            `/api/public/schools/${encodeURIComponent(
-              row.school_id,
-            )}/notification-logo`,
+            iconUrl,
           sizes:
             "512x512",
           type:

@@ -18,8 +18,8 @@ export async function POST(request: NextRequest) {
     const access = await requireCasaCapability("CARD_PRODUCTION_ADMIN");
     const body = bodySchema.safeParse(await request.json().catch(() => ({})));
     if (!body.success) return NextResponse.json({ message: "Invalid production manifest request." }, { status: 400, headers: casaInternalNoStoreHeaders });
-    if (body.data.status === "PRINTED") return NextResponse.json({ message: "Printed card history cannot be exported into a new production manifest." }, { status: 409, headers: casaInternalNoStoreHeaders });
-    const jobs = await listCentralProductionJobs({ status: body.data.status ?? null, category: body.data.category ?? null, schoolId: body.data.schoolId ?? null, branchId: body.data.branchId ?? null, exportableOnly: true, limit: body.data.limit, origin: request.nextUrl.origin });
+    const historicalReExport = body.data.status === "PRINTED";
+    const jobs = await listCentralProductionJobs({ status: body.data.status ?? null, category: body.data.category ?? null, schoolId: body.data.schoolId ?? null, branchId: body.data.branchId ?? null, exportableOnly: !historicalReExport, limit: body.data.limit, origin: request.nextUrl.origin });
     const ids = jobs.map((job) => job.studentId);
     const db = getDb();
     const branchRows = ids.length === 0 ? [] : rowsOf<{ student_id: string; branch_id: string | null; branch_name: string | null }>(await db.execute(sql`
@@ -42,8 +42,8 @@ export async function POST(request: NextRequest) {
     const exportJobs = body.data.branchId ? enriched.filter((job) => job.branchId === body.data.branchId) : enriched;
     const exportDate = new Date().toISOString().slice(0, 10);
     const workbook = await buildCardProductionManifest({ jobs: exportJobs, exportDate });
-    await markJobsExported(exportJobs.map((job) => job.id));
-    await writeCasaInternalAudit({ access, schoolId: body.data.schoolId ?? undefined, action: "CARD_PRODUCTION_MANIFEST_EXPORTED", subjectType: "CARD_PRODUCTION_MANIFEST", metadata: { status: body.data.status ?? null, category: body.data.category ?? null, branchId: body.data.branchId ?? null, jobCount: exportJobs.length, exportDate } });
+    if (!historicalReExport) await markJobsExported(exportJobs.map((job) => job.id));
+    await writeCasaInternalAudit({ access, schoolId: body.data.schoolId ?? undefined, action: historicalReExport ? "CARD_PRODUCTION_PRINTED_HISTORY_REEXPORTED" : "CARD_PRODUCTION_MANIFEST_EXPORTED", subjectType: "CARD_PRODUCTION_MANIFEST", metadata: { status: body.data.status ?? null, category: body.data.category ?? null, branchId: body.data.branchId ?? null, jobCount: exportJobs.length, exportDate } });
     return new NextResponse(new Uint8Array(workbook), { status: 200, headers: { "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Content-Disposition": `attachment; filename="casa-card-production-${exportDate}.xlsx"`, "Cache-Control": "no-store" } });
   } catch (error) {
     const response = casaInternalAuthErrorResponse(error);

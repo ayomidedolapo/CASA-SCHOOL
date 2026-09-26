@@ -43,7 +43,7 @@ function rowsOf<T>(
 }
 
 export async function GET(
-  _request: Request,
+  request: Request,
   context: {
     params:
       Promise<{
@@ -55,10 +55,23 @@ export async function GET(
     schoolId,
   } =
     await context.params;
+  const branchId =
+    new URL(
+      request.url,
+    ).searchParams.get(
+      "branchId",
+    );
 
   if (
     !/^[0-9a-f-]{36}$/i.test(
       schoolId,
+    ) ||
+    (
+      branchId !==
+        null &&
+      !/^[0-9a-f-]{36}$/i.test(
+        branchId,
+      )
     )
   ) {
     return new NextResponse(
@@ -72,12 +85,23 @@ export async function GET(
       .execute(sql`
         select
           school.name as school_name,
-          branding.logo_object_key,
-          branding.logo_content_type
+          coalesce(
+            branch_branding.logo_object_key,
+            school_branding.logo_object_key
+          ) as logo_object_key,
+          coalesce(
+            branch_branding.logo_content_type,
+            school_branding.logo_content_type
+          ) as logo_content_type
         from schools school
-        left join school_notification_branding branding
-          on branding.school_id =
+        left join school_notification_branding school_branding
+          on school_branding.school_id =
              school.id
+        left join school_branch_notification_branding branch_branding
+          on branch_branding.school_id =
+             school.id
+         and branch_branding.branch_id =
+             ${branchId}::uuid
         where school.id =
           ${schoolId}::uuid
         limit 1

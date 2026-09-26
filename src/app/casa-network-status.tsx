@@ -261,7 +261,7 @@ export default function CasaNetworkStatus() {
     <div
       role="status"
       aria-live="polite"
-      className={`fixed inset-x-0 top-0 z-[250] flex min-h-8 items-center justify-center px-4 py-1 text-center text-xs font-semibold ${
+      className={`sticky inset-x-0 top-0 z-[250] flex min-h-8 items-center justify-center px-4 py-1 text-center text-xs font-semibold ${
         state ===
           "OFFLINE"
           ? "bg-black text-white"

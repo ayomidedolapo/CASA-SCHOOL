@@ -28,7 +28,7 @@ import {
 import {
   registryAuthErrorResponse,
   registryNoStoreHeaders,
-  requireRegistryAdmin,
+  requireRegistryOperator,
 } from "@/server/registry/http";
 
 export const dynamic =
@@ -89,7 +89,7 @@ export async function POST(
 
   try {
     const access =
-      await requireRegistryAdmin(
+      await requireRegistryOperator(
         slug,
       );
     const db =

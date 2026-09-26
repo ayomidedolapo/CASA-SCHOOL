@@ -40,6 +40,9 @@ import {
 import {
   sendAccountAccessEmail,
 } from "@/server/messaging/account-access-email";
+import {
+  listVisibleBranches,
+} from "@/server/school-operations/operations";
 
 export const dynamic =
   "force-dynamic";
@@ -75,7 +78,114 @@ const createSchema =
         "STAFF",
         "SCHOOL_TECHNICIAN",
       ]),
+    branchId:
+      z.string()
+        .uuid(),
   });
+
+function rowsOf<T>(
+  result: unknown,
+): T[] {
+  if (Array.isArray(result)) {
+    return result as T[];
+  }
+
+  if (
+    result &&
+    typeof result === "object" &&
+    "rows" in result &&
+    Array.isArray(
+      (
+        result as {
+          rows?: unknown;
+        }
+      ).rows,
+    )
+  ) {
+    return (
+      result as {
+        rows: T[];
+      }
+    ).rows;
+  }
+
+  return [];
+}
+
+type VisibleBranch = {
+  id: string;
+  name: string;
+  code: string;
+  is_headquarters: boolean;
+};
+
+async function resolveStaffScope(
+  slug: string,
+) {
+  const access =
+    await requireSchoolRole(
+      slug,
+      [
+        "OWNER",
+        "ADMIN",
+      ],
+    );
+  const visible =
+    await listVisibleBranches(
+      slug,
+    );
+
+  return {
+    access,
+    organizationAdmin:
+      visible.organizationAdmin,
+    branches:
+      visible.branches as
+        VisibleBranch[],
+  };
+}
+
+async function assignMembershipToBranch(
+  input: {
+    schoolId: string;
+    branchId: string;
+    membershipId: string;
+    assignedByMembershipId: string;
+  },
+) {
+  await getDb().execute(sql`
+    insert into school_branch_staff_assignments (
+      id,
+      school_id,
+      branch_id,
+      membership_id,
+      is_active,
+      assigned_by_membership_id,
+      created_at,
+      updated_at
+    )
+    values (
+      gen_random_uuid(),
+      ${input.schoolId}::uuid,
+      ${input.branchId}::uuid,
+      ${input.membershipId}::uuid,
+      true,
+      ${input.assignedByMembershipId}::uuid,
+      now(),
+      now()
+    )
+    on conflict (
+      school_id,
+      branch_id,
+      membership_id
+    )
+    do update set
+      is_active = true,
+      assigned_by_membership_id =
+        excluded.assigned_by_membership_id,
+      updated_at = now()
+  `);
+}
 
 async function deliverSchoolStaffAccess(
   input: {
@@ -257,84 +367,173 @@ export async function GET(
     await context.params;
 
   try {
-    const access =
-      await requireSchoolRole(
+    const scope =
+      await resolveStaffScope(
         slug,
-        [
-          "OWNER",
-          "ADMIN",
-        ],
       );
-
+    const access =
+      scope.access;
+    const branchIds =
+      scope.branches.map(
+        (branch) =>
+          branch.id,
+      );
     const db =
       getDb();
 
     const staffRows =
-      await db
-        .select({
-          membershipId:
-            schoolMemberships.id,
-          userId:
-            users.id,
-          fullName:
-            users.fullName,
-          email:
-            users.email,
-          membershipStatus:
-            schoolMemberships.status,
-          role:
-            schoolMembershipRoles.role,
-        })
-        .from(
-          schoolMemberships,
-        )
-        .innerJoin(
-          users,
-          eq(
-            users.id,
-            schoolMemberships
-              .userId,
-          ),
-        )
-        .innerJoin(
-          schoolMembershipRoles,
-          and(
-            eq(
-              schoolMembershipRoles
-                .schoolId,
-              schoolMemberships
-                .schoolId,
-            ),
-            eq(
-              schoolMembershipRoles
-                .membershipId,
-              schoolMemberships
-                .id,
-            ),
-          ),
-        )
-        .where(
-          and(
-            eq(
-              schoolMemberships
-                .schoolId,
-              access.school.id,
-            ),
-            inArray(
-              schoolMembershipRoles
-                .role,
-              [
-                "OWNER",
-                "ADMIN",
-                "STAFF",
-                "SCHOOL_TECHNICIAN",
-              ],
-            ),
-          ),
-        )
-        .orderBy(
-          users.fullName,
-        );
+      branchIds.length ===
+        0
+        ? []
+        : rowsOf<{
+            membershipId: string;
+            userId: string;
+            fullName: string;
+            email:
+              string | null;
+            membershipStatus:
+              string;
+            role: string;
+            branchId:
+              string | null;
+            branchName:
+              string | null;
+            legacyUnassigned:
+              boolean;
+          }>(
+            await db.execute(sql`
+              select
+                membership.id::text
+                  as "membershipId",
+                user_account.id::text
+                  as "userId",
+                user_account.full_name
+                  as "fullName",
+                user_account.email
+                  as email,
+                membership.status::text
+                  as "membershipStatus",
+                role.role::text
+                  as role,
+                coalesce(
+                  staff_assignment.branch_id,
+                  admin_assignment.branch_id
+                )::text
+                  as "branchId",
+                coalesce(
+                  staff_branch.name,
+                  admin_branch.name
+                ) as "branchName",
+                (
+                  role.role in (
+                    'STAFF'::school_membership_role,
+                    'SCHOOL_TECHNICIAN'::school_membership_role
+                  )
+                  and staff_assignment.id is null
+                ) as "legacyUnassigned"
+              from school_memberships membership
+              join users user_account
+                on user_account.id =
+                   membership.user_id
+              join school_membership_roles role
+                on role.school_id =
+                   membership.school_id
+               and role.membership_id =
+                   membership.id
+              left join school_branch_staff_assignments
+                staff_assignment
+                on staff_assignment.school_id =
+                   membership.school_id
+               and staff_assignment.membership_id =
+                   membership.id
+               and staff_assignment.is_active =
+                   true
+              left join school_branches staff_branch
+                on staff_branch.school_id =
+                   staff_assignment.school_id
+               and staff_branch.id =
+                   staff_assignment.branch_id
+              left join school_branch_admin_assignments
+                admin_assignment
+                on admin_assignment.school_id =
+                   membership.school_id
+               and admin_assignment.membership_id =
+                   membership.id
+               and admin_assignment.is_active =
+                   true
+              left join school_branches admin_branch
+                on admin_branch.school_id =
+                   admin_assignment.school_id
+               and admin_branch.id =
+                   admin_assignment.branch_id
+              where
+                membership.school_id =
+                  ${access.school.id}::uuid
+                and role.role in (
+                  'OWNER'::school_membership_role,
+                  'ADMIN'::school_membership_role,
+                  'STAFF'::school_membership_role,
+                  'SCHOOL_TECHNICIAN'::school_membership_role
+                )
+                and (
+                  (
+                    role.role in (
+                      'STAFF'::school_membership_role,
+                      'SCHOOL_TECHNICIAN'::school_membership_role
+                    )
+                    and staff_assignment.branch_id in (
+                      ${sql.join(
+                        branchIds.map(
+                          (branchId) =>
+                            sql`${branchId}::uuid`,
+                        ),
+                        sql`, `,
+                      )}
+                    )
+                  )
+                  or (
+                    role.role =
+                      'ADMIN'::school_membership_role
+                    and admin_assignment.branch_id in (
+                      ${sql.join(
+                        branchIds.map(
+                          (branchId) =>
+                            sql`${branchId}::uuid`,
+                        ),
+                        sql`, `,
+                      )}
+                    )
+                  )
+                  or (
+                    ${scope.organizationAdmin}
+                    and role.role =
+                      'OWNER'::school_membership_role
+                  )
+                  or (
+                    ${scope.organizationAdmin}
+                    and role.role =
+                      'ADMIN'::school_membership_role
+                    and admin_assignment.id is null
+                  )
+                  or (
+                    ${scope.organizationAdmin}
+                    and role.role in (
+                      'STAFF'::school_membership_role,
+                      'SCHOOL_TECHNICIAN'::school_membership_role
+                    )
+                    and staff_assignment.id is null
+                  )
+                )
+              order by
+                user_account.full_name,
+                role.role,
+                coalesce(
+                  staff_branch.name,
+                  admin_branch.name,
+                  ''
+                )
+            `),
+          );
 
     const userIds =
       [
@@ -412,6 +611,21 @@ export async function GET(
                 0,
             }),
           ),
+        branches:
+          scope.branches.map(
+            (branch) => ({
+              id:
+                branch.id,
+              name:
+                branch.name,
+              code:
+                branch.code,
+              isHeadquarters:
+                branch.is_headquarters,
+            }),
+          ),
+        organizationAdmin:
+          scope.organizationAdmin,
       },
       {
         headers:
@@ -444,14 +658,12 @@ export async function POST(
     await context.params;
 
   try {
-    const access =
-      await requireSchoolRole(
+    const scope =
+      await resolveStaffScope(
         slug,
-        [
-          "OWNER",
-          "ADMIN",
-        ],
       );
+    const access =
+      scope.access;
 
     const body =
       createSchema.safeParse(
@@ -462,7 +674,7 @@ export async function POST(
       return NextResponse.json(
         {
           message:
-            "Enter a valid staff name, email and role.",
+            "Enter a valid staff name, email, role and campus.",
         },
         {
           status:
@@ -473,17 +685,42 @@ export async function POST(
       );
     }
 
+    const branch =
+      scope.branches.find(
+        (candidate) =>
+          candidate.id ===
+          body.data.branchId,
+      );
+
+    if (!branch) {
+      return NextResponse.json(
+        {
+          message:
+            "Select a campus within your Staff & Access scope.",
+        },
+        {
+          status:
+            403,
+          headers:
+            noStoreHeaders,
+        },
+      );
+    }
+
     if (
       body.data.role ===
         "ADMIN" &&
-      !access.roles.includes(
-        "OWNER",
+      (
+        !access.roles.includes(
+          "OWNER",
+        ) ||
+        !scope.organizationAdmin
       )
     ) {
       return NextResponse.json(
         {
           message:
-            "Only the school Owner can create another Admin.",
+            "Only the school Owner can create another organization Admin.",
         },
         {
           status:
@@ -750,6 +987,21 @@ export async function POST(
         await roleInsert;
       }
 
+      if (
+        body.data.role !==
+        "ADMIN"
+      ) {
+        await assignMembershipToBranch({
+          schoolId:
+            access.school.id,
+          branchId:
+            branch.id,
+          membershipId,
+          assignedByMembershipId:
+            access.membership.id,
+        });
+      }
+
       const delivery =
         await deliverSchoolStaffAccess({
           db,
@@ -778,6 +1030,12 @@ export async function POST(
           membershipId,
           userId:
             existingUser.id,
+          branch: {
+            id:
+              branch.id,
+            name:
+              branch.name,
+          },
           setup:
             delivery.setup,
           emailDelivery:
@@ -785,8 +1043,8 @@ export async function POST(
           message:
             delivery.emailDelivery ===
               "SENT"
-              ? "Staff access created. CASA emailed the required access link to the staff member."
-              : "Staff access created. Email delivery did not complete; use the returned private fallback link where setup is required.",
+              ? `Staff access created for ${branch.name}. CASA emailed the required access link.`
+              : `Staff access created for ${branch.name}. Email delivery did not complete; use the private fallback link where setup is required.`,
         },
         {
           status:
@@ -819,59 +1077,74 @@ export async function POST(
       randomUUID();
 
     await db.batch([
-        db
-          .insert(
-            users,
-          )
-          .values({
-            id:
-              userId,
-            fullName:
-              body.data
-                .fullName,
-            email,
-            status:
-              "ACTIVE",
-          }),
-        db
-          .insert(
-            schoolMemberships,
-          )
-          .values({
-            id:
-              membershipId,
-            schoolId:
-              access.school.id,
+      db
+        .insert(
+          users,
+        )
+        .values({
+          id:
             userId,
-            status:
-              "ACTIVE",
-            joinedAt:
-              new Date(),
-          }),
-        db
-          .insert(
-            schoolMembershipRoles,
-          )
-          .values({
-            id:
-              roleId,
-            schoolId:
-              access.school.id,
+          fullName:
+            body.data
+              .fullName,
+          email,
+          status:
+            "ACTIVE",
+        }),
+      db
+        .insert(
+          schoolMemberships,
+        )
+        .values({
+          id:
             membershipId,
-            role:
-              body.data.role,
-          }),
-        db
-          .insert(
-            authPasswordCredentials,
-          )
-          .values({
-            userId,
-            passwordHash,
-            mustChangePassword:
-              true,
-          }),
+          schoolId:
+            access.school.id,
+          userId,
+          status:
+            "ACTIVE",
+          joinedAt:
+            new Date(),
+        }),
+      db
+        .insert(
+          schoolMembershipRoles,
+        )
+        .values({
+          id:
+            roleId,
+          schoolId:
+            access.school.id,
+          membershipId,
+          role:
+            body.data.role,
+        }),
+      db
+        .insert(
+          authPasswordCredentials,
+        )
+        .values({
+          userId,
+          passwordHash,
+          mustChangePassword:
+            true,
+        }),
     ]);
+
+    if (
+      body.data.role !==
+      "ADMIN"
+    ) {
+      await assignMembershipToBranch({
+        schoolId:
+          access.school.id,
+        branchId:
+          branch.id,
+        membershipId,
+        assignedByMembershipId:
+          access.membership.id,
+      });
+    }
 
     const delivery =
       await deliverSchoolStaffAccess({
@@ -897,6 +1170,12 @@ export async function POST(
           null,
         membershipId,
         userId,
+        branch: {
+          id:
+            branch.id,
+          name:
+            branch.name,
+        },
         setup:
           delivery.setup,
         emailDelivery:
@@ -904,8 +1183,8 @@ export async function POST(
         message:
           delivery.emailDelivery ===
             "SENT"
-            ? "Staff account created. CASA emailed the private setup link to the staff member."
-            : "Staff account created. Email delivery did not complete; use the returned private setup link as fallback.",
+            ? `Staff account created for ${branch.name}. CASA emailed the private setup link.`
+            : `Staff account created for ${branch.name}. Email delivery did not complete; use the returned private setup link as fallback.`,
       },
       {
         status:

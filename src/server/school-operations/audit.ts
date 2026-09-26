@@ -151,38 +151,6 @@ export async function resolveSchoolAuditScope(
   const db =
     getDb();
 
-  if (
-    hasOrganizationAdminAuthority(
-      access,
-    )
-  ) {
-    const branches =
-      rowsOf<{
-        id: string;
-        name: string;
-      }>(
-        await db.execute(sql`
-          select
-            id::text as id,
-            name
-          from school_branches
-          where
-            school_id =
-              ${access.school.id}::uuid
-          order by
-            is_headquarters desc,
-            name asc
-        `),
-      );
-
-    return {
-      access,
-      organizationWide:
-        true,
-      branches,
-    };
-  }
-
   const branches =
     rowsOf<{
       id: string;
@@ -215,18 +183,51 @@ export async function resolveSchoolAuditScope(
     );
 
   if (
-    branches.length ===
+    branches.length >
       0
   ) {
-    throw new SchoolAccessDeniedError();
+    return {
+      access,
+      organizationWide:
+        false,
+      branches,
+    };
   }
 
-  return {
-    access,
-    organizationWide:
-      false,
-    branches,
-  };
+  if (
+    hasOrganizationAdminAuthority(
+      access,
+    )
+  ) {
+    const organizationBranches =
+      rowsOf<{
+        id: string;
+        name: string;
+      }>(
+        await db.execute(sql`
+          select
+            id::text as id,
+            name
+          from school_branches
+          where
+            school_id =
+              ${access.school.id}::uuid
+          order by
+            is_headquarters desc,
+            name asc
+        `),
+      );
+
+    return {
+      access,
+      organizationWide:
+        true,
+      branches:
+        organizationBranches,
+    };
+  }
+
+  throw new SchoolAccessDeniedError();
 }
 
 export async function listSchoolAuditEvents(

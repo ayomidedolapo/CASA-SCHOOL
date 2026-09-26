@@ -9,6 +9,7 @@ import { getDb } from "@/db";
 import { normalizeLoginIdentifier } from "@/server/auth/identifier";
 import { requireCasaCapability, requireCasaInternalSchoolAccess } from "@/server/internal/authorization";
 import { casaInternalAuthErrorResponse, casaInternalNoStoreHeaders } from "@/server/internal/http";
+import { sendAccountAccessEmail } from "@/server/messaging/account-access-email";
 import { writeCasaInternalAudit } from "@/server/internal/onboarding";
 
 export const dynamic = "force-dynamic";
@@ -138,8 +139,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       return NextResponse.json({ message: "Check the Branch Admin setup request." }, { status: 400, headers: casaInternalNoStoreHeaders });
     }
     const db = getDb();
-    const branch = rowsOf<{ id: string; is_headquarters: boolean; status: string }>(await db.execute(sql`
-      select id,is_headquarters,status::text as status from school_branches
+    const branch = rowsOf<{ id: string; name: string; is_headquarters: boolean; status: string }>(await db.execute(sql`
+      select id,name,is_headquarters,status::text as status from school_branches
       where school_id=${schoolId}::uuid and id=${parsed.data.branchId}::uuid limit 1
     `))[0];
     if (!branch || branch.is_headquarters || branch.status !== "ACTIVE") {
@@ -169,7 +170,20 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       `);
       await writeCasaInternalAudit({ access, schoolId, action: "INTERNAL_BRANCH_ADMIN_SETUP_REISSUED", subjectType: "SCHOOL_BRANCH", subjectId: parsed.data.branchId, metadata: { branchAdminUserId: existing.user_id } });
       const origin = new URL(request.url).origin;
-      return NextResponse.json({ administrator: { fullName: existing.full_name, email: existing.email, setup: { url: `${origin}/account/setup?token=${encodeURIComponent(rawToken)}`, expiresAt: expiresAt.toISOString() } } }, { headers: casaInternalNoStoreHeaders });
+      const setup = {
+        url: `${origin}/account/setup?token=${encodeURIComponent(rawToken)}`,
+        expiresAt: expiresAt.toISOString(),
+      };
+      const emailDelivery = await sendAccountAccessEmail({
+        email: existing.email,
+        recipientName: existing.full_name,
+        organizationName: access.school.name,
+        actionLabel: "Set up Branch Admin access",
+        actionUrl: setup.url,
+        expiresAt,
+        context: `${access.school.name} created a new private Branch Admin setup link for ${branch.name}.`,
+      });
+      return NextResponse.json({ emailDelivery, administrator: { fullName: existing.full_name, email: existing.email, setup } }, { headers: casaInternalNoStoreHeaders });
     }
 
     const identity = normalizeLoginIdentifier(parsed.data.email);
@@ -243,7 +257,20 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     await client.transaction(statements);
     await writeCasaInternalAudit({ access, schoolId, action: "INTERNAL_BRANCH_ADMIN_PROVISIONED", subjectType: "SCHOOL_BRANCH", subjectId: parsed.data.branchId, metadata: { branchAdminUserId: userId, branchAdminMembershipId: membershipId, branchAdminExistingIdentity: Boolean(user), setupRequired: Boolean(rawToken) } });
     const origin = new URL(request.url).origin;
-    return NextResponse.json({ administrator: { fullName: user?.full_name ?? parsed.data.fullName, email: identity.value, existingIdentity: Boolean(user), setup: rawToken ? { url: `${origin}/account/setup?token=${encodeURIComponent(rawToken)}`, expiresAt: expiresAt.toISOString() } : null } }, { status: existingMembership ? 200 : 201, headers: casaInternalNoStoreHeaders });
+    const setup = rawToken ? {
+      url: `${origin}/account/setup?token=${encodeURIComponent(rawToken)}`,
+      expiresAt: expiresAt.toISOString(),
+    } : null;
+    const emailDelivery = await sendAccountAccessEmail({
+      email: identity.value,
+      recipientName: user?.full_name ?? parsed.data.fullName,
+      organizationName: access.school.name,
+      actionLabel: setup ? "Set up Branch Admin access" : "Sign in to CASA",
+      actionUrl: setup?.url ?? `${origin}/login?school=${encodeURIComponent(access.school.slug)}`,
+      expiresAt: setup ? expiresAt : null,
+      context: `${access.school.name} granted you Branch Admin access for ${branch.name}.`,
+    });
+    return NextResponse.json({ emailDelivery, administrator: { fullName: user?.full_name ?? parsed.data.fullName, email: identity.value, existingIdentity: Boolean(user), setup } }, { status: existingMembership ? 200 : 201, headers: casaInternalNoStoreHeaders });
   } catch (error) {
     const response = casaInternalAuthErrorResponse(error);
     if (response) return response;

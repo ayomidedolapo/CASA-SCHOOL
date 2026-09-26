@@ -892,15 +892,18 @@ export default function CardProductionClient(
   }
 
   async function exportManifest() {
-    if (
-      status ===
-        "PRINTED"
-    ) {
-      setError(
-        "Printed card history cannot be exported into a new production manifest.",
+    const manifestStatus =
+      status ||
+      (
+        jobs.length > 0 &&
+        jobs.every(
+          (job) =>
+            job.status ===
+              "PRINTED",
+        )
+          ? "PRINTED"
+          : null
       );
-      return;
-    }
 
     setBusy(
       true,
@@ -928,8 +931,7 @@ export default function CardProductionClient(
             body:
               JSON.stringify({
                 status:
-                  status ||
-                  null,
+                  manifestStatus,
                 category:
                   category ||
                   null,
@@ -983,7 +985,10 @@ export default function CardProductionClient(
       );
 
       setMessage(
-        "Manifest exported from current filters. Only due, unprinted jobs whose linked card is still valid for handover are exportable.",
+        manifestStatus ===
+          "PRINTED"
+          ? "Printed card history exported again. Existing PRINTED status and production history were not changed."
+          : "Manifest exported from current filters. Only due, unprinted jobs whose linked card is still valid for handover are exportable.",
       );
       await reload();
     } catch (
@@ -1399,13 +1404,8 @@ export default function CardProductionClient(
             type="button"
             disabled={
               busy ||
-              status ===
-                "PRINTED" ||
-              jobs.every(
-                (job) =>
-                  job.status ===
-                  "PRINTED",
-              )
+              jobs.length ===
+                0
             }
             onClick={() =>
               void exportManifest()

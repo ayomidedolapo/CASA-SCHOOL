@@ -20,7 +20,7 @@ import {
   registryAuthErrorResponse,
   registryDatabaseErrorResponse,
   registryNoStoreHeaders,
-  requireRegistryAdmin,
+  requireRegistryOperator,
 } from "@/server/registry/http";
 
 export const dynamic =
@@ -72,7 +72,7 @@ export async function PATCH(
 
   try {
     const access =
-      await requireRegistryAdmin(
+      await requireRegistryOperator(
         slug,
       );
     const parsed =

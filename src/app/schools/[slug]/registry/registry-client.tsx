@@ -26,6 +26,7 @@ interface RegistryClientProps {
     fullName: string;
   };
   roles: string[];
+  canManageBranches: boolean;
 }
 
 interface StudentRow {
@@ -125,6 +126,7 @@ export function RegistryClient({
   school,
   user,
   roles,
+  canManageBranches,
 }: RegistryClientProps) {
   const router = useRouter();
   const [tab, setTab] =
@@ -938,7 +940,7 @@ export function RegistryClient({
                 <p className="text-xs font-semibold">{user.fullName}</p>
                 <p className="mt-1 font-mono text-[9px] uppercase tracking-[0.1em] text-black/45">{roles.join(" · ")}</p>
               </div>
-              <div className="flex flex-wrap gap-2"><a className="casa-button-quiet" href={`/schools/${encodeURIComponent(school.slug)}/branches`}>Branches</a><a className="casa-button-quiet" href={`/schools/${encodeURIComponent(school.slug)}/summer`}>Summer</a><button onClick={() => void logout()} className="casa-button-quiet" type="button">Sign out</button></div>
+              <div className="flex flex-wrap gap-2">{canManageBranches ? (<a className="casa-button-quiet" href={`/schools/${encodeURIComponent(school.slug)}/branches`}>Branches</a>) : null}<a className="casa-button-quiet" href={`/schools/${encodeURIComponent(school.slug)}/summer`}>Summer</a><button onClick={() => void logout()} className="casa-button-quiet" type="button">Sign out</button></div>
             </div>
           </section>
         </div>

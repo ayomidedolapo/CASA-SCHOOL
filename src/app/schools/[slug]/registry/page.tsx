@@ -6,6 +6,8 @@ import {
   requireSchoolRole,
 } from "@/server/auth/authorization";
 
+import { requireOrganizationAdmin } from "@/server/school-operations/operations";
+
 import { RegistryClient } from "./registry-client";
 
 interface RegistryPageProps {
@@ -68,6 +70,22 @@ export default async function RegistryPage({
     throw error;
   }
 
+  let canManageBranches = false;
+
+  if (
+    access.roles.includes("OWNER") ||
+    access.roles.includes("ADMIN")
+  ) {
+    try {
+      await requireOrganizationAdmin(slug);
+      canManageBranches = true;
+    } catch (error) {
+      if (!(error instanceof SchoolAccessDeniedError)) {
+        throw error;
+      }
+    }
+  }
+
   return (
     <RegistryClient
       school={{
@@ -83,6 +101,7 @@ export default async function RegistryPage({
       roles={
         access.roles
       }
+      canManageBranches={canManageBranches}
     />
   );
 }

@@ -402,6 +402,7 @@ export default function SchoolDetailClient({
             existingIdentity?: boolean;
             setup?: SetupLink | null;
           };
+          emailDelivery?: string;
           message?: string;
         } | null;
 
@@ -422,10 +423,13 @@ export default function SchoolDetailClient({
       setAdminBranchId("");
 
       setNotice(
-        body?.administrator
-          ?.setup
-          ? "Branch Admin assigned. Share the private one-time setup link below."
-          : "Branch Admin assigned. The existing CASA identity is already able to sign in.",
+        body?.administrator?.setup
+          ? body?.emailDelivery === "SENT"
+            ? "Branch Admin assigned. CASA emailed the private setup link. The visible link below is the fallback."
+            : "Branch Admin assigned. Email delivery did not complete; use the private fallback link below."
+          : body?.emailDelivery === "SENT"
+            ? "Branch Admin assigned. CASA emailed the sign-in link."
+            : "Branch Admin assigned. Existing CASA credentials can be used; automatic email delivery did not complete.",
       );
 
       await reloadDirectory();
@@ -483,6 +487,7 @@ export default function SchoolDetailClient({
           administrator?: {
             setup?: SetupLink | null;
           };
+          emailDelivery?: string;
           message?: string;
         } | null;
 
@@ -499,7 +504,9 @@ export default function SchoolDetailClient({
           null,
       );
       setNotice(
-        "A new Branch Admin setup link was created. The older unused setup link is no longer valid.",
+        body?.emailDelivery === "SENT"
+          ? "A new Branch Admin setup link was created and emailed. The older unused setup link is no longer valid."
+          : "A new Branch Admin setup link was created, but email delivery did not complete. Use the visible fallback link. The older unused setup link is no longer valid.",
       );
       await reloadDirectory();
     } catch (caught) {

@@ -114,6 +114,8 @@ export async function queueGuardianPresencePushBestEffort(
                 as guardian_id,
               device.id
                 as device_id,
+              device.branch_id
+                as branch_id,
               device.firebase_installation_id
                 as firebase_installation_id
             from context
@@ -208,9 +210,19 @@ export async function queueGuardianPresencePushBestEffort(
                   ) ||
                   '.'
               end,
-              '/api/public/schools/' ||
-                recipients.school_id::text ||
-                '/notification-logo',
+              case
+                when recipients.branch_id
+                  is not null
+                  then
+                    '/api/public/schools/' ||
+                    recipients.school_id::text ||
+                    '/notification-logo?branchId=' ||
+                    recipients.branch_id::text
+                else
+                  '/api/public/schools/' ||
+                  recipients.school_id::text ||
+                  '/notification-logo'
+              end,
               '/',
               jsonb_build_object(
                 'type',
@@ -387,6 +399,8 @@ export async function reconcileRecentGuardianPresencePushes(
                 as guardian_id,
               device.id
                 as device_id,
+              device.branch_id
+                as branch_id,
               device.firebase_installation_id
                 as firebase_installation_id
             from recent_events context
@@ -481,9 +495,19 @@ export async function reconcileRecentGuardianPresencePushes(
                   ) ||
                   '.'
               end,
-              '/api/public/schools/' ||
-                recipients.school_id::text ||
-                '/notification-logo',
+              case
+                when recipients.branch_id
+                  is not null
+                  then
+                    '/api/public/schools/' ||
+                    recipients.school_id::text ||
+                    '/notification-logo?branchId=' ||
+                    recipients.branch_id::text
+                else
+                  '/api/public/schools/' ||
+                  recipients.school_id::text ||
+                  '/notification-logo'
+              end,
               '/',
               jsonb_build_object(
                 'type',

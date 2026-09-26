@@ -12,6 +12,12 @@ import {
   useRouter,
 } from "next/navigation";
 
+type BrandingBranch = {
+  id: string;
+  name: string;
+  isHeadquarters: boolean;
+};
+
 type Notice = {
   id: string;
   title: string;
@@ -115,11 +121,15 @@ export default function NotificationsClient(
     schoolId,
     schoolName,
     canBrand,
+    organizationAdmin,
+    brandingBranches,
   }: {
     slug: string;
     schoolId: string;
     schoolName: string;
     canBrand: boolean;
+    organizationAdmin: boolean;
+    brandingBranches: BrandingBranch[];
   },
 ) {
   const router =
@@ -156,6 +166,28 @@ export default function NotificationsClient(
     setLogoNonce,
   ] =
     useState(0);
+  const [
+    logoScope,
+    setLogoScope,
+  ] =
+    useState(
+      organizationAdmin
+        ? "SCHOOL"
+        : brandingBranches[0]?.id ??
+          "SCHOOL",
+    );
+
+  const logoPreviewUrl =
+    logoScope ===
+      "SCHOOL"
+      ? `/api/public/schools/${encodeURIComponent(
+          schoolId,
+        )}/notification-logo?v=${logoNonce}`
+      : `/api/public/schools/${encodeURIComponent(
+          schoolId,
+        )}/notification-logo?branchId=${encodeURIComponent(
+          logoScope,
+        )}&v=${logoNonce}`;
 
   const endpoint =
     `/api/schools/${encodeURIComponent(
@@ -360,6 +392,28 @@ export default function NotificationsClient(
         form,
       );
 
+    if (
+      logoScope ===
+        "SCHOOL"
+    ) {
+      data.set(
+        "scope",
+        "SCHOOL",
+      );
+      data.delete(
+        "branchId",
+      );
+    } else {
+      data.set(
+        "scope",
+        "BRANCH",
+      );
+      data.set(
+        "branchId",
+        logoScope,
+      );
+    }
+
     setLogoBusy(
       true,
     );
@@ -401,7 +455,10 @@ export default function NotificationsClient(
       }
 
       setLogoMessage(
-        "Notification logo saved.",
+        logoScope ===
+          "SCHOOL"
+          ? "Whole-school fallback logo saved."
+          : "Campus notification logo saved.",
       );
       setLogoNonce(
         (value) =>
@@ -471,9 +528,7 @@ export default function NotificationsClient(
               <img
                 className="max-h-20 max-w-20 object-contain"
                 alt={`${schoolName} notification logo`}
-                src={`/api/public/schools/${encodeURIComponent(
-                  schoolId,
-                )}/notification-logo?v=${logoNonce}`}
+                src={logoPreviewUrl}
               />
             </div>
             <form
@@ -487,11 +542,46 @@ export default function NotificationsClient(
                 Notification identity
               </p>
               <h2 className="mt-1 text-lg font-semibold">
-                School notification logo
+                Notification logo
               </h2>
               <p className="mt-1 text-sm text-black/50">
-                Used by guardian notifications and supported system notification surfaces. PNG/JPEG/WebP, up to 3 MB.
+                Each campus can use its own logo. A branch logo is used first; the explicit whole-school logo is only the fallback. HQ logo is not automatically used by other campuses.
               </p>
+
+              <label className="mt-4 block text-sm">
+                <span className="mb-1 block font-medium">
+                  Logo scope
+                </span>
+                <select
+                  className="w-full border border-black bg-white px-3 py-2 text-sm"
+                  value={logoScope}
+                  onChange={(event) =>
+                    setLogoScope(
+                      event.target.value,
+                    )
+                  }
+                >
+                  {organizationAdmin ? (
+                    <option value="SCHOOL">
+                      Whole school fallback
+                    </option>
+                  ) : null}
+                  {brandingBranches.map(
+                    (branch) => (
+                      <option
+                        key={branch.id}
+                        value={branch.id}
+                      >
+                        {branch.name}
+                        {branch.isHeadquarters
+                          ? " · HQ"
+                          : ""}
+                      </option>
+                    ),
+                  )}
+                </select>
+              </label>
+
               <div className="mt-4 flex flex-wrap items-center gap-3">
                 <input
                   required

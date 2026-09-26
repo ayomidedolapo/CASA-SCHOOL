@@ -248,6 +248,41 @@ export async function requireCasaInternalSchoolAccess(
   };
 }
 
+export async function requireCasaInternalSchoolManagementAccess(
+  schoolId: string,
+): Promise<CasaInternalSchoolAccess> {
+  const access = await requireCasaInternalAccess();
+  const db = getDb();
+  const result = await withTransientDatabaseReadRetry(() => db.execute(sql`
+    select school.id, school.slug, school.name, school.timezone,
+      school.status::text as status
+    from schools school
+    where school.id = ${schoolId}::uuid
+    limit 1
+  `));
+  const school = rowsOf<{
+    id:string; slug:string; name:string; timezone:string; status:string;
+  }>(result)[0];
+
+  if (
+    !school ||
+    (school.status !== "ACTIVE" &&
+      access.membership.role !== "CASA_SUPER_ADMIN")
+  ) {
+    throw new CasaInternalSchoolScopeError();
+  }
+
+  return {
+    ...access,
+    school: {
+      id: school.id,
+      slug: school.slug,
+      name: school.name,
+      timezone: school.timezone,
+    },
+  };
+}
+
 export async function requireCasaInternalOnboardingCapability(
   schoolId: string,
   capability:

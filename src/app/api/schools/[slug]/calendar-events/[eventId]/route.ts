@@ -6,13 +6,12 @@ import { z } from "zod";
 
 import {
   getCalendarEventScope,
-  hasOrganizationAdminAuthority,
   requireBranchAccess,
+  requireOrganizationAdmin,
   updateCalendarEvent,
 } from "@/server/school-operations/operations";
 import {
   requireSchoolAccess,
-  SchoolAccessDeniedError,
 } from "@/server/auth/authorization";
 import {
   schoolOperationsErrorResponse,
@@ -78,18 +77,19 @@ export async function PATCH(
         slug,
         current.branch_id,
       );
-    } else if (
-      !hasOrganizationAdminAuthority(access)
-    ) {
-      throw new SchoolAccessDeniedError();
+    } else {
+      await requireOrganizationAdmin(
+        slug,
+      );
     }
 
     if (
       current.kind ===
-        "PUBLIC_HOLIDAY" &&
-      !hasOrganizationAdminAuthority(access)
+        "PUBLIC_HOLIDAY"
     ) {
-      throw new SchoolAccessDeniedError();
+      await requireOrganizationAdmin(
+        slug,
+      );
     }
 
     const body =
@@ -114,10 +114,11 @@ export async function PATCH(
 
     if (
       body.data.kind ===
-        "PUBLIC_HOLIDAY" &&
-      !hasOrganizationAdminAuthority(access)
+        "PUBLIC_HOLIDAY"
     ) {
-      throw new SchoolAccessDeniedError();
+      await requireOrganizationAdmin(
+        slug,
+      );
     }
 
     const event =

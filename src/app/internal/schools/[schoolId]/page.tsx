@@ -12,7 +12,7 @@ import {
   CasaInternalAccessDeniedError,
   CasaInternalSchoolScopeError,
   isAuthRequiredError,
-  requireCasaInternalSchoolAccess,
+  requireCasaInternalSchoolManagementAccess,
 } from "@/server/internal/authorization";
 
 import InternalShell from "../../internal-shell";
@@ -48,13 +48,13 @@ export default async function Page({
 
   let access: Awaited<
     ReturnType<
-      typeof requireCasaInternalSchoolAccess
+      typeof requireCasaInternalSchoolManagementAccess
     >
   >;
 
   try {
     access =
-      await requireCasaInternalSchoolAccess(
+      await requireCasaInternalSchoolManagementAccess(
         schoolId,
       );
   } catch (error) {

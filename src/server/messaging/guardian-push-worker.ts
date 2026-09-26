@@ -12,6 +12,7 @@ import { sendFcmToFid } from "./firebase-fcm";
 type PushRow = {
   id: string;
   school_id: string;
+  branch_id: string | null;
   device_id: string;
   firebase_installation_id: string;
   title: string;
@@ -137,7 +138,9 @@ export async function runGuardianPushOutbox(
     rowsOf<PushRow>(
       await db.execute(sql`
     with due as (
-      select outbox.id
+      select
+        outbox.id,
+        device.branch_id
       from guardian_push_outbox outbox
       join guardian_push_devices device
         on device.id =
@@ -171,6 +174,8 @@ export async function runGuardianPushOutbox(
     returning
       outbox.id::text,
       outbox.school_id::text,
+      due.branch_id::text
+        as branch_id,
       outbox.device_id::text,
       outbox.firebase_installation_id,
       outbox.title,
@@ -200,7 +205,13 @@ export async function runGuardianPushOutbox(
           ) ??
           `${publicAppOrigin()}/api/public/schools/${encodeURIComponent(
             row.school_id,
-          )}/notification-logo`,
+          )}/notification-logo${
+            row.branch_id
+              ? `?branchId=${encodeURIComponent(
+                  row.branch_id,
+                )}`
+              : ""
+          }`,
         clickUrl:
           absolutePublicUrl(
             row.click_url,

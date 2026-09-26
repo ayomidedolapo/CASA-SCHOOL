@@ -9,7 +9,6 @@ import { getDb } from "@/db";
 import {
   registryAuthErrorResponse,
   registryNoStoreHeaders,
-  requireRegistryAdmin,
   requireRegistryOperator,
 } from "@/server/registry/http";
 
@@ -184,7 +183,7 @@ export async function PATCH(
 
   try {
     const access =
-      await requireRegistryAdmin(
+      await requireRegistryOperator(
         slug,
       );
 

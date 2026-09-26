@@ -151,6 +151,85 @@ export const schoolBranchAdminAssignments = pgTable(
   ],
 );
 
+
+export const schoolBranchStaffAssignments = pgTable(
+  "school_branch_staff_assignments",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    schoolId: uuid("school_id").notNull(),
+    branchId: uuid("branch_id").notNull(),
+    membershipId: uuid("membership_id").notNull(),
+    isActive: boolean("is_active").default(true).notNull(),
+    assignedByMembershipId: uuid("assigned_by_membership_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    unique("school_branch_staff_assignments_unique").on(
+      table.schoolId,
+      table.branchId,
+      table.membershipId,
+    ),
+    index("school_branch_staff_membership_idx").on(
+      table.schoolId,
+      table.membershipId,
+      table.isActive,
+    ),
+    index("school_branch_staff_branch_idx").on(
+      table.schoolId,
+      table.branchId,
+      table.isActive,
+    ),
+    foreignKey({
+      columns: [table.schoolId, table.branchId],
+      foreignColumns: [schoolBranches.schoolId, schoolBranches.id],
+      name: "school_branch_staff_branch_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.schoolId, table.membershipId],
+      foreignColumns: [schoolMemberships.schoolId, schoolMemberships.id],
+      name: "school_branch_staff_membership_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.schoolId, table.assignedByMembershipId],
+      foreignColumns: [schoolMemberships.schoolId, schoolMemberships.id],
+      name: "school_branch_staff_assigner_fk",
+    }).onDelete("set null"),
+  ],
+);
+
+export const schoolBranchNotificationBranding = pgTable(
+  "school_branch_notification_branding",
+  {
+    branchId: uuid("branch_id").primaryKey(),
+    schoolId: uuid("school_id").notNull(),
+    logoObjectKey: varchar("logo_object_key", { length: 500 }),
+    logoContentType: varchar("logo_content_type", { length: 100 }),
+    updatedByMembershipId: uuid("updated_by_membership_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("school_branch_notification_branding_school_idx").on(
+      table.schoolId,
+    ),
+    foreignKey({
+      columns: [table.schoolId, table.branchId],
+      foreignColumns: [schoolBranches.schoolId, schoolBranches.id],
+      name: "school_branch_notification_branding_branch_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.schoolId, table.updatedByMembershipId],
+      foreignColumns: [schoolMemberships.schoolId, schoolMemberships.id],
+      name: "school_branch_notification_branding_updater_fk",
+    }).onDelete("set null"),
+    check(
+      "school_branch_notification_branding_logo_pair_check",
+      sql`(${table.logoObjectKey} is null and ${table.logoContentType} is null) or (${table.logoObjectKey} is not null and ${table.logoContentType} is not null)`,
+    ),
+  ],
+);
+
 export const schoolBranchSections = pgTable(
   "school_branch_sections",
   {
