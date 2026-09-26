@@ -16,6 +16,9 @@ import { schoolMemberships } from "./users";
 import { schools } from "./schools";
 import { students } from "./students";
 import {
+  schoolBranches,
+} from "./school-operations";
+import {
   guardianStatusEnum,
 } from "./student-enums";
 
@@ -30,6 +33,9 @@ export const guardians = pgTable(
       .references(
         () => schools.id,
       ),
+    originBranchId: uuid(
+      "origin_branch_id",
+    ).notNull(),
     membershipId: uuid(
       "membership_id",
     ),
@@ -78,6 +84,27 @@ export const guardians = pgTable(
     ).on(
       table.schoolId,
       table.status,
+    ),
+    index(
+      "guardians_school_origin_branch_status_idx",
+    ).on(
+      table.schoolId,
+      table.originBranchId,
+      table.status,
+    ),
+    foreignKey({
+      columns: [
+        table.schoolId,
+        table.originBranchId,
+      ],
+      foreignColumns: [
+        schoolBranches.schoolId,
+        schoolBranches.id,
+      ],
+      name:
+        "guardians_school_origin_branch_fk",
+    }).onDelete(
+      "restrict",
     ),
     foreignKey({
       columns: [

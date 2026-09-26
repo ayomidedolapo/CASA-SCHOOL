@@ -123,6 +123,11 @@ export const studentUpdateSchema =
 
 export const guardianCreateSchema =
   z.object({
+    branchId: z
+      .string()
+      .uuid()
+      .optional()
+      .nullable(),
     fullName: z
       .string()
       .trim()

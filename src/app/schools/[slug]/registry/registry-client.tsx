@@ -600,6 +600,10 @@ export function RegistryClient({
         {
           method: "POST",
           body: JSON.stringify({
+            branchId:
+              form.get("branchId") ||
+              registrationCampus?.id ||
+              null,
             fullName:
               form.get("fullName"),
             email:
@@ -1837,6 +1841,61 @@ export function RegistryClient({
                   createGuardian
                 }
               >
+                <div className="casa-label">
+                  <span>
+                    Campus
+                  </span>
+                  {registrationCampuses.length >
+                  1 ? (
+                    <select
+                      className="casa-field"
+                      name="branchId"
+                      defaultValue=""
+                      required
+                    >
+                      <option
+                        value=""
+                        disabled
+                      >
+                        Select campus
+                      </option>
+                      {registrationCampuses.map(
+                        (campus) => (
+                          <option
+                            key={campus.id}
+                            value={campus.id}
+                          >
+                            {campus.name}
+                            {campus.isHeadquarters
+                              ? " · HQ"
+                              : ""}
+                          </option>
+                        ),
+                      )}
+                    </select>
+                  ) : registrationCampus ? (
+                    <>
+                      <input
+                        type="hidden"
+                        name="branchId"
+                        value={registrationCampus.id}
+                      />
+                      <div className="casa-field flex min-h-11 items-center bg-black/[0.035]">
+                        {registrationCampus.name}
+                        {registrationCampus.isHeadquarters
+                          ? " · HQ"
+                          : ""}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="casa-field flex min-h-11 items-center bg-black/[0.035]">
+                      Campus scope unavailable
+                    </div>
+                  )}
+                  <span className="mt-1 text-[10px] leading-4 text-black/45">
+                    An unlinked guardian stays visible only in the campus where the record was created.
+                  </span>
+                </div>
                 <label className="casa-label">
                   <span>
                     Full name
@@ -1868,7 +1927,11 @@ export function RegistryClient({
                   />
                 </label>
                 <button
-                  disabled={busy}
+                  disabled={
+                    busy ||
+                    registrationCampuses.length ===
+                      0
+                  }
                   className="casa-button-secondary"
                   type="submit"
                 >

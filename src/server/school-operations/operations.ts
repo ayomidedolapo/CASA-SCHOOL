@@ -215,6 +215,48 @@ export async function listVisibleBranches(
     };
   }
 
+  const staffAssignedResult =
+    await db.execute(sql`
+      select
+        b.id,
+        b.name,
+        b.code,
+        b.address,
+        b.is_headquarters,
+        b.status,
+        b.created_at,
+        b.updated_at
+      from school_branch_staff_assignments a
+      join school_branches b
+        on b.school_id = a.school_id
+       and b.id = a.branch_id
+      where
+        a.school_id =
+          ${access.school.id}::uuid
+        and a.membership_id =
+          ${access.membership.id}::uuid
+        and a.is_active = true
+        and b.status =
+          'ACTIVE'::school_branch_status
+      order by b.name asc
+    `);
+
+  const staffAssignedBranches =
+    rowsOf(staffAssignedResult);
+
+  if (
+    staffAssignedBranches.length >
+    0
+  ) {
+    return {
+      access,
+      organizationAdmin:
+        false,
+      branches:
+        staffAssignedBranches,
+    };
+  }
+
   if (
     hasOrganizationAdminAuthority(access)
   ) {
@@ -243,41 +285,6 @@ export async function listVisibleBranches(
       access,
       organizationAdmin: true,
       branches: rowsOf(result),
-    };
-  }
-
-  if (
-    access.roles.includes(
-      "SCHOOL_TECHNICIAN",
-    )
-  ) {
-    const result =
-      await db.execute(sql`
-        select
-          id,
-          name,
-          code,
-          address,
-          is_headquarters,
-          status,
-          created_at,
-          updated_at
-        from school_branches
-        where
-          school_id =
-            ${access.school.id}::uuid
-          and status =
-            'ACTIVE'::school_branch_status
-        order by
-          is_headquarters desc,
-          name asc
-      `);
-
-    return {
-      access,
-      organizationAdmin: false,
-      branches:
-        rowsOf(result),
     };
   }
 

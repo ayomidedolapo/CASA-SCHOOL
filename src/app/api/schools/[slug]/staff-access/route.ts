@@ -135,10 +135,42 @@ async function resolveStaffScope(
       slug,
     );
 
+  if (
+    visible.organizationAdmin
+  ) {
+    const result =
+      await getDb().execute(sql`
+        select
+          id,
+          name,
+          code,
+          is_headquarters
+        from school_branches
+        where
+          school_id =
+            ${access.school.id}::uuid
+          and status =
+            'ACTIVE'::school_branch_status
+        order by
+          is_headquarters desc,
+          name asc
+      `);
+
+    return {
+      access,
+      organizationAdmin:
+        true,
+      branches:
+        rowsOf<VisibleBranch>(
+          result,
+        ),
+    };
+  }
+
   return {
     access,
     organizationAdmin:
-      visible.organizationAdmin,
+      false,
     branches:
       visible.branches as
         VisibleBranch[],

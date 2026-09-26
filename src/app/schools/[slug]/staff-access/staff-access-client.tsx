@@ -1050,7 +1050,15 @@ export default function StaffAccessClient(
                             }
                             className="border border-black/25 px-3 py-2 font-mono text-[9px] font-semibold uppercase tracking-[0.1em] disabled:cursor-not-allowed disabled:opacity-30"
                           >
-                            Assign campus
+                            Assign to{" "}
+                            {
+                              branches.find(
+                                (branch) =>
+                                  branch.id ===
+                                  selectedBranchId,
+                              )?.name ??
+                              "campus"
+                            }
                           </button>
                         ) : null}
 

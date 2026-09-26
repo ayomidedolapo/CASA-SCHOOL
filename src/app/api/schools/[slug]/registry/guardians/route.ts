@@ -107,15 +107,19 @@ export async function GET(
             and visible_student.home_branch_id
               in (${branchScope})
         )
-        or not exists (
-          select 1
-          from student_guardians
-            any_link
-          where
-            any_link.school_id =
-              ${access.school.id}::uuid
-            and any_link.guardian_id =
-              ${guardians.id}
+        or (
+          not exists (
+            select 1
+            from student_guardians
+              any_link
+            where
+              any_link.school_id =
+                ${access.school.id}::uuid
+              and any_link.guardian_id =
+                ${guardians.id}
+          )
+          and ${guardians.originBranchId}
+            in (${branchScope})
         )
       )`;
 
@@ -347,6 +351,34 @@ export async function POST(
   try {
     const access =
       await requireRegistryOperator(slug);
+    const visibility =
+      await listVisibleBranches(
+        slug,
+      );
+    const operationalBranches =
+      visibility.branches as
+        Array<{
+          id: string;
+          name: string;
+          is_headquarters: boolean;
+        }>;
+
+    if (
+      operationalBranches.length ===
+      0
+    ) {
+      return NextResponse.json(
+        {
+          message:
+            "No operational campus is available for this Registry operator.",
+        },
+        {
+          status: 403,
+          headers:
+            registryNoStoreHeaders,
+        },
+      );
+    }
 
     let body: unknown;
 
@@ -396,12 +428,45 @@ export async function POST(
 
     const db = getDb();
     const input = parsed.data;
+    const requestedBranchId =
+      input.branchId ??
+      null;
+    const originBranch =
+      requestedBranchId
+        ? operationalBranches.find(
+            (branch) =>
+              branch.id ===
+              requestedBranchId,
+          ) ?? null
+        : operationalBranches.length ===
+            1
+          ? operationalBranches[0]
+          : null;
+
+    if (!originBranch) {
+      return NextResponse.json(
+        {
+          message:
+            operationalBranches.length >
+            1
+              ? "Select the campus creating this guardian record."
+              : "The selected campus is not available to this Registry operator.",
+        },
+        {
+          status: 400,
+          headers:
+            registryNoStoreHeaders,
+        },
+      );
+    }
 
     const inserted = await db
       .insert(guardians)
       .values({
         schoolId:
           access.school.id,
+        originBranchId:
+          originBranch.id,
         fullName:
           input.fullName,
         email:

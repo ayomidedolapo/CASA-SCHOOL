@@ -26,6 +26,8 @@ export async function sendGuardianInviteEmail(
     guardianName: string;
     schoolName: string;
     schoolId: string;
+    branchId:
+      string | null;
     studentName: string;
     inviteUrl: string;
     origin: string;
@@ -55,7 +57,13 @@ export async function sendGuardianInviteEmail(
   const logoUrl =
     `${input.origin}/api/public/schools/${encodeURIComponent(
       input.schoolId,
-    )}/notification-logo`;
+    )}/notification-logo${
+      input.branchId
+        ? `?branchId=${encodeURIComponent(
+            input.branchId,
+          )}`
+        : ""
+    }`;
 
   const subject =
     `${input.schoolName}: guardian notification setup`;

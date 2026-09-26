@@ -1673,10 +1673,10 @@ export default function TechnicianClient(
         </Link>
         <Link
           href={
-            `/schools/${slug}/attendance`
+            `/schools/${slug}/technician/attendance`
           }
         >
-          Attendance operations
+          Attendance register
         </Link>
         <Link
           href="/security/passkeys"

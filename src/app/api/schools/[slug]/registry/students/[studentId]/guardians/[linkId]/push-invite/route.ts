@@ -30,6 +30,9 @@ import {
   registryNoStoreHeaders,
   requireRegistryOperator,
 } from "@/server/registry/http";
+import {
+  listVisibleBranches,
+} from "@/server/school-operations/operations";
 
 export const dynamic =
   "force-dynamic";
@@ -94,6 +97,22 @@ export async function POST(
       );
     const db =
       getDb();
+    const visibility =
+      await listVisibleBranches(
+        slug,
+      );
+    const visibleBranchIds =
+      new Set(
+        (
+          visibility.branches as
+            Array<{
+              id: string;
+            }>
+        ).map(
+          (branch) =>
+            branch.id,
+        ),
+      );
 
     const relation =
       rowsOf<{
@@ -173,6 +192,25 @@ export async function POST(
         },
         {
           status: 404,
+          headers:
+            registryNoStoreHeaders,
+        },
+      );
+    }
+
+    if (
+      !relation.home_branch_id ||
+      !visibleBranchIds.has(
+        relation.home_branch_id,
+      )
+    ) {
+      return NextResponse.json(
+        {
+          message:
+            "This guardian notification link belongs to another campus.",
+        },
+        {
+          status: 403,
           headers:
             registryNoStoreHeaders,
         },
@@ -341,6 +379,8 @@ export async function POST(
           access.school.name,
         schoolId:
           access.school.id,
+        branchId:
+          relation.home_branch_id,
         studentName:
           relation.student_name,
         inviteUrl:
