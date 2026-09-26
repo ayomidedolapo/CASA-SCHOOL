@@ -1,0 +1,1 @@
+DROP INDEX "student_guardians_one_notification_recipient_per_student_idx";

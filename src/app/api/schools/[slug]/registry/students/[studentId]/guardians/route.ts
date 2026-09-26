@@ -147,28 +147,126 @@ export async function POST(
       );
     }
 
-    const inserted = await db
-      .insert(studentGuardians)
-      .values({
-        schoolId:
-          access.school.id,
-        studentId,
-        guardianId:
-          parsed.data.guardianId,
-        relationshipLabel:
-          parsed.data.relationshipLabel,
-        isPrimary:
-          parsed.data.isPrimary,
-        isEmergencyContact:
-          parsed.data.isEmergencyContact,
-        pickupAuthorized:
-          parsed.data.pickupAuthorized,
-        receivesNotifications:
-          parsed.data.receivesNotifications,
-      })
-      .returning({
-        id: studentGuardians.id,
-      });
+    const existingLinkRows =
+      await db
+        .select({
+          id:
+            studentGuardians.id,
+        })
+        .from(
+          studentGuardians,
+        )
+        .where(
+          and(
+            eq(
+              studentGuardians.schoolId,
+              access.school.id,
+            ),
+            eq(
+              studentGuardians.studentId,
+              studentId,
+            ),
+            eq(
+              studentGuardians.guardianId,
+              parsed.data.guardianId,
+            ),
+          ),
+        )
+        .limit(1);
+
+    if (existingLinkRows[0]) {
+      return NextResponse.json(
+        {
+          message:
+            "This guardian is already linked to this student.",
+        },
+        {
+          status: 409,
+          headers:
+            registryNoStoreHeaders,
+        },
+      );
+    }
+
+    const relationshipValues = {
+      schoolId:
+        access.school.id,
+      studentId,
+      guardianId:
+        parsed.data.guardianId,
+      relationshipLabel:
+        parsed.data.relationshipLabel,
+      isPrimary:
+        parsed.data.isPrimary,
+      isEmergencyContact:
+        parsed.data.isEmergencyContact,
+      pickupAuthorized:
+        parsed.data.pickupAuthorized,
+      receivesNotifications:
+        parsed.data.receivesNotifications,
+    };
+
+    let inserted:
+      Array<{
+        id: string;
+      }>;
+
+    if (parsed.data.isPrimary) {
+      const batch =
+        await db.batch([
+          db
+            .update(
+              studentGuardians,
+            )
+            .set({
+              isPrimary: false,
+              updatedAt:
+                new Date(),
+            })
+            .where(
+              and(
+                eq(
+                  studentGuardians.schoolId,
+                  access.school.id,
+                ),
+                eq(
+                  studentGuardians.studentId,
+                  studentId,
+                ),
+                eq(
+                  studentGuardians.isPrimary,
+                  true,
+                ),
+              ),
+            ),
+          db
+            .insert(
+              studentGuardians,
+            )
+            .values(
+              relationshipValues,
+            )
+            .returning({
+              id:
+                studentGuardians.id,
+            }),
+        ]);
+
+      inserted =
+        batch[1];
+    } else {
+      inserted = await db
+        .insert(
+          studentGuardians,
+        )
+        .values(
+          relationshipValues,
+        )
+        .returning({
+          id:
+            studentGuardians.id,
+        });
+    }
 
     return NextResponse.json(
       {
