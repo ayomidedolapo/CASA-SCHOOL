@@ -168,7 +168,24 @@ export async function POST(
       return domain;
     }
 
-    throw error;
+    console.error(
+      "Card-replacement attendance exception failed unexpectedly.",
+      error,
+    );
+
+    return NextResponse.json(
+      {
+        message:
+          "Card-replacement attendance exception failed unexpectedly.",
+        code:
+          "CARD_REPLACEMENT_EXCEPTION_INTERNAL_ERROR",
+      },
+      {
+        status: 500,
+        headers:
+          attendanceNoStoreHeaders,
+      },
+    );
   }
 }
 

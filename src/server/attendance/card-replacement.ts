@@ -957,125 +957,10 @@ export async function recordCardReplacementAttendanceException(
           ${input.access.membership.id}::uuid,
           ${input.verificationMethod}::student_card_attendance_exception_verification,
           ${graceDayNumber},
-          ${replacementPaid},
+          ${replacementRequested},
           now()
         from inserted_record record
         returning *
-      ),
-      active_sender as (
-        select
-          sender.id,
-          sender.school_id
-        from school_whatsapp_senders sender
-        where
-          sender.school_id =
-            ${input.access.school.id}::uuid
-          and sender.status =
-            'ACTIVE'::school_messaging_sender_status
-        limit 1
-      ),
-      recipients as (
-        select
-          event.id as presence_event_id,
-          event.school_id,
-          event.student_id,
-          event.attendance_record_id,
-          event.occurred_at,
-          sender.id as sender_id,
-          guardian.id as guardian_id,
-          guardian.phone
-            as recipient_phone,
-          student.casa_student_id,
-          concat_ws(
-            ' ',
-            student.first_name,
-            nullif(
-              student.middle_name,
-              ''
-            ),
-            student.last_name
-          ) as student_name
-        from inserted_event event
-        join active_sender sender
-          on sender.school_id =
-             event.school_id
-        join student_guardians mapping
-          on mapping.school_id =
-             event.school_id
-         and mapping.student_id =
-             event.student_id
-         and mapping.receives_notifications =
-             true
-        join guardians guardian
-          on guardian.school_id =
-             mapping.school_id
-         and guardian.id =
-             mapping.guardian_id
-         and guardian.status =
-             'ACTIVE'::guardian_status
-         and guardian.phone is not null
-         and length(
-           trim(guardian.phone)
-         ) > 0
-        join students student
-          on student.school_id =
-             event.school_id
-         and student.id =
-             event.student_id
-      ),
-      queued as (
-        insert into school_notification_outbox (
-          school_id,
-          attendance_record_id,
-          presence_event_id,
-          guardian_id,
-          sender_id,
-          event_type,
-          recipient_phone,
-          template_key,
-          payload,
-          status,
-          attempt_count,
-          available_at,
-          created_at,
-          updated_at
-        )
-        select
-          recipients.school_id,
-          recipients.attendance_record_id,
-          recipients.presence_event_id,
-          recipients.guardian_id,
-          recipients.sender_id,
-          'STUDENT_CHECKED_IN'::school_notification_event_type,
-          recipients.recipient_phone,
-          'student_card_replacement_exception_checked_in',
-          jsonb_build_object(
-            'studentName',
-              recipients.student_name,
-            'casaStudentId',
-              recipients.casa_student_id,
-            'checkedInAt',
-              recipients.occurred_at,
-            'attendanceMethod',
-              'CARD_REPLACEMENT_EXCEPTION',
-            'replacementPending',
-              true,
-            'replacementRequested',
-              ${replacementRequested},
-            'graceDayNumber',
-              ${graceDayNumber},
-            'message',
-              recipients.student_name ||
-              ' has arrived at school through the card-replacement exception process.'
-          ),
-          'PENDING'::school_notification_delivery_status,
-          0,
-          now(),
-          now(),
-          now()
-        from recipients
-        on conflict do nothing
-        returning id
       )
       select
         record.id
@@ -1084,10 +969,7 @@ export async function recordCardReplacementAttendanceException(
           as presence_event_id,
         exception.id
           as exception_id,
-        (
-          select count(*)::int
-          from queued
-        ) as guardian_notifications_queued
+        0::int as guardian_notifications_queued
       from inserted_record record
       join inserted_event event
         on event.attendance_record_id =

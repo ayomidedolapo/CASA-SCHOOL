@@ -275,7 +275,7 @@ function formatTime(
     string | null,
 ): string {
   if (!value) {
-    return "—";
+    return "â€”";
   }
 
   const parsed =
@@ -765,6 +765,15 @@ export default function AttendanceClient(
             persistedDefault.name,
           );
 
+          setSchoolBusGraceMinutes(
+            persistedDefault
+              .schoolBusGraceMinutes,
+          );
+          setIndependentGraceMinutes(
+            persistedDefault
+              .independentGraceMinutes,
+          );
+
           setSelectedWeekdays(
             orderedDays.map(
               (day) =>
@@ -1176,8 +1185,10 @@ export default function AttendanceClient(
         );
 
       const body =
-        await response
-          .json() as {
+        JSON.parse(
+          (await response.text()) ||
+            "{}",
+        ) as {
             message?:
               string;
             code?:
@@ -2279,11 +2290,11 @@ export default function AttendanceClient(
                 .date ??
               "Loading date..."
             }
-            {" · "}
+            {" Â· "}
             {
               data?.clock
                 .clock ??
-              "—"
+              "â€”"
             }
           </div>
 
@@ -2506,11 +2517,11 @@ export default function AttendanceClient(
         </label>
 
         {data?.readOnly && (
-          <span className="casa-status">Historical · read only</span>
+          <span className="casa-status">Historical Â· read only</span>
         )}
 
         {data?.session?.mode === "PRESENCE_ONLY" && (
-          <span className="casa-status">Presence only · not graded</span>
+          <span className="casa-status">Presence only Â· not graded</span>
         )}
 
         <span
@@ -2934,7 +2945,7 @@ export default function AttendanceClient(
                         styles.success
                       }
                     >
-                      Authorized — waiting for face verification.
+                      Authorized â€” waiting for face verification.
                     </div>
                   ) : (
                     <input
@@ -3067,7 +3078,7 @@ export default function AttendanceClient(
                   value={branch.id}
                 >
                   {branch.name}
-                  {branch.isHeadquarters ? " · HQ" : ""}
+                  {branch.isHeadquarters ? " Â· HQ" : ""}
                 </option>
               ))}
             </select>
@@ -3238,7 +3249,7 @@ export default function AttendanceClient(
                       <td>
                         {
                           student.arrivalStatus ??
-                          "—"
+                          "â€”"
                         }
                       </td>
                       <td>
@@ -3325,7 +3336,7 @@ export default function AttendanceClient(
                               student.presenceStatus === "ON_CAMPUS" &&
                               (student.scannerCheckoutEligible ? (
                                 student.earlyDeparturePreauthorized ? (
-                                  <span className="casa-status">Early departure authorized · complete Scanner checkout</span>
+                                  <span className="casa-status">Early departure authorized Â· complete Scanner checkout</span>
                                 ) : (
                                   <label className={styles.actions}>
                                     <input
@@ -3426,11 +3437,11 @@ export default function AttendanceClient(
             <div className={styles.sectionHeader}>
               <div>
                 <h3 className={styles.sectionTitle}>
-                  {studentName(historyStudent)} · Attendance history
+                  {studentName(historyStudent)} Â· Attendance history
                 </h3>
                 <span className={styles.muted}>
                   {historyData
-                    ? `${historyData.period.academicSessionName}${historyData.period.academicTermName ? ` · ${historyData.period.academicTermName}` : ""}`
+                    ? `${historyData.period.academicSessionName}${historyData.period.academicTermName ? ` Â· ${historyData.period.academicTermName}` : ""}`
                     : "Loading history..."}
                 </span>
               </div>
@@ -3451,8 +3462,8 @@ export default function AttendanceClient(
             {historyData && (
               <>
                 <div className={styles.filters}>
-                  <span className="casa-status">Attendance {historyData.attendancePercentage ?? "—"}%</span>
-                  <span className="casa-status">Punctuality {historyData.punctualityPercentage ?? "—"}%</span>
+                  <span className="casa-status">Attendance {historyData.attendancePercentage ?? "â€”"}%</span>
+                  <span className="casa-status">Punctuality {historyData.punctualityPercentage ?? "â€”"}%</span>
                   <span className="casa-status">Early departures {historyData.earlyDepartures}</span>
                 </div>
                 <div className={styles.tableWrap}>
@@ -3471,9 +3482,9 @@ export default function AttendanceClient(
                       {historyData.trend.slice().reverse().map((entry) => (
                         <tr key={entry.date}>
                           <td>{entry.date}</td>
-                          <td>{entry.className || "—"}</td>
+                          <td>{entry.className || "â€”"}</td>
                           <td>{entry.status}</td>
-                          <td>{entry.actualArrivalStatus ?? "—"}</td>
+                          <td>{entry.actualArrivalStatus ?? "â€”"}</td>
                           <td>{formatTime(entry.recordedAt)}</td>
                           <td>{formatTime(entry.checkedOutAt)}</td>
                         </tr>
@@ -3583,7 +3594,7 @@ export default function AttendanceClient(
                 styles.muted
               }
             >
-              New version only — historical days remain intact.
+              New version only â€” historical days remain intact.
             </span>
           </div>
 
@@ -3905,7 +3916,81 @@ export default function AttendanceClient(
               </p>
             </div>
 
-            <button
+                        <div
+              className={
+                styles.policyTimes
+              }
+            >
+              <label>
+                <span
+                  className={
+                    styles.muted
+                  }
+                >
+                  School Bus grace (minutes)
+                </span>
+                <input
+                  className={
+                    styles.input
+                  }
+                  type="number"
+                  min={0}
+                  max={240}
+                  value={
+                    schoolBusGraceMinutes
+                  }
+                  onChange={(event) =>
+                    setSchoolBusGraceMinutes(
+                      Math.max(
+                        0,
+                        Math.min(
+                          240,
+                          Number(
+                            event.target.value,
+                          ) || 0,
+                        ),
+                      ),
+                    )
+                  }
+                />
+              </label>
+
+              <label>
+                <span
+                  className={
+                    styles.muted
+                  }
+                >
+                  Independent grace (minutes)
+                </span>
+                <input
+                  className={
+                    styles.input
+                  }
+                  type="number"
+                  min={0}
+                  max={240}
+                  value={
+                    independentGraceMinutes
+                  }
+                  onChange={(event) =>
+                    setIndependentGraceMinutes(
+                      Math.max(
+                        0,
+                        Math.min(
+                          240,
+                          Number(
+                            event.target.value,
+                          ) || 0,
+                        ),
+                      ),
+                    )
+                  }
+                />
+              </label>
+            </div>
+
+<button
               type="button"
               className={
                 styles.button
@@ -3933,7 +4018,34 @@ export default function AttendanceClient(
                     defaultPolicy.name
                   }
                 </strong>
-              </p>
+
+                <br />
+                <span>
+                  School Bus grace:{" "}
+                  <strong>
+                    {
+                      defaultPolicy
+                        .schoolBusGraceMinutes
+                    }{" "}
+                    min
+                  </strong>
+                  {" Ã‚Â· "}Independent grace:{" "}
+                  <strong>
+                    {
+                      defaultPolicy
+                        .independentGraceMinutes
+                    }{" "}
+                    min
+                  </strong>
+                  {" Ã‚Â· "}Effective:{" "}
+                  <strong>
+                    {
+                      defaultPolicy
+                        .validFrom
+                    }
+                  </strong>
+                </span>
+</p>
             )}
           </div>
         </section>
