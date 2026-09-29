@@ -1,6 +1,9 @@
 import { sql } from "drizzle-orm";
 
 import { getDb } from "@/db";
+import {
+  runGuardianPushOutbox,
+} from "@/server/messaging/guardian-push-worker";
 import type {
   SchoolAccess,
 } from "@/server/auth/authorization";
@@ -997,6 +1000,19 @@ export async function recordCardReplacementAttendanceException(
       409,
       "CARD_REPLACEMENT_EXCEPTION_STATE_CHANGED",
     );
+  }
+
+  try {
+    await runGuardianPushOutbox({
+      schoolId:
+        input.access.school.id,
+      presenceEventId:
+        row.presence_event_id,
+      limit: 50,
+    });
+  } catch {
+    // Physical attendance is authoritative. Push delivery is best-effort
+    // and must never roll back a completed replacement attendance record.
   }
 
   return {

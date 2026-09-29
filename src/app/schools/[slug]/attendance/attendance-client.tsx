@@ -2290,7 +2290,7 @@ export default function AttendanceClient(
                 .date ??
               "Loading date..."
             }
-            {" Â· "}
+            {" | "}
             {
               data?.clock
                 .clock ??
@@ -4029,7 +4029,7 @@ export default function AttendanceClient(
                     }{" "}
                     min
                   </strong>
-                  {" Ã‚Â· "}Independent grace:{" "}
+                  {" | "}Independent grace:{" "}
                   <strong>
                     {
                       defaultPolicy
@@ -4037,7 +4037,7 @@ export default function AttendanceClient(
                     }{" "}
                     min
                   </strong>
-                  {" Ã‚Â· "}Effective:{" "}
+                  {" | "}Effective:{" "}
                   <strong>
                     {
                       defaultPolicy
