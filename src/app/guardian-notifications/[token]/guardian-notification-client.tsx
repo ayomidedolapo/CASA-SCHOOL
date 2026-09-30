@@ -58,6 +58,23 @@ function isAppleMobile() {
   );
 }
 
+function isAndroid() {
+  return /Android/i.test(
+    navigator.userAgent,
+  );
+}
+
+function isChromeFamily() {
+  return (
+    /Chrome|CriOS/i.test(
+      navigator.userAgent,
+    ) &&
+    !/Edg|OPR|SamsungBrowser/i.test(
+      navigator.userAgent,
+    )
+  );
+}
+
 function isStandalone() {
   return (
     window.matchMedia(
@@ -109,6 +126,28 @@ export default function GuardianNotificationClient(
     setAppleNeedsInstall,
   ] =
     useState(false);
+  const [
+    permissionState,
+    setPermissionState,
+  ] =
+    useState<
+      | NotificationPermission
+      | "unsupported"
+      | "unknown"
+    >(
+      "unknown",
+    );
+  const [
+    permissionRecovery,
+    setPermissionRecovery,
+  ] =
+    useState<
+      | "PROMPT_NOT_SHOWN"
+      | "BLOCKED"
+      | null
+    >(
+      null,
+    );
 
   useEffect(
     () => {
@@ -181,6 +220,64 @@ export default function GuardianNotificationClient(
       return () => {
         window.clearTimeout(
           timeout,
+        );
+      };
+    },
+    [],
+  );
+
+  useEffect(
+    () => {
+      function syncPermission() {
+        if (
+          typeof window ===
+            "undefined" ||
+          !(
+            "Notification" in
+            window
+          )
+        ) {
+          setPermissionState(
+            "unsupported",
+          );
+          return;
+        }
+
+        const current =
+          Notification.permission;
+
+        setPermissionState(
+          current,
+        );
+
+        if (
+          current ===
+            "granted"
+        ) {
+          setPermissionRecovery(
+            null,
+          );
+        }
+      }
+
+      syncPermission();
+      window.addEventListener(
+        "focus",
+        syncPermission,
+      );
+      document.addEventListener(
+        "visibilitychange",
+        syncPermission,
+      );
+
+      return () => {
+        window.removeEventListener(
+          "focus",
+          syncPermission,
+        );
+        document.removeEventListener(
+          "visibilitychange",
+          syncPermission,
         );
       };
     },
@@ -268,32 +365,65 @@ export default function GuardianNotificationClient(
       const currentPermission =
         Notification.permission;
 
+      setPermissionState(
+        currentPermission,
+      );
+
       if (
         currentPermission ===
-        "denied"
+          "denied"
       ) {
+        setPermissionRecovery(
+          "BLOCKED",
+        );
+
         throw new Error(
-          "Notifications are blocked in this browser context. A single physical phone can receive CASA alerts for multiple students, but every setup link must be opened in the same browser profile where CASA notifications are allowed. If this link opened inside WhatsApp or another in-app browser, open it in Chrome (or your normal browser), allow CASA notifications there, then try again.",
+          isAndroid() &&
+            isChromeFamily()
+            ? "Chrome has blocked CASA notifications for this browser profile. Open CASA site permissions in Chrome and set Notifications to Allow, then return to this same setup page and tap Allow school notifications again. You do not need a new CASA link."
+            : "This browser has blocked CASA notifications. Change this site's notification permission to Allow, return to this setup page, and try again. You do not need a new CASA link.",
         );
       }
 
       const permission =
         currentPermission ===
-        "granted"
+          "granted"
           ? "granted"
           : await Notification
               .requestPermission();
 
+      setPermissionState(
+        permission,
+      );
+
       if (
         permission !==
-        "granted"
+          "granted"
       ) {
+        setPermissionRecovery(
+          permission ===
+            "denied"
+            ? "BLOCKED"
+            : "PROMPT_NOT_SHOWN",
+        );
+
         throw new Error(
-          "Notification permission was not allowed in this browser context. A single phone can be registered for more than one student. Open every guardian setup link in the same normal browser profile (for example Chrome), not an in-app browser, and allow notifications for CASA there.",
+          permission ===
+            "default"
+            ? (
+                isAndroid() &&
+                isChromeFamily()
+                  ? "Chrome did not grant notification permission. If no popup appeared, Chrome may have suppressed the prompt. Use the CASA site permission control in Chrome to set Notifications to Allow, then return here and tap Allow school notifications again. The current CASA setup link remains valid."
+                  : "The browser did not grant notification permission. Set this site's Notifications permission to Allow, return here, and try again. The current CASA setup link remains valid."
+              )
+            : "Notification permission is blocked for this browser context. Set CASA notifications to Allow in browser or device settings, then return here and try again.",
         );
       }
 
-      const serviceWorker =
+      setPermissionRecovery(
+        null,
+      );
+const serviceWorker =
         await navigator
           .serviceWorker
           .register(
@@ -562,7 +692,32 @@ export default function GuardianNotificationClient(
               </p>
             ) : null}
 
-            <button
+            {permissionRecovery ? (
+        <div className="mt-5 border border-black/20 bg-black/[0.03] p-4">
+          <p className="text-xs font-semibold">
+            Browser notification permission needs attention
+          </p>
+          <p className="mt-2 text-xs leading-5 text-black/60">
+            Current permission: {permissionState}. CASA cannot silently grant browser permission, but once this browser profile is allowed it can be registered for this student and other linked students without asking for browser permission again.
+          </p>
+          {isAndroid() &&
+          isChromeFamily() ? (
+            <ol className="mt-3 list-decimal space-y-1 pl-5 text-xs leading-5 text-black/60">
+              <li>On this CASA page, open the site controls beside the Chrome address bar.</li>
+              <li>Open Permissions and set Notifications to Allow.</li>
+              <li>In Chrome Settings, Site settings, Notifications, make sure sites are allowed to ask. Quieter prompts can hide the normal popup.</li>
+              <li>In Android Settings, Apps, Chrome, Notifications, make sure Chrome notifications are allowed.</li>
+              <li>Return to this same CASA page and tap Allow school notifications again. Do not request another setup link.</li>
+            </ol>
+          ) : (
+            <p className="mt-3 text-xs leading-5 text-black/60">
+              Set CASA Notifications to Allow in this browser or device settings, return to this same setup page, then tap Allow school notifications again. You do not need another setup link.
+            </p>
+          )}
+        </div>
+      ) : null}
+
+      <button
               type="button"
               className="casa-button mt-7 w-full"
               disabled={

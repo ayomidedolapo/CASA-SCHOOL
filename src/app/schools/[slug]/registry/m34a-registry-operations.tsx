@@ -12,6 +12,8 @@ import {
   obtainPasskeyStepUpGrant,
 } from "@/client/passkey-step-up";
 
+import GuardianNotificationDeviceManager from "./guardian-notification-device-manager";
+
 type GuardianLink = {
   linkId: string;
   guardianId: string;
@@ -833,6 +835,13 @@ export function RegistryM34AOperations({
                           ? "Reissue link with Passkey"
                           : "Create notification link"}
                 </button>
+                  <GuardianNotificationDeviceManager
+                    schoolSlug={schoolSlug}
+                    studentId={studentId}
+                    guardianLinkId={guardian.linkId}
+                    activeCount={guardian.activeNotificationDevices}
+                    onChanged={() => void load()}
+                  />
                 <span className="font-mono text-[9px] uppercase tracking-[0.08em] text-black/45">
                   {guardian.receivesNotifications &&
                   guardian.activeNotificationDevices > 0
