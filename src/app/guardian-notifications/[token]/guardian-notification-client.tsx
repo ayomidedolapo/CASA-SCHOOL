@@ -273,7 +273,7 @@ export default function GuardianNotificationClient(
         "denied"
       ) {
         throw new Error(
-          "Notifications are blocked for this site. On Android, open the browser site settings for CASA, set Notifications to Allow, then return here and tap Allow school notifications again.",
+          "Notifications are blocked in this browser context. A single physical phone can receive CASA alerts for multiple students, but every setup link must be opened in the same browser profile where CASA notifications are allowed. If this link opened inside WhatsApp or another in-app browser, open it in Chrome (or your normal browser), allow CASA notifications there, then try again.",
         );
       }
 
@@ -289,7 +289,7 @@ export default function GuardianNotificationClient(
         "granted"
       ) {
         throw new Error(
-          "Notification permission was not allowed. Choose Allow in the browser permission prompt. If no prompt appeared, open this site's notification permission in your browser settings and set it to Allow.",
+          "Notification permission was not allowed in this browser context. A single phone can be registered for more than one student. Open every guardian setup link in the same normal browser profile (for example Chrome), not an in-app browser, and allow notifications for CASA there.",
         );
       }
 

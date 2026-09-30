@@ -82,17 +82,46 @@ type ArrivalAssignment = {
 async function jsonOrThrow<T>(
   response: Response,
 ): Promise<T> {
-  const body =
-    await response.json().catch(
-      () => ({}),
-    ) as {
-      message?: string;
-    } & T;
+  const responseText =
+    await response.text();
+
+  let body:
+    | ({
+        message?: string;
+        code?: string;
+      } & T)
+    | null =
+    null;
+
+  if (responseText.trim()) {
+    try {
+      body =
+        JSON.parse(responseText) as {
+          message?: string;
+          code?: string;
+        } & T;
+    } catch {
+      body =
+        null;
+    }
+  }
 
   if (!response.ok) {
+    const codeSuffix =
+      body?.code
+        ? ` (${body.code})`
+        : "";
+    const statusSuffix =
+      ` [HTTP ${response.status}]`;
+
     throw new Error(
-      body.message ??
-        "CASA could not complete this registry action.",
+      `${body?.message ?? "CASA could not complete this registry action."}${codeSuffix}${statusSuffix}`,
+    );
+  }
+
+  if (!body) {
+    throw new Error(
+      `CASA returned an empty or unreadable registry response. [HTTP ${response.status}]`,
     );
   }
 
