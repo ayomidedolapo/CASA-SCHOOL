@@ -275,7 +275,7 @@ function formatTime(
     string | null,
 ): string {
   if (!value) {
-    return "â€”";
+    return "-";
   }
 
   const parsed =
@@ -2294,7 +2294,7 @@ export default function AttendanceClient(
             {
               data?.clock
                 .clock ??
-              "â€”"
+              "-"
             }
           </div>
 
@@ -2517,11 +2517,11 @@ export default function AttendanceClient(
         </label>
 
         {data?.readOnly && (
-          <span className="casa-status">Historical Â· read only</span>
+          <span className="casa-status">Historical - read only</span>
         )}
 
         {data?.session?.mode === "PRESENCE_ONLY" && (
-          <span className="casa-status">Presence only Â· not graded</span>
+          <span className="casa-status">Presence only - not graded</span>
         )}
 
         <span
@@ -2945,7 +2945,7 @@ export default function AttendanceClient(
                         styles.success
                       }
                     >
-                      Authorized â€” waiting for face verification.
+                      Authorized - waiting for face verification.
                     </div>
                   ) : (
                     <input
@@ -3078,7 +3078,7 @@ export default function AttendanceClient(
                   value={branch.id}
                 >
                   {branch.name}
-                  {branch.isHeadquarters ? " Â· HQ" : ""}
+                  {branch.isHeadquarters ? " - HQ" : ""}
                 </option>
               ))}
             </select>
@@ -3249,7 +3249,7 @@ export default function AttendanceClient(
                       <td>
                         {
                           student.arrivalStatus ??
-                          "â€”"
+                          "-"
                         }
                       </td>
                       <td>
@@ -3336,7 +3336,7 @@ export default function AttendanceClient(
                               student.presenceStatus === "ON_CAMPUS" &&
                               (student.scannerCheckoutEligible ? (
                                 student.earlyDeparturePreauthorized ? (
-                                  <span className="casa-status">Early departure authorized Â· complete Scanner checkout</span>
+                                  <span className="casa-status">Early departure authorized - complete Scanner checkout</span>
                                 ) : (
                                   <label className={styles.actions}>
                                     <input
@@ -3437,11 +3437,11 @@ export default function AttendanceClient(
             <div className={styles.sectionHeader}>
               <div>
                 <h3 className={styles.sectionTitle}>
-                  {studentName(historyStudent)} Â· Attendance history
+                  {studentName(historyStudent)} - Attendance history
                 </h3>
                 <span className={styles.muted}>
                   {historyData
-                    ? `${historyData.period.academicSessionName}${historyData.period.academicTermName ? ` Â· ${historyData.period.academicTermName}` : ""}`
+                    ? `${historyData.period.academicSessionName}${historyData.period.academicTermName ? ` - ${historyData.period.academicTermName}` : ""}`
                     : "Loading history..."}
                 </span>
               </div>
@@ -3462,8 +3462,8 @@ export default function AttendanceClient(
             {historyData && (
               <>
                 <div className={styles.filters}>
-                  <span className="casa-status">Attendance {historyData.attendancePercentage ?? "â€”"}%</span>
-                  <span className="casa-status">Punctuality {historyData.punctualityPercentage ?? "â€”"}%</span>
+                  <span className="casa-status">Attendance {historyData.attendancePercentage ?? "-"}%</span>
+                  <span className="casa-status">Punctuality {historyData.punctualityPercentage ?? "-"}%</span>
                   <span className="casa-status">Early departures {historyData.earlyDepartures}</span>
                 </div>
                 <div className={styles.tableWrap}>
@@ -3482,9 +3482,9 @@ export default function AttendanceClient(
                       {historyData.trend.slice().reverse().map((entry) => (
                         <tr key={entry.date}>
                           <td>{entry.date}</td>
-                          <td>{entry.className || "â€”"}</td>
+                          <td>{entry.className || "-"}</td>
                           <td>{entry.status}</td>
-                          <td>{entry.actualArrivalStatus ?? "â€”"}</td>
+                          <td>{entry.actualArrivalStatus ?? "-"}</td>
                           <td>{formatTime(entry.recordedAt)}</td>
                           <td>{formatTime(entry.checkedOutAt)}</td>
                         </tr>
@@ -3594,7 +3594,7 @@ export default function AttendanceClient(
                 styles.muted
               }
             >
-              New version only â€” historical days remain intact.
+              New version only - historical days remain intact.
             </span>
           </div>
 

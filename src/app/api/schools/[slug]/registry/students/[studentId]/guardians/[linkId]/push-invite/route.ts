@@ -287,7 +287,6 @@ export async function POST(
                 ${access.school.id}::uuid
               and student_guardian_link_id =
                 ${linkId}::uuid
-              and claimed_at is null
               and revoked_at is null
             returning id
           )
