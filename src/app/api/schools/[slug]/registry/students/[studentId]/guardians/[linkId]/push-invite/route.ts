@@ -303,7 +303,8 @@ export async function POST(
             school_id,
             student_guardian_link_id
           )
-          where revoked_at is null
+          where claimed_at is null
+            and revoked_at is null
           do update set
             branch_id =
               excluded.branch_id,
