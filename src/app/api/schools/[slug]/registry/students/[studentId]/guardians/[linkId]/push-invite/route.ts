@@ -277,19 +277,6 @@ export async function POST(
           string;
       }>(
         await db.execute(sql`
-          with old_link as (
-            update guardian_push_enrollment_links
-            set
-              revoked_at =
-                now()
-            where
-              school_id =
-                ${access.school.id}::uuid
-              and student_guardian_link_id =
-                ${linkId}::uuid
-              and revoked_at is null
-            returning id
-          )
           insert into guardian_push_enrollment_links (
             school_id,
             branch_id,
@@ -312,6 +299,30 @@ export async function POST(
             now() + interval '48 hours',
             now()
           )
+          on conflict (
+            school_id,
+            student_guardian_link_id
+          )
+          where revoked_at is null
+          do update set
+            branch_id =
+              excluded.branch_id,
+            student_id =
+              excluded.student_id,
+            guardian_id =
+              excluded.guardian_id,
+            token_hash =
+              excluded.token_hash,
+            created_by_membership_id =
+              excluded.created_by_membership_id,
+            expires_at =
+              excluded.expires_at,
+            created_at =
+              excluded.created_at,
+            claimed_at =
+              null,
+            revoked_at =
+              null
           returning
             id,
             expires_at
