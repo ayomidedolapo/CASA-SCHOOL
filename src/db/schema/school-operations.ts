@@ -425,6 +425,211 @@ export const studentAttendanceExcuses = pgTable(
   ],
 );
 
+export const studentBranchTransferStatusEnum =
+  pgEnum("student_branch_transfer_status", [
+    "PENDING",
+    "CONFIRMED",
+    "REJECTED",
+    "CANCELLED",
+  ]);
+
+export const studentBranchTransferRequests =
+  pgTable(
+    "student_branch_transfer_requests",
+    {
+      id: uuid("id")
+        .defaultRandom()
+        .primaryKey(),
+      schoolId: uuid("school_id")
+        .notNull(),
+      studentId: uuid("student_id")
+        .notNull(),
+      sourceBranchId: uuid(
+        "source_branch_id",
+      ).notNull(),
+      targetBranchId: uuid(
+        "target_branch_id",
+      ).notNull(),
+      sourceEnrollmentId: uuid(
+        "source_enrollment_id",
+      ).notNull(),
+      targetClassArmId: uuid(
+        "target_class_arm_id",
+      ),
+      status:
+        studentBranchTransferStatusEnum(
+          "status",
+        )
+          .default("PENDING")
+          .notNull(),
+      reason: text("reason"),
+      requestedByMembershipId: uuid(
+        "requested_by_membership_id",
+      ).notNull(),
+      decidedByMembershipId: uuid(
+        "decided_by_membership_id",
+      ),
+      requestedAt: timestamp(
+        "requested_at",
+        {
+          withTimezone: true,
+        },
+      )
+        .defaultNow()
+        .notNull(),
+      decidedAt: timestamp(
+        "decided_at",
+        {
+          withTimezone: true,
+        },
+      ),
+      createdAt: timestamp(
+        "created_at",
+        {
+          withTimezone: true,
+        },
+      )
+        .defaultNow()
+        .notNull(),
+      updatedAt: timestamp(
+        "updated_at",
+        {
+          withTimezone: true,
+        },
+      )
+        .defaultNow()
+        .notNull(),
+    },
+    (table) => [
+      unique(
+        "student_branch_transfer_school_id_id_unique",
+      ).on(
+        table.schoolId,
+        table.id,
+      ),
+      uniqueIndex(
+        "student_branch_transfer_one_pending_idx",
+      )
+        .on(
+          table.schoolId,
+          table.studentId,
+        )
+        .where(
+          sql`${table.status} = 'PENDING'`,
+        ),
+      index(
+        "student_branch_transfer_source_status_idx",
+      ).on(
+        table.schoolId,
+        table.sourceBranchId,
+        table.status,
+      ),
+      index(
+        "student_branch_transfer_target_status_idx",
+      ).on(
+        table.schoolId,
+        table.targetBranchId,
+        table.status,
+      ),
+      foreignKey({
+        columns: [
+          table.schoolId,
+          table.studentId,
+        ],
+        foreignColumns: [
+          students.schoolId,
+          students.id,
+        ],
+        name:
+          "student_branch_transfer_student_fk",
+      }).onDelete("cascade"),
+      foreignKey({
+        columns: [
+          table.schoolId,
+          table.sourceBranchId,
+        ],
+        foreignColumns: [
+          schoolBranches.schoolId,
+          schoolBranches.id,
+        ],
+        name:
+          "student_branch_transfer_source_branch_fk",
+      }).onDelete("restrict"),
+      foreignKey({
+        columns: [
+          table.schoolId,
+          table.targetBranchId,
+        ],
+        foreignColumns: [
+          schoolBranches.schoolId,
+          schoolBranches.id,
+        ],
+        name:
+          "student_branch_transfer_target_branch_fk",
+      }).onDelete("restrict"),
+      foreignKey({
+        columns: [
+          table.schoolId,
+          table.sourceEnrollmentId,
+        ],
+        foreignColumns: [
+          studentEnrollments.schoolId,
+          studentEnrollments.id,
+        ],
+        name:
+          "student_branch_transfer_source_enrollment_fk",
+      }).onDelete("restrict"),
+      foreignKey({
+        columns: [
+          table.schoolId,
+          table.targetClassArmId,
+        ],
+        foreignColumns: [
+          classArms.schoolId,
+          classArms.id,
+        ],
+        name:
+          "student_branch_transfer_target_class_fk",
+      }).onDelete("restrict"),
+      foreignKey({
+        columns: [
+          table.schoolId,
+          table.requestedByMembershipId,
+        ],
+        foreignColumns: [
+          schoolMemberships.schoolId,
+          schoolMemberships.id,
+        ],
+        name:
+          "student_branch_transfer_requester_fk",
+      }).onDelete("restrict"),
+      foreignKey({
+        columns: [
+          table.schoolId,
+          table.decidedByMembershipId,
+        ],
+        foreignColumns: [
+          schoolMemberships.schoolId,
+          schoolMemberships.id,
+        ],
+        name:
+          "student_branch_transfer_decider_fk",
+      }).onDelete("restrict"),
+      check(
+        "student_branch_transfer_branches_differ_check",
+        sql`${table.sourceBranchId} <> ${table.targetBranchId}`,
+      ),
+      check(
+        "student_branch_transfer_decision_pair_check",
+        sql`(
+          (${table.status} = 'PENDING' and ${table.decidedAt} is null and ${table.decidedByMembershipId} is null)
+          or
+          (${table.status} <> 'PENDING' and ${table.decidedAt} is not null and ${table.decidedByMembershipId} is not null)
+        )`,
+      ),
+    ],
+  );
+
 export const studentProgressionBatches = pgTable(
   "student_progression_batches",
   {

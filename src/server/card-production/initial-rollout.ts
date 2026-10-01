@@ -53,6 +53,8 @@ export async function getInitialCardRolloutState(
       school_id: string;
       completed_at:
         string | Date | null;
+      completed_by_present:
+        boolean;
       active_template:
         boolean;
       active_students:
@@ -74,6 +76,10 @@ export async function getInitialCardRolloutState(
             as school_id,
           school.initial_card_rollout_completed_at
             as completed_at,
+          (
+            school.initial_card_rollout_completed_by_internal_membership_id
+              is not null
+          ) as completed_by_present,
           exists (
             select 1
             from student_card_templates template
@@ -216,7 +222,8 @@ export async function getInitialCardRolloutState(
   }
 
   const completedAt =
-    row.completed_at
+    row.completed_at &&
+    row.completed_by_present
       ? (
           row.completed_at instanceof Date
             ? row.completed_at
@@ -748,6 +755,8 @@ export async function completeInitialCardRollout(
           id =
             ${input.schoolId}::uuid
           and initial_card_rollout_completed_at
+            is null
+          and initial_card_rollout_completed_by_internal_membership_id
             is null
         returning
           initial_card_rollout_completed_at

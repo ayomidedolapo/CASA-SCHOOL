@@ -45,6 +45,8 @@ export interface AttendanceOperationalScope {
     string | null;
   studentBranchStatus:
     "ACTIVE" | "INACTIVE" | null;
+  branchTransferPending?:
+    boolean;
   nonInstructionalEvent:
     | {
         id: string;
@@ -68,6 +70,12 @@ export type AttendanceScopeRejection =
   | {
       code:
         "STUDENT_BRANCH_UNRESOLVED";
+      message: string;
+      classification: string;
+    }
+  | {
+      code:
+        "BRANCH_TRANSFER_PENDING";
       message: string;
       classification: string;
     }
@@ -118,6 +126,8 @@ export async function resolveAttendanceOperationalScope(
           as student_branch_name,
         student_branch.status
           as student_branch_status,
+        pending_transfer.id is not null
+          as branch_transfer_pending,
         calendar.id
           as calendar_event_id,
         calendar.kind
@@ -152,6 +162,8 @@ export async function resolveAttendanceOperationalScope(
             attendance.school_id
           and enrollment.student_id =
             ${input.studentId}::uuid
+          and enrollment.status =
+            'ACTIVE'::student_enrollment_status
           and enrollment.starts_on <=
             attendance.attendance_date
           and (
@@ -171,6 +183,22 @@ export async function resolveAttendanceOperationalScope(
            attendance.school_id
        and student_branch.id =
            student_map.branch_id
+      left join lateral (
+        select
+          transfer.id
+        from student_branch_transfer_requests transfer
+        where
+          transfer.school_id =
+            attendance.school_id
+          and transfer.student_id =
+            ${input.studentId}::uuid
+          and transfer.status =
+            'PENDING'::student_branch_transfer_status
+        order by
+          transfer.requested_at desc
+        limit 1
+      ) pending_transfer
+        on true
       left join lateral (
         select
           event.id,
@@ -223,6 +251,8 @@ export async function resolveAttendanceOperationalScope(
         string | null;
       student_branch_status:
         "ACTIVE" | "INACTIVE" | null;
+      branch_transfer_pending:
+        boolean;
       calendar_event_id:
         string | null;
       calendar_event_kind:
@@ -256,6 +286,10 @@ export async function resolveAttendanceOperationalScope(
       row.student_branch_name,
     studentBranchStatus:
       row.student_branch_status,
+    branchTransferPending:
+      Boolean(
+        row.branch_transfer_pending,
+      ),
     nonInstructionalEvent:
       row.calendar_event_id &&
       row.calendar_event_kind &&
@@ -292,6 +326,19 @@ export function getAttendanceScopeRejection(
         "This attendance terminal has not been assigned to a school branch.",
       classification:
         "TERMINAL_BRANCH_UNASSIGNED",
+    };
+  }
+
+  if (
+    scope.branchTransferPending
+  ) {
+    return {
+      code:
+        "BRANCH_TRANSFER_PENDING",
+      message:
+        "This student has a branch transfer awaiting destination confirmation. Attendance is temporarily suspended at both branches.",
+      classification:
+        "BRANCH_TRANSFER_PENDING",
     };
   }
 

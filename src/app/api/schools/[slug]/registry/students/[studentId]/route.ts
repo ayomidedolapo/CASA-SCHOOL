@@ -27,6 +27,9 @@ import {
   requireRegistryOperator,
 } from "@/server/registry/http";
 import {
+  listVisibleBranches,
+} from "@/server/school-operations/operations";
+import {
   studentUpdateSchema,
 } from "@/server/registry/validation";
 import {
@@ -42,6 +45,64 @@ interface RouteContext {
   }>;
 }
 
+async function registryStudentVisible(
+  slug: string,
+  schoolId: string,
+  studentId: string,
+) {
+  const visibility =
+    await listVisibleBranches(
+      slug,
+    );
+  const visibleBranchIds =
+    (
+      visibility.branches as
+        Array<{
+          id: string;
+        }>
+    ).map(
+      (branch) =>
+        branch.id,
+    );
+
+  if (
+    visibleBranchIds.length ===
+    0
+  ) {
+    return false;
+  }
+
+  const row =
+    (
+      await getDb()
+        .select({
+          homeBranchId:
+            students.homeBranchId,
+        })
+        .from(students)
+        .where(
+          and(
+            eq(
+              students.schoolId,
+              schoolId,
+            ),
+            eq(
+              students.id,
+              studentId,
+            ),
+          ),
+        )
+        .limit(1)
+    )[0];
+
+  return Boolean(
+    row?.homeBranchId &&
+    visibleBranchIds.includes(
+      row.homeBranchId,
+    ),
+  );
+}
+
 export async function GET(
   _request: NextRequest,
   context: RouteContext,
@@ -55,6 +116,26 @@ export async function GET(
     const access =
       await requireRegistryOperator(slug);
     const db = getDb();
+
+    if (
+      !(await registryStudentVisible(
+        slug,
+        access.school.id,
+        studentId,
+      ))
+    ) {
+      return NextResponse.json(
+        {
+          message:
+            "Student not found in your active branch scope.",
+        },
+        {
+          status: 404,
+          headers:
+            registryNoStoreHeaders,
+        },
+      );
+    }
 
     const studentRows = await db
       .select()
@@ -291,6 +372,26 @@ export async function PATCH(
     const access =
       await requireRegistryOperator(slug);
 
+    if (
+      !(await registryStudentVisible(
+        slug,
+        access.school.id,
+        studentId,
+      ))
+    ) {
+      return NextResponse.json(
+        {
+          message:
+            "Student not found in your active branch scope.",
+        },
+        {
+          status: 404,
+          headers:
+            registryNoStoreHeaders,
+        },
+      );
+    }
+
     let body: unknown;
 
     try {
@@ -423,6 +524,26 @@ export async function DELETE(
       await requireRegistryAdmin(
         slug,
       );
+
+    if (
+      !(await registryStudentVisible(
+        slug,
+        access.school.id,
+        studentId,
+      ))
+    ) {
+      return NextResponse.json(
+        {
+          message:
+            "Student not found in your active branch scope.",
+        },
+        {
+          status: 404,
+          headers:
+            registryNoStoreHeaders,
+        },
+      );
+    }
 
     const result =
       await archiveStudent({

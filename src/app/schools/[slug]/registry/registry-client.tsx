@@ -183,6 +183,28 @@ export function RegistryClient({
   ] =
     useState(0);
 
+  const [
+    transferBranches,
+    setTransferBranches,
+  ] =
+    useState<
+      Array<{
+        id: string;
+        name: string;
+        code: string;
+      }>
+    >([]);
+  const [
+    transferTargetBranchId,
+    setTransferTargetBranchId,
+  ] =
+    useState("");
+  const [
+    transferReason,
+    setTransferReason,
+  ] =
+    useState("");
+
   useEffect(() => {
     const handleBatchComplete = () => {
       setCardActivationBatchVersion(
@@ -202,6 +224,64 @@ export function RegistryClient({
       );
     };
   }, []);
+
+  useEffect(() => {
+    if (
+      !roles.includes(
+        "OWNER",
+      ) &&
+      !roles.includes(
+        "ADMIN",
+      )
+    ) {
+      return;
+    }
+
+    void fetch(
+      `/api/schools/${encodeURIComponent(
+        school.slug,
+      )}/transfers`,
+      {
+        cache:
+          "no-store",
+      },
+    )
+      .then(
+        async (
+          response,
+        ) => {
+          if (!response.ok) {
+            return;
+          }
+
+          const body =
+            await response
+              .json()
+              .catch(
+                () => ({}),
+              ) as {
+                branches?: Array<{
+                  id: string;
+                  name: string;
+                  code: string;
+                }>;
+              };
+
+          setTransferBranches(
+            body.branches ??
+            [],
+          );
+        },
+      )
+      .catch(
+        () => {
+          // Transfer navigation is optional until an Admin uses it.
+        },
+      );
+  }, [
+    roles,
+    school.slug,
+  ]);
 
   const apiBase = useMemo(
     () =>
@@ -750,6 +830,67 @@ export function RegistryClient({
     }
   }
 
+  async function requestBranchTransfer() {
+    if (
+      !selectedStudentId ||
+      !selectedStudent ||
+      !transferTargetBranchId
+    ) {
+      setError(
+        "Choose the destination branch.",
+      );
+      return;
+    }
+
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+
+    try {
+      await request(
+        `/students/${selectedStudentId}/transfer`,
+        {
+          method:
+            "POST",
+          body:
+            JSON.stringify({
+              targetBranchId:
+                transferTargetBranchId,
+              reason:
+                transferReason.trim() ||
+                null,
+            }),
+        },
+      );
+
+      setNotice(
+        "Branch transfer requested. The student is temporarily suspended from attendance terminals until the destination branch confirms or rejects the request.",
+      );
+      setTransferTargetBranchId(
+        "",
+      );
+      setTransferReason(
+        "",
+      );
+      setSelectedStudentId(
+        null,
+      );
+      setStudentDetail(
+        null,
+      );
+      await refresh();
+    } catch (cause) {
+      setError(
+        cause instanceof
+          Error
+          ? cause.message
+          : "Unable to request branch transfer.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function updateStudent(
     event: FormEvent<HTMLFormElement>,
   ) {
@@ -911,6 +1052,8 @@ export function RegistryClient({
                 <Link className="border-b border-black" href={`/schools/${encodeURIComponent(school.slug)}/technician`}>Identity operations</Link>
                 {(roles.includes("OWNER") || roles.includes("ADMIN")) ? (
                   <>
+                    <Link className="border-b border-black" href={`/schools/${encodeURIComponent(school.slug)}/progression`}>Session progression</Link>
+                    <Link className="border-b border-black" href={`/schools/${encodeURIComponent(school.slug)}/transfers`}>Branch transfers</Link>
                     <Link className="border-b border-black" href={`/schools/${encodeURIComponent(school.slug)}/academic`}>Academic setup</Link>
                     <Link className="border-b border-black" href={`/schools/${encodeURIComponent(school.slug)}/calendar`}>Calendar & holidays</Link>
                     <Link className="border-b border-black" href={`/schools/${encodeURIComponent(school.slug)}/staff-access`}>Staff & access</Link>
@@ -1444,6 +1587,120 @@ export function RegistryClient({
                   schoolSlug={school.slug}
                   studentId={selectedStudent.id}
                 />
+                {(roles.includes("OWNER") ||
+                  roles.includes("ADMIN")) &&
+                selectedStudent.homeBranchId ? (
+                  <div className="mt-7 border-t border-black pt-5">
+                    <div className="flex flex-wrap items-end justify-between gap-3">
+                      <div>
+                        <p className="casa-kicker">
+                          Branch transfer
+                        </p>
+                        <p className="mt-2 max-w-xl text-xs leading-5 text-black/50">
+                          Use this for a transfer while the current term/session is still running. Sending the request temporarily suspends attendance-terminal use until the destination branch confirms or rejects it.
+                        </p>
+                      </div>
+                      <Link
+                        className="casa-button"
+                        href={`/schools/${encodeURIComponent(
+                          school.slug,
+                        )}/transfers`}
+                      >
+                        Open transfer requests
+                      </Link>
+                    </div>
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                      <label className="casa-label">
+                        <span>
+                          Destination branch
+                        </span>
+                        <select
+                          className="casa-field"
+                          value={
+                            transferTargetBranchId
+                          }
+                          onChange={(
+                            event,
+                          ) =>
+                            setTransferTargetBranchId(
+                              event
+                                .target
+                                .value,
+                            )
+                          }
+                        >
+                          <option
+                            value=""
+                            disabled
+                          >
+                            Select branch
+                          </option>
+                          {transferBranches
+                            .filter(
+                              (
+                                branch,
+                              ) =>
+                                branch.id !==
+                                selectedStudent.homeBranchId,
+                            )
+                            .map(
+                              (
+                                branch,
+                              ) => (
+                                <option
+                                  key={
+                                    branch.id
+                                  }
+                                  value={
+                                    branch.id
+                                  }
+                                >
+                                  {
+                                    branch.name
+                                  }
+                                </option>
+                              ),
+                            )}
+                        </select>
+                      </label>
+                      <label className="casa-label">
+                        <span>
+                          Reason / optional
+                        </span>
+                        <input
+                          className="casa-field"
+                          value={
+                            transferReason
+                          }
+                          onChange={(
+                            event,
+                          ) =>
+                            setTransferReason(
+                              event
+                                .target
+                                .value,
+                            )
+                          }
+                          placeholder="Family relocation, campus move..."
+                        />
+                      </label>
+                    </div>
+                    <button
+                      type="button"
+                      className="casa-button-primary mt-3"
+                      disabled={
+                        busy ||
+                        !transferTargetBranchId
+                      }
+                      onClick={() =>
+                        void requestBranchTransfer()
+                      }
+                    >
+                      Request branch transfer
+                    </button>
+                  </div>
+                ) : null}
+
                 <div className="mt-7 border-t border-black pt-5">
                   <p className="casa-kicker">
                     Enrollment

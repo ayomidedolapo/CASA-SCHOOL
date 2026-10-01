@@ -49,6 +49,16 @@ export const schools = pgTable(
     check(
       "schools_name_not_blank_check",
       sql`length(trim(${table.name})) > 0`,
+    ),    check(
+      "schools_initial_card_rollout_manual_completion_check",
+      sql`(
+        ${table.initialCardRolloutCompletedAt} is null
+        and ${table.initialCardRolloutCompletedByInternalMembershipId} is null
+      ) or (
+        ${table.initialCardRolloutCompletedAt} is not null
+        and ${table.initialCardRolloutCompletedByInternalMembershipId} is not null
+      )`,
     ),
+
   ],
 );

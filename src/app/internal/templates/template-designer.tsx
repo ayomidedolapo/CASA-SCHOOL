@@ -43,37 +43,229 @@ function loadImage(url: string): Promise<HTMLImageElement> {
   });
 }
 
-async function flattenStaticArtwork(baseFile: File, side: Side, fields: DesignField[]): Promise<File> {
-  const baseUrl = URL.createObjectURL(baseFile);
-  try {
-    const base = await loadImage(baseUrl);
-    const canvas = document.createElement("canvas");
-    canvas.width = base.naturalWidth || base.width;
-    canvas.height = base.naturalHeight || base.height;
-    const context = canvas.getContext("2d");
-    if (!context) throw new Error("This browser cannot prepare the card artwork.");
-    context.drawImage(base, 0, 0, canvas.width, canvas.height);
+const TEMPLATE_ARTWORK_MAX_DIMENSION =
+  2000;
+const TEMPLATE_ARTWORK_TARGET_BYTES =
+  3.5 * 1024 * 1024;
 
-    for (const field of fields.filter((entry) => entry.side === side)) {
-      if (field.kind === "IMAGE") {
-        const image = await loadImage(field.url);
-        context.drawImage(image, Math.round(field.x * canvas.width), Math.round(field.y * canvas.height), Math.round(field.width * canvas.width), Math.round(field.height * canvas.height));
+async function canvasBlob(
+  canvas: HTMLCanvasElement,
+  quality: number,
+) {
+  return new Promise<Blob>(
+    (
+      resolve,
+      reject,
+    ) =>
+      canvas.toBlob(
+        (value) =>
+          value
+            ? resolve(value)
+            : reject(
+                new Error(
+                  "Unable to prepare the flattened card artwork.",
+                ),
+              ),
+        "image/webp",
+        quality,
+      ),
+  );
+}
+
+async function flattenStaticArtwork(
+  baseFile: File,
+  side: Side,
+  fields: DesignField[],
+): Promise<File> {
+  const baseUrl =
+    URL.createObjectURL(
+      baseFile,
+    );
+
+  try {
+    const base =
+      await loadImage(
+        baseUrl,
+      );
+    const sourceWidth =
+      base.naturalWidth ||
+      base.width;
+    const sourceHeight =
+      base.naturalHeight ||
+      base.height;
+    const scale =
+      Math.min(
+        1,
+        TEMPLATE_ARTWORK_MAX_DIMENSION /
+          Math.max(
+            sourceWidth,
+            sourceHeight,
+          ),
+      );
+    const canvas =
+      document.createElement(
+        "canvas",
+      );
+
+    canvas.width =
+      Math.max(
+        1,
+        Math.round(
+          sourceWidth *
+            scale,
+        ),
+      );
+    canvas.height =
+      Math.max(
+        1,
+        Math.round(
+          sourceHeight *
+            scale,
+        ),
+      );
+
+    const context =
+      canvas.getContext(
+        "2d",
+      );
+
+    if (!context) {
+      throw new Error(
+        "This browser cannot prepare the card artwork.",
+      );
+    }
+
+    context.drawImage(
+      base,
+      0,
+      0,
+      canvas.width,
+      canvas.height,
+    );
+
+    for (
+      const field of
+        fields.filter(
+          (entry) =>
+            entry.side ===
+            side,
+        )
+    ) {
+      if (
+        field.kind ===
+        "IMAGE"
+      ) {
+        const image =
+          await loadImage(
+            field.url,
+          );
+
+        context.drawImage(
+          image,
+          Math.round(
+            field.x *
+              canvas.width,
+          ),
+          Math.round(
+            field.y *
+              canvas.height,
+          ),
+          Math.round(
+            field.width *
+              canvas.width,
+          ),
+          Math.round(
+            field.height *
+              canvas.height,
+          ),
+        );
       }
-      if (field.kind === "STATIC_TEXT") {
+
+      if (
+        field.kind ===
+        "STATIC_TEXT"
+      ) {
         context.save();
-        context.fillStyle = field.color;
-        context.font = `${field.weight} ${Math.max(8, Math.round(field.fontSize * canvas.width))}px Arial, Helvetica, sans-serif`;
-        context.textAlign = "center";
-        context.textBaseline = "middle";
-        context.fillText(field.text, Math.round(field.x * canvas.width), Math.round(field.y * canvas.height));
+        context.fillStyle =
+          field.color;
+        context.font =
+          `${field.weight} ${Math.max(
+            8,
+            Math.round(
+              field.fontSize *
+                canvas.width,
+            ),
+          )}px Arial, Helvetica, sans-serif`;
+        context.textAlign =
+          "center";
+        context.textBaseline =
+          "middle";
+        context.fillText(
+          field.text,
+          Math.round(
+            field.x *
+              canvas.width,
+          ),
+          Math.round(
+            field.y *
+              canvas.height,
+          ),
+        );
         context.restore();
       }
     }
 
-    const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob((value) => value ? resolve(value) : reject(new Error("Unable to prepare the flattened card artwork.")), "image/png"));
-    return new File([blob], `${side.toLowerCase()}-card-template.png`, { type: "image/png" });
+    let blob:
+      Blob | null =
+        null;
+
+    for (
+      const quality of
+        [
+          0.94,
+          0.86,
+          0.76,
+          0.66,
+        ]
+    ) {
+      blob =
+        await canvasBlob(
+          canvas,
+          quality,
+        );
+
+      if (
+        blob.size <=
+        TEMPLATE_ARTWORK_TARGET_BYTES
+      ) {
+        break;
+      }
+    }
+
+    if (
+      !blob ||
+      blob.size >
+        TEMPLATE_ARTWORK_TARGET_BYTES
+    ) {
+      throw new Error(
+        "The prepared artwork is still too large. Reduce the base image resolution and save again.",
+      );
+    }
+
+    return new File(
+      [
+        blob,
+      ],
+      `${side.toLowerCase()}-card-template.webp`,
+      {
+        type:
+          "image/webp",
+      },
+    );
   } finally {
-    URL.revokeObjectURL(baseUrl);
+    URL.revokeObjectURL(
+      baseUrl,
+    );
   }
 }
 
