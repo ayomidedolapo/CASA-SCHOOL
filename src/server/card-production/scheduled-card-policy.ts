@@ -61,12 +61,16 @@ export async function resolveFirstCardQueueSchedule(
             select
               enrollment.id,
               enrollment.academic_session_id,
+              school.initial_card_rollout_completed_at,
               (
                 now() at time zone
                   ${input.timezone}
               )::date as school_today
             from student_enrollments
               enrollment
+            join schools school
+              on school.id =
+                 enrollment.school_id
             where
               enrollment.school_id =
                 ${input.schoolId}::uuid
@@ -97,16 +101,20 @@ export async function resolveFirstCardQueueSchedule(
           )
           select
             case
-              when current_term.school_today >
-                   current_term.starts_on
+              when context.initial_card_rollout_completed_at
+                     is not null
+                   and current_term.school_today >
+                       current_term.starts_on
                 then
                   current_term.ends_on::text
               else
                 null
             end as scheduled_for,
             case
-              when current_term.school_today >
-                   current_term.starts_on
+              when context.initial_card_rollout_completed_at
+                     is not null
+                   and current_term.school_today >
+                       current_term.starts_on
                 then
                   (
                     current_term.ends_on::timestamp

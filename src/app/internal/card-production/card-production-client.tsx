@@ -1095,7 +1095,7 @@ export default function CardProductionClient(
             Students waiting for the next card run
           </h2>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-black/50">
-            New students registered after a term has started stay on supervised first-card attendance until term-end production. Paid lost/damaged replacements also wait for their scheduled batch. Expand any group to see the exact students before anything enters the print queue.
+            Initial school rollout cards enter production immediately until a CASA Super Admin confirms the rollout cutoff. After that cutoff, genuinely new students registered mid-term stay on supervised first-card attendance until term-end production. Paid lost/damaged replacements also wait for their scheduled batch. Expand any group to see the exact students before anything enters the print queue.
           </p>
         </div>
 
@@ -1105,7 +1105,7 @@ export default function CardProductionClient(
               New students / first cards
             </h3>
             <p className="mt-1 text-xs leading-5 text-black/45">
-              These production jobs release automatically on the scheduled term-end date.
+              Only post-rollout new-student jobs wait here. These production jobs release automatically on the scheduled term-end date.
             </p>
 
             {firstCardBatches.length ===

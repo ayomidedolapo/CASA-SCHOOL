@@ -102,6 +102,48 @@ export const CASA_OPERATIONAL_EVENT_CATALOG = {
     category: "CARD_PRODUCTION",
     dedupeSeconds: 21600,
   },
+  INITIAL_CARD_ROLLOUT_TEMPLATE_MISSING: {
+    eventType: "INITIAL_CARD_ROLLOUT_TEMPLATE_MISSING",
+    severity: "WARNING",
+    category: "SCHOOL_ONBOARDING",
+    dedupeSeconds: 21600,
+  },
+  INITIAL_CARD_ROLLOUT_BACKFILL_PENDING: {
+    eventType: "INITIAL_CARD_ROLLOUT_BACKFILL_PENDING",
+    severity: "WARNING",
+    category: "CARD_PRODUCTION",
+    dedupeSeconds: 21600,
+  },
+  INITIAL_CARD_ROLLOUT_READY: {
+    eventType: "INITIAL_CARD_ROLLOUT_READY",
+    severity: "INFO",
+    category: "SCHOOL_ONBOARDING",
+    dedupeSeconds: 21600,
+  },
+  INITIAL_CARD_ROLLOUT_COMPLETED: {
+    eventType: "INITIAL_CARD_ROLLOUT_COMPLETED",
+    severity: "INFO",
+    category: "SCHOOL_ONBOARDING",
+    dedupeSeconds: 604800,
+  },
+  CARD_REPLACEMENT_GRACE_ENDING: {
+    eventType: "CARD_REPLACEMENT_GRACE_ENDING",
+    severity: "WARNING",
+    category: "CARD_PRODUCTION",
+    dedupeSeconds: 86400,
+  },
+  CARD_REPLACEMENT_PAYMENT_OVERDUE: {
+    eventType: "CARD_REPLACEMENT_PAYMENT_OVERDUE",
+    severity: "CRITICAL",
+    category: "CARD_PRODUCTION",
+    dedupeSeconds: 86400,
+  },
+  ATTENDANCE_SESSION_STALE_OPEN: {
+    eventType: "ATTENDANCE_SESSION_STALE_OPEN",
+    severity: "WARNING",
+    category: "SCANNER_ATTENDANCE",
+    dedupeSeconds: 21600,
+  },
   BIOMETRIC_PROVIDER_FAILURE: {
     eventType: "BIOMETRIC_PROVIDER_FAILURE",
     severity: "CRITICAL",

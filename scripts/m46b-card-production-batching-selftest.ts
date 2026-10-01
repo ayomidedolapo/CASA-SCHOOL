@@ -124,8 +124,11 @@ const manifestRoute =
 for (
   const marker of [
     "category:",
-    "exportableOnly: true",
-    "Printed card history cannot be exported",
+    "historicalReExport",
+    'body.data.status === "PRINTED"',
+    "exportableOnly: !historicalReExport",
+    "if (!historicalReExport)",
+    "markJobsExported",
   ]
 ) {
   requireText(

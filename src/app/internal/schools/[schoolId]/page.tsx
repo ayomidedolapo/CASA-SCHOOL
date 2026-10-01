@@ -9,6 +9,9 @@ import {
   getDb,
 } from "@/db";
 import {
+  getInitialCardRolloutState,
+} from "@/server/card-production/initial-rollout";
+import {
   CasaInternalAccessDeniedError,
   CasaInternalSchoolScopeError,
   isAuthRequiredError,
@@ -237,6 +240,11 @@ export default async function Page({
       active_cards: 0,
     };
 
+  const rollout =
+    await getInitialCardRolloutState({
+      schoolId,
+    });
+
   let canManageStructure =
     access.membership.role ===
     "CASA_SUPER_ADMIN";
@@ -304,6 +312,9 @@ export default async function Page({
         }
         pendingCards={
           pendingCards
+        }
+        rollout={
+          rollout
         }
         school={{
           ...access.school,

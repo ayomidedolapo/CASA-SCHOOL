@@ -308,7 +308,11 @@ export async function getTodayAttendanceOperations(
           replacement.reported_lost_on::text
             as card_replacement_reported_lost_on,
           replacement.replacement_requested_at
-            as card_replacement_requested_at
+            as card_replacement_requested_at,
+          replacement.payment_status::text
+            as card_replacement_payment_status,
+          replacement.replacement_reason::text
+            as card_replacement_reason
         from student_enrollments
           enrollment
         join students student
@@ -428,7 +432,9 @@ export async function getTodayAttendanceOperations(
           select
             replacement_case.id,
             replacement_case.reported_lost_on,
-            replacement_case.replacement_requested_at
+            replacement_case.replacement_requested_at,
+            replacement_case.payment_status,
+            replacement_case.replacement_reason
           from student_card_replacement_cases
             replacement_case
           where
@@ -774,6 +780,10 @@ export async function getTodayAttendanceOperations(
         string | null;
       card_replacement_requested_at:
         Date | string | null;
+      card_replacement_payment_status:
+        "UNPAID" | "PAID" | null;
+      card_replacement_reason:
+        "LOST" | "DAMAGED" | null;
     }>(
       stateResult,
     );
@@ -889,6 +899,12 @@ export async function getTodayAttendanceOperations(
                     Boolean(
                       student.card_replacement_requested_at,
                     ),
+                  paymentStatus:
+                    student.card_replacement_payment_status ??
+                    "UNPAID",
+                  replacementReason:
+                    student.card_replacement_reason ??
+                    "LOST",
                 }
               : null,
           departureResult:

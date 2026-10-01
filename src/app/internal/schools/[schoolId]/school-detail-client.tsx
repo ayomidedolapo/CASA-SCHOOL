@@ -51,12 +51,37 @@ type ConfirmAction = {
   danger: boolean;
 };
 
+type InitialRolloutState = {
+  schoolId: string;
+  completedAt:
+    string | null;
+  activeTemplate:
+    boolean;
+  activeStudents:
+    number;
+  activeEnrolledStudents:
+    number;
+  unenrolledStudents:
+    number;
+  missingFirstCards:
+    number;
+  scheduledFirstCards:
+    number;
+  readyNowFirstCards:
+    number;
+  canComplete:
+    boolean;
+  blockers:
+    string[];
+};
+
 export default function SchoolDetailClient({
   school,
   branches,
   owners,
   pendingCards,
   metrics,
+  rollout,
   canManageStructure,
   isSuperAdmin,
 }: {
@@ -79,6 +104,9 @@ export default function SchoolDetailClient({
     ready_cards: number;
     active_cards: number;
   };
+  rollout:
+    InitialRolloutState |
+    null;
   canManageStructure: boolean;
   isSuperAdmin: boolean;
 }) {
@@ -148,6 +176,12 @@ export default function SchoolDetailClient({
     setConfirmAction,
   ] = useState<ConfirmAction | null>(
     null,
+  );
+  const [
+    rolloutConfirmOpen,
+    setRolloutConfirmOpen,
+  ] = useState(
+    false,
   );
 
   useEffect(() => {
@@ -580,6 +614,76 @@ export default function SchoolDetailClient({
     }
   }
 
+  async function completeRollout() {
+    setBusy(true);
+    setError("");
+    setNotice("");
+
+    try {
+      const response =
+        await fetch(
+          `/api/internal/platform/schools/${encodeURIComponent(
+            school.id,
+          )}/card-rollout/complete`,
+          {
+            method:
+              "POST",
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+            credentials:
+              "same-origin",
+            body:
+              JSON.stringify({
+                confirm:
+                  true,
+              }),
+          },
+        );
+      const body =
+        await response
+          .json()
+          .catch(
+            () => null,
+          ) as {
+            message?:
+              string;
+            blockers?:
+              string[];
+          } | null;
+
+      if (!response.ok) {
+        throw new Error(
+          [
+            body?.message ??
+              "Initial card rollout could not be completed.",
+            ...(body?.blockers ?? []),
+          ]
+            .filter(Boolean)
+            .join(" "),
+        );
+      }
+
+      setNotice(
+        "Initial card rollout completed. The cutoff is now active: future mid-term admissions follow normal term-end first-card batching.",
+      );
+      setRolloutConfirmOpen(
+        false,
+      );
+      router.refresh();
+    } catch (caught) {
+      setError(
+        caught instanceof
+          Error
+          ? caught.message
+          : "Initial card rollout could not be completed.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function ownerRecovery() {
     setBusy(true);
     setError("");
@@ -871,6 +975,117 @@ export default function SchoolDetailClient({
             Share privately. It expires after 24 hours and becomes unusable after the password is set.
           </p>
         </div>
+      ) : null}
+
+      {isSuperAdmin &&
+      rollout ? (
+        <section className="mt-7 border border-black bg-white">
+          <div className="flex flex-wrap items-start justify-between gap-4 border-b border-black p-5">
+            <div>
+              <p className="casa-kicker text-black/40">
+                Initial first-card rollout
+              </p>
+              <h2 className="mt-2 text-2xl font-semibold">
+                {rollout.completedAt
+                  ? "Rollout complete / normal batching live"
+                  : "Initial rollout open"}
+              </h2>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-black/50">
+                Only a CASA Super Admin can complete this cutoff. Completion means the initial school population has been registered, enrolled and issued first-card jobs. It does not require every physical card to have been handed over yet.
+              </p>
+            </div>
+            <span
+              className={`casa-status ${
+                rollout.completedAt
+                  ? "casa-status-positive"
+                  : rollout.canComplete
+                    ? "casa-status-positive"
+                    : "casa-status-warning"
+              }`}
+            >
+              {rollout.completedAt
+                ? "LIVE"
+                : rollout.canComplete
+                  ? "READY TO COMPLETE"
+                  : "INITIAL ROLLOUT"}
+            </span>
+          </div>
+
+          <div className="grid gap-px bg-black sm:grid-cols-4">
+            {[
+              ["Active students", rollout.activeStudents],
+              ["Enrolled", rollout.activeEnrolledStudents],
+              ["Missing first cards", rollout.missingFirstCards],
+              ["Ready now", rollout.readyNowFirstCards],
+            ].map(
+              ([label, value]) => (
+                <div
+                  className="bg-white p-4"
+                  key={String(label)}
+                >
+                  <p className="casa-kicker text-black/35">
+                    {label}
+                  </p>
+                  <p className="mt-2 text-2xl font-semibold">
+                    {value}
+                  </p>
+                </div>
+              ),
+            )}
+          </div>
+
+          {!rollout.completedAt ? (
+            <div className="p-5">
+              {rollout.blockers.length >
+              0 ? (
+                <div className="border border-black/15 bg-[#f2f2ef] p-4">
+                  <p className="font-semibold">
+                    Completion blockers
+                  </p>
+                  <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-black/55">
+                    {rollout.blockers.map(
+                      (blocker) => (
+                        <li key={blocker}>
+                          {blocker}
+                        </li>
+                      ),
+                    )}
+                  </ul>
+                </div>
+              ) : (
+                <p className="text-sm leading-6 text-black/55">
+                  CASA has no remaining rollout blockers. Review the roster before confirming. Once completed, future mid-term admissions will be treated as genuine new students and will follow the normal term-end first-card batch.
+                </p>
+              )}
+
+              <button
+                className="casa-button-primary mt-4"
+                disabled={
+                  busy ||
+                  !rollout.canComplete
+                }
+                onClick={() =>
+                  setRolloutConfirmOpen(
+                    true,
+                  )
+                }
+                type="button"
+              >
+                Complete initial card rollout
+              </button>
+            </div>
+          ) : (
+            <p className="p-5 text-sm leading-6 text-black/55">
+              Cutoff confirmed{" "}
+              {new Date(
+                rollout.completedAt,
+              ).toLocaleString(
+                "en-NG",
+              )}
+              . Future students are classified under the normal post-rollout batching policy.
+            </p>
+          )}
+        </section>
       ) : null}
 
       {isSuperAdmin ? (
@@ -1209,6 +1424,27 @@ export default function SchoolDetailClient({
           },
         )}
       </section>
+
+      <CasaConfirmDialog
+        busy={busy}
+        confirmLabel="Complete rollout"
+        danger
+        message={
+          `Complete the initial card rollout for ${school.name}? Confirm only after the school's initial student population has been registered and enrolled and all first cards are queued. This creates the rollout cutoff. After confirmation, future mid-term admissions will enter normal term-end first-card batching. School users cannot perform or undo this cutoff.`
+        }
+        onCancel={() =>
+          setRolloutConfirmOpen(
+            false,
+          )
+        }
+        onConfirm={() =>
+          void completeRollout()
+        }
+        open={
+          rolloutConfirmOpen
+        }
+        title="Complete initial card rollout?"
+      />
 
       <CasaConfirmDialog
         busy={busy}

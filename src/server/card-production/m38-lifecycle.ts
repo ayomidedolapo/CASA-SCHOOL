@@ -210,20 +210,64 @@ export type FirstCardProvisioningResult =
         "STATE_CHANGED";
     };
 
+type FirstCardProvisioningAccess = {
+  school: {
+    id: string;
+    timezone: string;
+  };
+  membership: {
+    id: string | null;
+  };
+};
+
 export async function ensureFirstStudentCardForEnrollment(
   input: {
     access:
-      SchoolAccess;
+      FirstCardProvisioningAccess;
     studentId:
       string;
     enrollmentId:
       string;
     origin:
       string;
+    authority?:
+      | "SCHOOL_ENROLLMENT_AUTO_ISSUE"
+      | "CASA_INTERNAL_INITIAL_ROLLOUT";
   },
 ): Promise<FirstCardProvisioningResult> {
   const db =
     getDb();
+  const productionAuthority =
+    input.authority ??
+    "SCHOOL_ENROLLMENT_AUTO_ISSUE";
+  const internalInitialRollout =
+    productionAuthority ===
+    "CASA_INTERNAL_INITIAL_ROLLOUT";
+  const actorMembershipId =
+    internalInitialRollout
+      ? null
+      : input.access.membership.id;
+  const identityActorKind =
+    internalInitialRollout
+      ? "CASA_INTERNAL"
+      : "SCHOOL_MEMBER";
+  const productionActorKind =
+    internalInitialRollout
+      ? "CASA_INTERNAL"
+      : "SCHOOL_MEMBER";
+  const issueReason =
+    internalInitialRollout
+      ? "CASA initial rollout first card created from active enrollment"
+      : "Automatic first card created from active enrollment";
+
+  if (
+    !internalInitialRollout &&
+    !actorMembershipId
+  ) {
+    throw new Error(
+      "School-member first-card issuance requires a school membership.",
+    );
+  }
 
   const enrollment =
     rowsOf<{
@@ -471,10 +515,10 @@ export async function ensureFirstStudentCardForEnrollment(
               ${input.access.school.id}::uuid,
               ${input.studentId}::uuid,
               inserted_card.id,
-              'SCHOOL_MEMBER',
-              ${input.access.membership.id}::uuid,
+              ${identityActorKind},
+              ${actorMembershipId}::uuid,
               'ISSUED'::student_identity_card_event_type,
-              'Automatic first card created from active enrollment',
+              ${issueReason},
               ${now}::timestamptz
             from inserted_card
             returning id
@@ -507,8 +551,8 @@ export async function ensureFirstStudentCardForEnrollment(
               ${input.studentId}::uuid,
               inserted_card.id,
               ${template.id}::uuid,
-              'SCHOOL_ENROLLMENT_AUTO_ISSUE',
-              ${input.access.membership.id}::uuid,
+              ${productionAuthority},
+              ${actorMembershipId}::uuid,
               null,
               ${input.enrollmentId}::uuid,
               ${publicAccessKey},
@@ -544,10 +588,10 @@ export async function ensureFirstStudentCardForEnrollment(
             select
               ${input.access.school.id}::uuid,
               inserted_job.id,
-              'SCHOOL_MEMBER'::student_card_production_actor_kind,
-              ${input.access.membership.id}::uuid,
+              ${productionActorKind}::student_card_production_actor_kind,
+              ${actorMembershipId}::uuid,
               'CARD_PRODUCTION_READY'::student_card_production_event_type,
-              'Automatic first card created from active enrollment',
+              ${issueReason},
               ${now}::timestamptz,
               ${now}::timestamptz
             from inserted_job
@@ -632,6 +676,39 @@ export async function ensureFirstStudentCardForEnrollment(
 
     throw error;
   }
+}
+
+export async function ensureFirstStudentCardForEnrollmentInternal(
+  input: {
+    schoolId: string;
+    timezone: string;
+    studentId: string;
+    enrollmentId: string;
+    origin: string;
+  },
+): Promise<FirstCardProvisioningResult> {
+  return ensureFirstStudentCardForEnrollment({
+    access: {
+      school: {
+        id:
+          input.schoolId,
+        timezone:
+          input.timezone,
+      },
+      membership: {
+        id:
+          null,
+      },
+    },
+    studentId:
+      input.studentId,
+    enrollmentId:
+      input.enrollmentId,
+    origin:
+      input.origin,
+    authority:
+      "CASA_INTERNAL_INITIAL_ROLLOUT",
+  });
 }
 
 export async function ensureFirstStudentCardForActiveEnrollment(

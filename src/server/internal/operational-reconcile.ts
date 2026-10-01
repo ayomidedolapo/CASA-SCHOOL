@@ -7,6 +7,9 @@ import {
 import {
   reconcileTerminalHealthNotifications,
 } from "@/server/internal/terminal-health";
+import {
+  reconcileSmartOperationalRisks,
+} from "@/server/notifications/smart-operations";
 
 function rowsOf<T>(
   result: unknown,
@@ -32,6 +35,17 @@ function rowsOf<T>(
 export async function reconcileCasaOperationalNotifications() {
   const terminalHealth =
     await reconcileTerminalHealthNotifications();
+  const smartRisks =
+    await reconcileSmartOperationalRisks()
+      .catch(
+        (error) => {
+          console.error(
+            "Smart operational risk reconciliation failed",
+            error,
+          );
+          return null;
+        },
+      );
   const db = getDb();
 
   const unassignedTerminals =
@@ -641,6 +655,7 @@ export async function reconcileCasaOperationalNotifications() {
 
   return {
     terminalHealth,
+    smartRisks,
     unassignedTerminals:
       unassignedTerminals.length,
     cardBacklogs:

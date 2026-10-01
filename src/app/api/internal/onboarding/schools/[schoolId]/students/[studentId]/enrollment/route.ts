@@ -14,6 +14,9 @@ import {
 import {
   assignCasaOnboardingEnrollment,
 } from "@/server/internal/onboarding";
+import {
+  reconcileInitialCardRollout,
+} from "@/server/card-production/initial-rollout";
 
 export const dynamic =
   "force-dynamic";
@@ -121,9 +124,49 @@ export async function POST(
       );
     }
 
+    let initialRollout:
+      Awaited<
+        ReturnType<
+          typeof reconcileInitialCardRollout
+        >
+      > |
+      null =
+        null;
+
+    try {
+      initialRollout =
+        await reconcileInitialCardRollout({
+          schoolId:
+            access.school.id,
+          timezone:
+            access.school.timezone,
+          origin:
+            request.nextUrl.origin,
+          limit:
+            5,
+        });
+    } catch (cardError) {
+      console.error(
+        "CASA onboarding first-card reconciliation will retry in background",
+        {
+          schoolId:
+            access.school.id,
+          studentId,
+          cardError:
+            cardError instanceof
+              Error
+              ? cardError.message
+              : String(
+                  cardError,
+                ),
+        },
+      );
+    }
+
     return NextResponse.json(
       {
         enrollment,
+        initialRollout,
       },
       {
         status: 201,

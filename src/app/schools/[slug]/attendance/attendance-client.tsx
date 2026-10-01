@@ -60,6 +60,12 @@ interface TodayStudent {
     | {
         reportedLostOn: string;
         replacementRequested: boolean;
+        paymentStatus:
+          | "UNPAID"
+          | "PAID";
+        replacementReason:
+          | "LOST"
+          | "DAMAGED";
       }
     | null;
 }
@@ -3276,9 +3282,28 @@ export default function AttendanceClient(
                         }
                       </td>
                       <td>
-                        {
-                          student.presenceStatus
-                        }
+                        <strong>
+                          {
+                            student.presenceStatus
+                          }
+                        </strong>
+                        {student.cardReplacement ? (
+                          <>
+                            <br />
+                            <span
+                              className={
+                                styles.muted
+                              }
+                            >
+                              {student.cardReplacement.replacementReason ===
+                              "DAMAGED"
+                                ? "Damaged card"
+                                : "Lost card"}
+                              {" / supervised attendance / "}
+                              {student.cardReplacement.paymentStatus}
+                            </span>
+                          </>
+                        ) : null}
                       </td>
                       <td>
                         {

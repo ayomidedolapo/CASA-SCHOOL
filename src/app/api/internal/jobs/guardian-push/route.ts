@@ -3,6 +3,12 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { runGuardianPushOutbox } from "@/server/messaging/guardian-push-worker";
 import {
+  reconcilePendingInitialCardRollouts,
+} from "@/server/card-production/initial-rollout";
+import {
+  reconcileCasaOperationalNotifications,
+} from "@/server/internal/operational-reconcile";
+import {
   emitCasaOperationalNotificationBestEffort,
 } from "@/server/internal/operational-notifications";
 
@@ -41,6 +47,36 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ message: "Unauthorized." }, { status: 401, headers: { "Cache-Control": "no-store" } });
   }
   try {
+    const rolloutReconciliation =
+      await reconcilePendingInitialCardRollouts({
+        origin:
+          request.nextUrl.origin,
+        schoolLimit:
+          2,
+        perSchoolLimit:
+          3,
+      }).catch(
+        (error) => {
+          console.error(
+            "Background initial card rollout reconciliation failed",
+            error,
+          );
+          return null;
+        },
+      );
+
+    const operationalReconciliation =
+      await reconcileCasaOperationalNotifications()
+        .catch(
+          (error) => {
+            console.error(
+              "Background smart operational reconciliation failed",
+              error,
+            );
+            return null;
+          },
+        );
+
     const result =
       await runGuardianPushOutbox({
         limit: 50,
@@ -49,6 +85,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         ok: true,
+        rolloutReconciliation,
+        operationalReconciliation,
         ...result,
       },
       {

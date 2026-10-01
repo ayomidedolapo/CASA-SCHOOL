@@ -1178,10 +1178,10 @@ export async function listCentralProductionJobs(
       "FIRST_CARD"
   ) {
     conditions.push(
-      eq(
-        studentCardProductionJobs.productionAuthority,
-        "SCHOOL_ENROLLMENT_AUTO_ISSUE",
-      ),
+      sql`${studentCardProductionJobs.productionAuthority} in (
+        'SCHOOL_ENROLLMENT_AUTO_ISSUE',
+        'CASA_INTERNAL_INITIAL_ROLLOUT'
+      )`,
     );
   } else if (
     input.category ===
@@ -1198,7 +1198,7 @@ export async function listCentralProductionJobs(
       "OTHER"
   ) {
     conditions.push(
-      sql`${studentCardProductionJobs.productionAuthority} not in ('SCHOOL_ENROLLMENT_AUTO_ISSUE', 'CASA_INTERNAL_REPLACEMENT')`,
+      sql`${studentCardProductionJobs.productionAuthority} not in ('SCHOOL_ENROLLMENT_AUTO_ISSUE', 'CASA_INTERNAL_INITIAL_ROLLOUT', 'CASA_INTERNAL_REPLACEMENT')`,
     );
   }
 
@@ -1317,8 +1317,12 @@ export async function listCentralProductionJobs(
     (row) => ({
       ...row,
       category:
-        row.productionAuthority ===
-          "SCHOOL_ENROLLMENT_AUTO_ISSUE"
+        (
+          row.productionAuthority ===
+            "SCHOOL_ENROLLMENT_AUTO_ISSUE" ||
+          row.productionAuthority ===
+            "CASA_INTERNAL_INITIAL_ROLLOUT"
+        )
           ? "FIRST_CARD" as const
           : row.productionAuthority ===
               "CASA_INTERNAL_REPLACEMENT"

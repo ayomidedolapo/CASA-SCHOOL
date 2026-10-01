@@ -22,6 +22,17 @@ export const schools = pgTable(
     timezone: varchar("timezone", { length: 64 })
       .default("Africa/Lagos")
       .notNull(),
+    initialCardRolloutCompletedAt:
+      timestamp(
+        "initial_card_rollout_completed_at",
+        {
+          withTimezone: true,
+        },
+      ),
+    initialCardRolloutCompletedByInternalMembershipId:
+      uuid(
+        "initial_card_rollout_completed_by_internal_membership_id",
+      ),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

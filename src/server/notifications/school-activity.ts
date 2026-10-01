@@ -9,6 +9,9 @@ import {
   listSchoolAuditEvents,
   type SchoolAuditEvent,
 } from "@/server/school-operations/audit";
+import {
+  reconcileSmartOperationalRisks,
+} from "@/server/notifications/smart-operations";
 
 function actionUrl(
   slug: string,
@@ -74,6 +77,19 @@ export async function reconcileSchoolMemberNotifications(
       string;
   },
 ) {
+  await reconcileSmartOperationalRisks({
+    schoolId:
+      input.schoolId,
+  }).catch(
+    (error) => {
+      console.error(
+        "School smart-risk reconciliation failed",
+        error,
+      );
+      return null;
+    },
+  );
+
   let result:
     Awaited<
       ReturnType<
