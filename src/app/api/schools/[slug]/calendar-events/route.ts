@@ -17,6 +17,15 @@ import {
   schoolOperationsErrorResponse,
   schoolOperationsNoStoreHeaders,
 } from "@/server/school-operations/http";
+import {
+  assertCalendarEventCanActivate,
+} from "@/server/school-operations/calendar-closure";
+import {
+  syncGuardianCalendarEventPushes,
+} from "@/server/messaging/guardian-calendar-push";
+import {
+  runGuardianPushOutbox,
+} from "@/server/messaging/guardian-push-worker";
 
 export const dynamic =
   "force-dynamic";
@@ -184,6 +193,18 @@ export async function POST(
       );
     }
 
+    await assertCalendarEventCanActivate({
+      schoolId:
+        access.school.id,
+      timezone:
+        access.school.timezone,
+      branchId,
+      startsOn:
+        body.data.startsOn,
+      endsOn:
+        body.data.endsOn,
+    });
+
     const event =
       await createCalendarEvent({
         access,
@@ -209,8 +230,49 @@ export async function POST(
           null,
       });
 
+    let guardianCalendarPushQueued =
+      0;
+    const eventId =
+      event &&
+      typeof (
+        event as {
+          id?: unknown;
+        }
+      ).id === "string"
+        ? (
+            event as {
+              id: string;
+            }
+          ).id
+        : null;
+
+    if (eventId) {
+      try {
+        guardianCalendarPushQueued =
+          await syncGuardianCalendarEventPushes({
+            schoolId:
+              access.school.id,
+            eventId,
+          });
+
+        await runGuardianPushOutbox({
+          schoolId:
+            access.school.id,
+          calendarEventId:
+            eventId,
+          limit:
+            100,
+        });
+      } catch {
+        // Scheduled guardian-push reconciliation will retry calendar delivery.
+      }
+    }
+
     return NextResponse.json(
-      { event },
+      {
+        event,
+        guardianCalendarPushQueued,
+      },
       {
         status: 201,
         headers:

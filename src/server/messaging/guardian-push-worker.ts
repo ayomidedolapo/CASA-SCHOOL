@@ -7,6 +7,9 @@ import {
 import {
   reconcileRecentGuardianPresencePushes,
 } from "./guardian-presence-push";
+import {
+  reconcileDueGuardianCalendarPushes,
+} from "./guardian-calendar-push";
 import { sendFcmToFid } from "./firebase-fcm";
 
 type PushRow = {
@@ -98,6 +101,7 @@ export async function runGuardianPushOutbox(
     limit?: number;
     schoolId?: string;
     presenceEventId?: string;
+    calendarEventId?: string;
   } = {},
 ) {
   const db = getDb();
@@ -111,19 +115,35 @@ export async function runGuardianPushOutbox(
     );
 
   const reconciled =
-    await reconcileRecentGuardianPresencePushes({
-      schoolId:
-        input.schoolId,
-      presenceEventId:
-        input.presenceEventId,
-      lookbackMinutes:
-        120,
-      limit:
-        Math.min(
-          200,
-          limit * 4,
-        ),
-    });
+    input.calendarEventId
+      ? 0
+      : await reconcileRecentGuardianPresencePushes({
+          schoolId:
+            input.schoolId,
+          presenceEventId:
+            input.presenceEventId,
+          lookbackMinutes:
+            120,
+          limit:
+            Math.min(
+              200,
+              limit * 4,
+            ),
+        });
+
+  const calendarReconciled =
+    input.presenceEventId ||
+    input.calendarEventId
+      ? 0
+      : await reconcileDueGuardianCalendarPushes({
+          schoolId:
+            input.schoolId,
+          limit:
+            Math.min(
+              100,
+              limit,
+            ),
+        });
 
   const schoolFilter =
     input.schoolId
@@ -132,6 +152,11 @@ export async function runGuardianPushOutbox(
   const presenceEventFilter =
     input.presenceEventId
       ? sql`and outbox.presence_event_id = ${input.presenceEventId}::uuid`
+      : sql``;
+  const calendarEventFilter =
+    input.calendarEventId
+      ? sql`and outbox.event_type = 'SCHOOL_CALENDAR_NOTICE'
+            and outbox.payload ->> 'calendarEventId' = ${input.calendarEventId}`
       : sql``;
 
   const claimed =
@@ -155,10 +180,29 @@ export async function runGuardianPushOutbox(
            outbox.firebase_installation_id
        and device.status =
            'ACTIVE'
+      join student_guardians relationship
+        on relationship.school_id =
+           device.school_id
+       and relationship.id =
+           device.student_guardian_link_id
+       and relationship.student_id =
+           device.student_id
+       and relationship.guardian_id =
+           device.guardian_id
+       and relationship.receives_notifications =
+           true
+      join guardians guardian
+        on guardian.school_id =
+           relationship.school_id
+       and guardian.id =
+           relationship.guardian_id
+       and guardian.status =
+           'ACTIVE'::guardian_status
       where outbox.status in ('PENDING', 'RETRY')
         and outbox.available_at <= now()
         ${schoolFilter}
         ${presenceEventFilter}
+        ${calendarEventFilter}
       order by outbox.available_at asc, outbox.created_at asc
       limit ${limit}
       for update skip locked
@@ -324,6 +368,7 @@ export async function runGuardianPushOutbox(
 
   return {
     reconciled,
+    calendarReconciled,
     claimed:
       claimed.length,
     sent,

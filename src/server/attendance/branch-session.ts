@@ -5,6 +5,10 @@ import type { SchoolAccess } from "@/server/auth/authorization";
 import { getAttendanceReadinessRejection, isInstructionalDate } from "./readiness";
 import { getSchoolClock } from "./terminal-session";
 import {
+  calendarClosureMessage,
+  getActiveCalendarClosure,
+} from "@/server/school-operations/calendar-closure";
+import {
   resolveBranchDefaultPolicy,
   resolveBranchDefaultPolicyForDate,
 } from "./branch-policy-management";
@@ -124,6 +128,29 @@ export async function prepareBranchAttendanceSession(input: {
 }) {
   const { access, branchId, mode } = input;
   const clock = getSchoolClock(new Date(), access.school.timezone);
+  const calendarClosure =
+    await getActiveCalendarClosure({
+      schoolId:
+        access.school.id,
+      date:
+        clock.date,
+      branchIds: [
+        branchId,
+      ],
+    });
+
+  if (calendarClosure) {
+    return {
+      ok: false as const,
+      status: 409 as const,
+      code:
+        "CALENDAR_CLOSURE_ACTIVE" as const,
+      message:
+        calendarClosureMessage(
+          calendarClosure,
+        ),
+    };
+  }
 
   // Do not let a PREPARE retry reopen or otherwise mutate a campus session
   // that has already moved beyond its pre-open state.
@@ -271,6 +298,29 @@ export async function openBranchAttendanceSession(input: {
     branchId,
     timezone: access.school.timezone,
   });
+  const calendarClosure =
+    await getActiveCalendarClosure({
+      schoolId:
+        access.school.id,
+      date:
+        context.clock.date,
+      branchIds: [
+        branchId,
+      ],
+    });
+
+  if (calendarClosure) {
+    return {
+      ok: false as const,
+      status: 409 as const,
+      code:
+        "CALENDAR_CLOSURE_ACTIVE" as const,
+      message:
+        calendarClosureMessage(
+          calendarClosure,
+        ),
+    };
+  }
 
   if (!context.session?.branchSessionId) {
     const prepared = await prepareBranchAttendanceSession({
@@ -442,6 +492,30 @@ export async function reopenBranchAttendanceSession(input: { access: SchoolAcces
     return { ok: false as const, status: 400 as const, code: "ATTENDANCE_SESSION_REOPEN_REASON_REQUIRED" as const };
   }
   const clock = getSchoolClock(new Date(), input.access.school.timezone);
+  const calendarClosure =
+    await getActiveCalendarClosure({
+      schoolId:
+        input.access.school.id,
+      date:
+        clock.date,
+      branchIds: [
+        input.branchId,
+      ],
+    });
+
+  if (calendarClosure) {
+    return {
+      ok: false as const,
+      status: 409 as const,
+      code:
+        "CALENDAR_CLOSURE_ACTIVE" as const,
+      message:
+        calendarClosureMessage(
+          calendarClosure,
+        ),
+    };
+  }
+
   const db = getDb();
   const now = new Date().toISOString();
   const row = rowsOf<{ session_id: string; branch_session_id: string; mode: AttendanceBranchMode }>(await db.execute(sql`
@@ -492,6 +566,30 @@ export async function rebindBranchAttendanceSessionPolicy(input: {
     branchId: input.branchId,
     timezone: input.access.school.timezone,
   });
+  const calendarClosure =
+    await getActiveCalendarClosure({
+      schoolId:
+        input.access.school.id,
+      date:
+        context.clock.date,
+      branchIds: [
+        input.branchId,
+      ],
+    });
+
+  if (calendarClosure) {
+    return {
+      ok: false as const,
+      status: 409 as const,
+      code:
+        "CALENDAR_CLOSURE_ACTIVE" as const,
+      message:
+        calendarClosureMessage(
+          calendarClosure,
+        ),
+    };
+  }
+
   if (
     !context.session?.branchSessionId ||
     (context.session.status !== "PLANNED" && context.session.status !== "OPEN")
@@ -586,6 +684,8 @@ export async function getTerminalBranchAttendanceContext(input: {
         null,
       policyDay:
         null,
+      calendarClosure:
+        null,
     };
   }
 
@@ -600,6 +700,18 @@ export async function getTerminalBranchAttendanceContext(input: {
       now:
         input.now,
     });
+  const calendarClosure =
+    await getActiveCalendarClosure({
+      schoolId:
+        input.schoolId,
+      date:
+        clock.date,
+      branchIds: [
+        terminalBranch.branch_id,
+      ],
+      includeNextInstructionalDate:
+        false,
+    });
 
   return {
     branch: {
@@ -611,12 +723,14 @@ export async function getTerminalBranchAttendanceContext(input: {
         terminalBranch.branch_status,
     },
     ...context,
+    calendarClosure,
   };
 }
 
 export type TerminalAttendanceReadinessCode =
   | "TERMINAL_BRANCH_UNASSIGNED"
   | "BRANCH_INACTIVE"
+  | "CALENDAR_CLOSURE_ACTIVE"
   | "ATTENDANCE_BRANCH_SESSION_NOT_PREPARED"
   | "ATTENDANCE_BRANCH_NOT_OPEN"
   | "ATTENDANCE_BRANCH_CLOSED"
@@ -657,6 +771,19 @@ export function getTerminalAttendanceReadiness(
         "BRANCH_INACTIVE",
       message:
         `${context.branch.name} is not an active campus, so this scanner cannot record attendance there.`,
+    };
+  }
+
+  if (
+    context.calendarClosure
+  ) {
+    return {
+      code:
+        "CALENDAR_CLOSURE_ACTIVE",
+      message:
+        calendarClosureMessage(
+          context.calendarClosure,
+        ),
     };
   }
 

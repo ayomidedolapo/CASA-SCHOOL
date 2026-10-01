@@ -139,6 +139,23 @@ export async function POST(
       );
     }
 
-    throw error;
+    console.error(
+      "ASSISTED_CHECKOUT_UNEXPECTED",
+      error,
+    );
+
+    return NextResponse.json(
+      {
+        message:
+          "CASA could not complete assisted sign-out because an internal attendance operation failed. Retry once; if it persists, return this message to CASA support.",
+        code:
+          "ASSISTED_CHECKOUT_INTERNAL_ERROR",
+      },
+      {
+        status: 500,
+        headers:
+          attendanceNoStoreHeaders,
+      },
+    );
   }
 }

@@ -551,6 +551,40 @@ export default function AttendanceClient(
   ] =
     useState<TodayStudent | null>(null);
 
+  useEffect(
+    () => {
+      window.dispatchEvent(
+        new CustomEvent(
+          "casa:calendar-branch-context",
+          {
+            detail: {
+              branchId:
+                selectedBranchId ||
+                null,
+            },
+          },
+        ),
+      );
+
+      return () => {
+        window.dispatchEvent(
+          new CustomEvent(
+            "casa:calendar-branch-context",
+            {
+              detail: {
+                branchId:
+                  null,
+              },
+            },
+          ),
+        );
+      };
+    },
+    [
+      selectedBranchId,
+    ],
+  );
+
   const refreshToday =
     useCallback(
       async (

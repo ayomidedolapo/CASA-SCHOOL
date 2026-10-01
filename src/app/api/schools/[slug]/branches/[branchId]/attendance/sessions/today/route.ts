@@ -55,7 +55,15 @@ export async function POST(request: NextRequest, context: Context) {
 
     if (!result.ok) {
       return NextResponse.json(
-        { message: result.code, code: result.code },
+        {
+          message:
+            "message" in result &&
+            typeof result.message === "string"
+              ? result.message
+              : result.code,
+          code:
+            result.code,
+        },
         { status: result.status, headers: schoolOperationsNoStoreHeaders },
       );
     }

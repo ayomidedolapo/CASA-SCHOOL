@@ -31,7 +31,31 @@ export async function POST(request: NextRequest, context: RouteContext) {
       stepUpToken: request.headers.get("x-casa-passkey-step-up"),
     });
     if (!result.ok) {
-      return NextResponse.json({ message: "Late-stay authorization could not be completed.", code: result.code, ...("requiredAction" in result ? { requiredAction: result.requiredAction } : {}) }, { status: result.status, headers: attendanceNoStoreHeaders });
+      return NextResponse.json(
+        {
+          message:
+            "message" in result &&
+            typeof result.message === "string"
+              ? result.message
+              : "Late-stay authorization could not be completed.",
+          code:
+            result.code,
+          ...(
+            "requiredAction" in result
+              ? {
+                  requiredAction:
+                    result.requiredAction,
+                }
+              : {}
+          ),
+        },
+        {
+          status:
+            result.status,
+          headers:
+            attendanceNoStoreHeaders,
+        },
+      );
     }
     return NextResponse.json(result, { headers: attendanceNoStoreHeaders });
   } catch (error) {

@@ -3,6 +3,10 @@ import { sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import type { SchoolAccess } from "@/server/auth/authorization";
 import { consumePasskeyStepUpGrantWithId } from "@/server/auth/passkey-step-up";
+import {
+  calendarClosureMessage,
+  getCurrentCalendarClosure,
+} from "@/server/school-operations/calendar-closure";
 
 function rowsOf<T>(result: unknown): T[] {
   if (Array.isArray(result)) return result as T[];
@@ -31,6 +35,30 @@ export async function authorizeLateStay(input: {
   const unique = Array.from(new Set(input.studentIds));
   if (unique.length === 0 || unique.length > 100) {
     return { ok: false as const, status: 400 as const, code: "LATE_STAY_SELECTION_REQUIRED" as const };
+  }
+
+  const calendarClosure =
+    await getCurrentCalendarClosure({
+      schoolId:
+        input.access.school.id,
+      timezone:
+        input.access.school.timezone,
+      branchIds: [
+        input.branchId,
+      ],
+    });
+
+  if (calendarClosure) {
+    return {
+      ok: false as const,
+      status: 409 as const,
+      code:
+        "CALENDAR_CLOSURE_ACTIVE" as const,
+      message:
+        calendarClosureMessage(
+          calendarClosure,
+        ),
+    };
   }
 
   const session = rowsOf<{

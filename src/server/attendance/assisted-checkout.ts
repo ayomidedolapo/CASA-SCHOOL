@@ -10,6 +10,10 @@ import {
 import {
   queueGuardianPresencePushBestEffort,
 } from "@/server/messaging/guardian-presence-push";
+import {
+  calendarClosureMessage,
+  getActiveCalendarClosure,
+} from "@/server/school-operations/calendar-closure";
 
 import {
   countInstructionalGraceDays,
@@ -325,6 +329,27 @@ export async function recordAssistedCheckout(
     );
   }
 
+  const activeCalendarClosure =
+    await getActiveCalendarClosure({
+      schoolId:
+        input.access.school.id,
+      date:
+        clock.date,
+      branchIds: [
+        candidate.branch_id,
+      ],
+    });
+
+  if (activeCalendarClosure) {
+    throw new AssistedCheckoutError(
+      calendarClosureMessage(
+        activeCalendarClosure,
+      ),
+      409,
+      "CALENDAR_CLOSURE_ACTIVE",
+    );
+  }
+
   if (
     ![
       "OPEN",
@@ -511,7 +536,128 @@ export async function recordAssistedCheckout(
           record.checked_out_at,
           record.departure_result
       ),
-      closed_attempts as (
+      inserted_event as (
+        insert into student_presence_events (
+          school_id,
+          session_id,
+          student_id,
+          attendance_record_id,
+          attempt_id,
+          terminal_id,
+          card_id,
+          event_type,
+          departure_result,
+          actor_membership_id,
+          reason,
+          occurred_at,
+          created_at
+        )
+        select
+          record.school_id,
+          record.session_id,
+          record.student_id,
+          record.id,
+          null,
+          null,
+          null,
+          'CHECKED_OUT'::attendance_presence_event_type,
+          ${departureResult}::attendance_departure_result,
+          ${input.access.membership.id}::uuid,
+          ${reason},
+          ${now}::timestamptz,
+          ${now}::timestamptz
+        from updated_record
+          record
+        on conflict (
+          school_id,
+          attendance_record_id,
+          event_type
+        )
+        do nothing
+        returning
+          id,
+          school_id,
+          student_id,
+          attendance_record_id,
+          occurred_at
+      ),
+      resolved_event as (
+        select
+          event.id,
+          event.school_id,
+          event.student_id,
+          event.attendance_record_id,
+          event.occurred_at
+        from inserted_event
+          event
+        union all
+        select
+          existing.id,
+          existing.school_id,
+          existing.student_id,
+          existing.attendance_record_id,
+          existing.occurred_at
+        from student_presence_events
+          existing
+        join updated_record
+          record
+          on record.school_id =
+             existing.school_id
+         and record.id =
+             existing.attendance_record_id
+        where
+          existing.event_type =
+            'CHECKED_OUT'::attendance_presence_event_type
+          and not exists (
+            select 1
+            from inserted_event
+          )
+        limit 1
+      )
+      select
+        record.id
+          as attendance_record_id,
+        event.id
+          as presence_event_id,
+        record.checked_out_at,
+        record.departure_result::text
+          as departure_result
+      from updated_record
+        record
+      join resolved_event
+        event
+        on event.attendance_record_id =
+           record.id
+    `);
+
+  const row =
+    rowsOf<{
+      attendance_record_id:
+        string;
+      presence_event_id:
+        string;
+      checked_out_at:
+        string | Date;
+      departure_result:
+        "EARLY" | "NORMAL";
+    }>(
+      result,
+    )[0];
+
+  if (!row) {
+    throw new AssistedCheckoutError(
+      "Attendance changed before assisted sign-out could complete.",
+      409,
+      "ASSISTED_CHECKOUT_STATE_CHANGED",
+    );
+  }
+
+  // ASSISTED_CHECKOUT_CLEANUP_BEST_EFFORT:
+  // the authoritative attendance departure above must not be rolled back
+  // by stale scanner-attempt, liveness, early-departure or late-stay cleanup.
+  try {
+    await db.execute(sql`
+      with closed_attempts as (
         update attendance_verification_attempts
           attempt
         set
@@ -523,15 +669,13 @@ export async function recordAssistedCheckout(
             ${input.access.membership.id}::uuid,
           completed_at =
             ${now}::timestamptz
-        from updated_record
-          record
         where
           attempt.school_id =
-            record.school_id
+            ${input.access.school.id}::uuid
           and attempt.session_id =
-            record.session_id
+            ${candidate.session_id}::uuid
           and attempt.student_id =
-            record.student_id
+            ${input.studentId}::uuid
           and attempt.operation =
             'CHECK_OUT'::attendance_operation
           and attempt.outcome =
@@ -569,21 +713,19 @@ export async function recordAssistedCheckout(
         returning
           liveness.id
       ),
-      revoked_early_preauth as (
+      revoked_early as (
         update attendance_early_departure_preauthorizations
           preauth
         set
           revoked_at =
             ${now}::timestamptz
-        from updated_record
-          record
         where
           preauth.school_id =
-            record.school_id
+            ${input.access.school.id}::uuid
           and preauth.session_id =
-            record.session_id
+            ${candidate.session_id}::uuid
           and preauth.student_id =
-            record.student_id
+            ${input.studentId}::uuid
           and preauth.consumed_attempt_id
             is null
           and preauth.revoked_at
@@ -591,258 +733,226 @@ export async function recordAssistedCheckout(
         returning
           preauth.id
       ),
-      consumed_after_hours as (
+      revoked_late_stay as (
         update attendance_late_stay_authorizations
           authorization
         set
-          consumed_at =
+          revoked_at =
             ${now}::timestamptz,
           updated_at =
             ${now}::timestamptz
-        from updated_record
-          record
         where
           authorization.school_id =
-            record.school_id
+            ${input.access.school.id}::uuid
           and authorization.session_id =
-            record.session_id
+            ${candidate.session_id}::uuid
           and authorization.student_id =
-            record.student_id
+            ${input.studentId}::uuid
           and authorization.consumed_at
             is null
           and authorization.revoked_at
             is null
         returning
           authorization.id
-      ),
-      inserted_event as (
-        insert into student_presence_events (
-          school_id,
-          session_id,
-          student_id,
-          attendance_record_id,
-          attempt_id,
-          terminal_id,
-          card_id,
-          event_type,
-          departure_result,
-          actor_membership_id,
-          reason,
-          occurred_at,
-          created_at
-        )
-        select
-          record.school_id,
-          record.session_id,
-          record.student_id,
-          record.id,
-          null,
-          null,
-          null,
-          'CHECKED_OUT'::attendance_presence_event_type,
-          ${departureResult}::attendance_departure_result,
-          ${input.access.membership.id}::uuid,
-          ${reason},
-          ${now}::timestamptz,
-          ${now}::timestamptz
-        from updated_record
-          record
-        on conflict do nothing
-        returning
-          id,
-          school_id,
-          student_id,
-          attendance_record_id,
-          occurred_at
-      ),
-      active_sender as (
-        select
-          sender.id,
-          sender.school_id
-        from school_whatsapp_senders
-          sender
-        where
-          sender.school_id =
-            ${input.access.school.id}::uuid
-          and sender.status =
-            'ACTIVE'::school_messaging_sender_status
-        limit 1
-      ),
-      recipients as (
-        select
-          event.id
-            as presence_event_id,
-          event.school_id,
-          event.student_id,
-          event.attendance_record_id,
-          event.occurred_at,
-          sender.id
-            as sender_id,
-          guardian.id
-            as guardian_id,
-          guardian.phone
-            as recipient_phone,
-          student.casa_student_id,
-          concat_ws(
-            ' ',
-            student.first_name,
-            nullif(
-              student.middle_name,
-              ''
-            ),
-            student.last_name
-          ) as student_name
-        from inserted_event
-          event
-        join active_sender
-          sender
-          on sender.school_id =
-             event.school_id
-        join student_guardians
-          relationship
-          on relationship.school_id =
-             event.school_id
-         and relationship.student_id =
-             event.student_id
-         and relationship.receives_notifications =
-             true
-        join guardians
-          guardian
-          on guardian.school_id =
-             relationship.school_id
-         and guardian.id =
-             relationship.guardian_id
-         and guardian.status =
-             'ACTIVE'::guardian_status
-         and guardian.phone
-             is not null
-         and length(
-           trim(
-             guardian.phone
-           )
-         ) > 0
-        join students
-          student
-          on student.school_id =
-             event.school_id
-         and student.id =
-             event.student_id
-      ),
-      queued as (
-        insert into school_notification_outbox (
-          school_id,
-          attendance_record_id,
-          presence_event_id,
-          guardian_id,
-          sender_id,
-          event_type,
-          recipient_phone,
-          template_key,
-          payload,
-          status,
-          attempt_count,
-          available_at,
-          created_at,
-          updated_at
-        )
-        select
-          recipients.school_id,
-          recipients.attendance_record_id,
-          recipients.presence_event_id,
-          recipients.guardian_id,
-          recipients.sender_id,
-          case
-            when ${departureResult} =
-              'EARLY'
-              then
-                'STUDENT_EARLY_DEPARTURE'::school_notification_event_type
-            else
-                'STUDENT_SIGNED_OUT'::school_notification_event_type
-          end,
-          recipients.recipient_phone,
-          case
-            when ${departureResult} =
-              'EARLY'
-              then
-                'student_early_departure'
-            else
-                'student_signed_out'
-          end,
-          jsonb_build_object(
-            'studentName',
-              recipients.student_name,
-            'casaStudentId',
-              recipients.casa_student_id,
-            'signedOutAt',
-              recipients.occurred_at,
-            'attendanceMethod',
-              'ASSISTED_NO_ACTIVE_CARD',
-            'departureResult',
-              ${departureResult},
-            'message',
-              case
-                when ${departureResult} =
-                  'EARLY'
-                  then
-                    recipients.student_name ||
-                    ' has checked out of school early through supervised assisted sign-out.'
-                else
-                    recipients.student_name ||
-                    ' has signed out of school through supervised assisted sign-out.'
-              end
-          ),
-          'PENDING'::school_notification_delivery_status,
-          0,
-          ${now}::timestamptz,
-          ${now}::timestamptz,
-          ${now}::timestamptz
-        from recipients
-        on conflict do nothing
-        returning
-          id
       )
       select
-        record.id
-          as attendance_record_id,
-        event.id
-          as presence_event_id,
-        record.checked_out_at,
-        record.departure_result::text
-          as departure_result,
         (
           select count(*)::int
-          from queued
-        ) as guardian_notifications_queued
-      from updated_record
-        record
-      join inserted_event
-        event
-        on event.attendance_record_id =
-           record.id
+          from closed_attempts
+        ) as closed_attempts,
+        (
+          select count(*)::int
+          from closed_liveness
+        ) as closed_liveness,
+        (
+          select count(*)::int
+          from revoked_early
+        ) as revoked_early,
+        (
+          select count(*)::int
+          from revoked_late_stay
+        ) as revoked_late_stay
     `);
+  } catch {
+    // Cleanup is deliberately non-authoritative after a successful sign-out.
+  }
 
-  const row =
-    rowsOf<{
-      attendance_record_id:
-        string;
-      presence_event_id:
-        string;
-      checked_out_at:
-        string | Date;
-      departure_result:
-        "EARLY" | "NORMAL";
-      guardian_notifications_queued:
-        number;
-    }>(
-      result,
-    )[0];
+  // ASSISTED_CHECKOUT_MESSAGING_BEST_EFFORT:
+  // WhatsApp/push transport failure must never roll back physical attendance.
+  let guardianNotificationsQueued =
+    0;
 
-  if (!row) {
-    throw new AssistedCheckoutError(
-      "Attendance changed before assisted sign-out could complete.",
-      409,
-      "ASSISTED_CHECKOUT_STATE_CHANGED",
-    );
+  try {
+    const queued =
+      await db.execute(sql`
+        with active_sender as (
+          select
+            sender.id,
+            sender.school_id
+          from school_whatsapp_senders
+            sender
+          where
+            sender.school_id =
+              ${input.access.school.id}::uuid
+            and sender.status =
+              'ACTIVE'::school_messaging_sender_status
+          limit 1
+        ),
+        recipients as (
+          select
+            event.id
+              as presence_event_id,
+            event.school_id,
+            event.student_id,
+            event.attendance_record_id,
+            event.occurred_at,
+            sender.id
+              as sender_id,
+            guardian.id
+              as guardian_id,
+            guardian.phone
+              as recipient_phone,
+            student.casa_student_id,
+            concat_ws(
+              ' ',
+              student.first_name,
+              nullif(
+                student.middle_name,
+                ''
+              ),
+              student.last_name
+            ) as student_name
+          from student_presence_events
+            event
+          join active_sender
+            sender
+            on sender.school_id =
+               event.school_id
+          join student_guardians
+            relationship
+            on relationship.school_id =
+               event.school_id
+           and relationship.student_id =
+               event.student_id
+           and relationship.receives_notifications =
+               true
+          join guardians
+            guardian
+            on guardian.school_id =
+               relationship.school_id
+           and guardian.id =
+               relationship.guardian_id
+           and guardian.status =
+               'ACTIVE'::guardian_status
+           and guardian.phone
+               is not null
+           and length(
+             trim(
+               guardian.phone
+             )
+           ) > 0
+          join students
+            student
+            on student.school_id =
+               event.school_id
+           and student.id =
+               event.student_id
+          where
+            event.school_id =
+              ${input.access.school.id}::uuid
+            and event.id =
+              ${row.presence_event_id}::uuid
+        ),
+        inserted as (
+          insert into school_notification_outbox (
+            school_id,
+            attendance_record_id,
+            presence_event_id,
+            guardian_id,
+            sender_id,
+            event_type,
+            recipient_phone,
+            template_key,
+            payload,
+            status,
+            attempt_count,
+            available_at,
+            created_at,
+            updated_at
+          )
+          select
+            recipients.school_id,
+            recipients.attendance_record_id,
+            recipients.presence_event_id,
+            recipients.guardian_id,
+            recipients.sender_id,
+            case
+              when ${row.departure_result} =
+                'EARLY'
+                then
+                  'STUDENT_EARLY_DEPARTURE'::school_notification_event_type
+              else
+                  'STUDENT_SIGNED_OUT'::school_notification_event_type
+            end,
+            recipients.recipient_phone,
+            case
+              when ${row.departure_result} =
+                'EARLY'
+                then
+                  'student_early_departure'
+              else
+                  'student_signed_out'
+            end,
+            jsonb_build_object(
+              'studentName',
+                recipients.student_name,
+              'casaStudentId',
+                recipients.casa_student_id,
+              'signedOutAt',
+                recipients.occurred_at,
+              'attendanceMethod',
+                'ASSISTED_NO_ACTIVE_CARD',
+              'departureResult',
+                ${row.departure_result},
+              'message',
+                case
+                  when ${row.departure_result} =
+                    'EARLY'
+                    then
+                      recipients.student_name ||
+                      ' has checked out of school early through supervised assisted sign-out.'
+                  else
+                      recipients.student_name ||
+                      ' has signed out of school through supervised assisted sign-out.'
+                end
+            ),
+            'PENDING'::school_notification_delivery_status,
+            0,
+            ${now}::timestamptz,
+            ${now}::timestamptz,
+            ${now}::timestamptz
+          from recipients
+          on conflict do nothing
+          returning id
+        )
+        select
+          count(*)::int
+            as count
+        from inserted
+      `);
+
+    guardianNotificationsQueued =
+      Number(
+        rowsOf<{
+          count: unknown;
+        }>(
+          queued,
+        )[0]?.count ??
+          0,
+      );
+  } catch {
+    guardianNotificationsQueued =
+      0;
   }
 
   const guardianPushQueued =
@@ -872,11 +982,7 @@ export async function recordAssistedCheckout(
       row.checked_out_at,
     departureResult:
       row.departure_result,
-    guardianNotificationsQueued:
-      Number(
-        row.guardian_notifications_queued ??
-        0,
-      ),
+    guardianNotificationsQueued,
     guardianPushQueued,
     verificationMethod:
       "FACE_EXISTING_PROFILE_STAFF_CONFIRMED" as const,
