@@ -12,6 +12,7 @@ import {
 } from "@/server/attendance/readiness";
 import {
   getInitialCardRolloutState,
+  reconcileInitialCardRollout,
 } from "@/server/card-production/initial-rollout";
 import {
   emitCasaOperationalNotificationBestEffort,
@@ -776,11 +777,13 @@ async function reconcileInitialRolloutRisks(
     rowsOf<{
       id: string;
       name: string;
+      timezone: string;
     }>(
       await db.execute(sql`
         select
           school.id::text,
-          school.name
+          school.name,
+          school.timezone
         from schools school
         where
           school.status =
@@ -805,7 +808,20 @@ async function reconcileInitialRolloutRisks(
     const school of
       schools
   ) {
+    const reconciliation =
+      await reconcileInitialCardRollout({
+        schoolId:
+          school.id,
+        timezone:
+          school.timezone,
+        origin:
+          "CASA_SMART_OPERATIONS_INITIAL_ROLLOUT",
+        limit:
+          25,
+      });
+
     const state =
+      reconciliation.state ??
       await getInitialCardRolloutState({
         schoolId:
           school.id,

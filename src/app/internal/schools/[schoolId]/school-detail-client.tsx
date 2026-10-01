@@ -614,6 +614,82 @@ export default function SchoolDetailClient({
     }
   }
 
+  async function reconcileRollout() {
+    setBusy(true);
+    setError("");
+    setNotice("");
+
+    try {
+      const response =
+        await fetch(
+          `/api/internal/platform/schools/${encodeURIComponent(
+            school.id,
+          )}/card-rollout/reconcile`,
+          {
+            method:
+              "POST",
+            credentials:
+              "same-origin",
+          },
+        );
+
+      const body =
+        await response
+          .json()
+          .catch(
+            () => null,
+          ) as {
+            reconciliation?: {
+              releasedScheduled?:
+                number;
+              created?:
+                number;
+              alreadyPresent?:
+                number;
+              deferred?:
+                number;
+              failed?:
+                number;
+            };
+            message?:
+              string;
+          } | null;
+
+      if (!response.ok) {
+        throw new Error(
+          body?.message ??
+            "Initial card rollout reconciliation failed.",
+        );
+      }
+
+      const result =
+        body?.reconciliation;
+
+      setNotice(
+        `Initial rollout reconciled. ${
+          result?.releasedScheduled ?? 0
+        } future-scheduled first-card job(s) released now; ${
+          result?.created ?? 0
+        } missing first card(s) created.${
+          result?.failed
+            ? ` ${result.failed} item(s) still need review.`
+            : ""
+        }`,
+      );
+
+      router.refresh();
+    } catch (caught) {
+      setError(
+        caught instanceof
+          Error
+          ? caught.message
+          : "Initial card rollout reconciliation failed.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function completeRollout() {
     setBusy(true);
     setError("");
@@ -1058,21 +1134,39 @@ export default function SchoolDetailClient({
                 </p>
               )}
 
-              <button
-                className="casa-button-primary mt-4"
-                disabled={
-                  busy ||
-                  !rollout.canComplete
-                }
-                onClick={() =>
-                  setRolloutConfirmOpen(
-                    true,
-                  )
-                }
-                type="button"
-              >
-                Complete initial card rollout
-              </button>
+              <div className="mt-4 flex flex-wrap gap-3">
+                {rollout.missingFirstCards >
+                  0 ||
+                rollout.scheduledFirstCards >
+                  0 ? (
+                  <button
+                    className="casa-button"
+                    disabled={busy}
+                    onClick={() =>
+                      void reconcileRollout()
+                    }
+                    type="button"
+                  >
+                    Reconcile initial cards now
+                  </button>
+                ) : null}
+
+                <button
+                  className="casa-button-primary"
+                  disabled={
+                    busy ||
+                    !rollout.canComplete
+                  }
+                  onClick={() =>
+                    setRolloutConfirmOpen(
+                      true,
+                    )
+                  }
+                  type="button"
+                >
+                  Complete initial card rollout
+                </button>
+              </div>
             </div>
           ) : (
             <p className="p-5 text-sm leading-6 text-black/55">
