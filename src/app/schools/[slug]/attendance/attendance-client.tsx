@@ -3324,7 +3324,8 @@ export default function AttendanceClient(
                       {(canSuperviseAttendance || canManage) && (
                         <td>
                           <div className={styles.actions}>
-                            {canManage && selectedBranchId && (
+                            {canSuperviseAttendance &&
+                              selectedBranchId && (
                               <button
                                 type="button"
                                 className={styles.secondaryButton}

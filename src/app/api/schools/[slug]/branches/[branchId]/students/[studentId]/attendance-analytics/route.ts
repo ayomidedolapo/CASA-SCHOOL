@@ -8,7 +8,7 @@ import {
   getStudentAttendanceAnalytics,
 } from "@/server/attendance/student-analytics";
 import {
-  requireBranchAccess,
+  requireBranchAttendanceOperatorAccess,
 } from "@/server/school-operations/operations";
 import {
   schoolOperationsErrorResponse,
@@ -84,7 +84,7 @@ export async function GET(
     }
 
     const branchAccess =
-      await requireBranchAccess(
+      await requireBranchAttendanceOperatorAccess(
         slug,
         branchId,
       );
