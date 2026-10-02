@@ -600,6 +600,15 @@ export async function produceStudentCard(
     activeCards[0] ??
     null;
 
+  if (activeCard) {
+    return {
+      ok: false as const,
+      status: 409 as const,
+      code:
+        "ACTIVE_CARD_LIFECYCLE_ACTION_REQUIRED",
+    };
+  }
+
   const pendingCards =
     await db
       .select({
@@ -835,34 +844,16 @@ export async function produceStudentCard(
                 and pending.status =
                   'READY_FOR_ACTIVATION'::student_identity_card_status
             )
-            and (
-              (
-                ${activeCard?.id ?? null}::uuid is null
-                and not exists (
-                  select 1
-                  from student_identity_cards active
-                  where
-                    active.school_id =
-                      ${input.access.school.id}::uuid
-                    and active.student_id =
-                      ${input.studentId}::uuid
-                    and active.status =
-                      'ACTIVE'::student_identity_card_status
-                )
-              )
-              or exists (
-                select 1
-                from student_identity_cards active
-                where
-                  active.school_id =
-                    ${input.access.school.id}::uuid
-                  and active.student_id =
-                    ${input.studentId}::uuid
-                  and active.id =
-                    ${activeCard?.id ?? null}::uuid
-                  and active.status =
-                    'ACTIVE'::student_identity_card_status
-              )
+            and not exists (
+              select 1
+              from student_identity_cards active
+              where
+                active.school_id =
+                  ${input.access.school.id}::uuid
+                and active.student_id =
+                  ${input.studentId}::uuid
+                and active.status =
+                  'ACTIVE'::student_identity_card_status
             )
         ),
         inserted_card as (

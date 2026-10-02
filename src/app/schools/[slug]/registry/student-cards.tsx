@@ -514,6 +514,13 @@ export function StudentCards({
         return;
       }
 
+      if (activeCard) {
+        setError(
+          "Mark the active card lost, damaged, or revoke it before creating a replacement.",
+        );
+        return;
+      }
+
       if (pendingCard) {
       setError(
         "A produced card is already awaiting physical handover. Activate it before producing another card.",
@@ -525,13 +532,12 @@ export function StudentCards({
       reason.trim();
 
     if (
-      (activeCard ||
-        reissueRequired) &&
+      reissueRequired &&
       actionReason.length <
         3
     ) {
       setError(
-        "Enter a clear lost, damaged, or security reason before card replacement.",
+        "Enter a clear replacement reason before card reissue.",
       );
       return;
     }
@@ -566,7 +572,6 @@ export function StudentCards({
       }
 
       const grant =
-        activeCard ||
         reissueRequired
           ? await obtainPasskeyStepUpGrant({
               schoolSlug,
@@ -598,7 +603,6 @@ export function StudentCards({
             body:
               JSON.stringify({
                 reason:
-                  activeCard ||
                   reissueRequired
                     ? actionReason
                     : null,
@@ -620,7 +624,7 @@ export function StudentCards({
       }
 
       setNotice(
-        activeCard
+        reissueRequired
           ? "Exceptional replacement card rendered and queued for CASA production."
           : "Missing first digital card created from the active enrollment. No per-student Passkey was required.",
       );
@@ -945,13 +949,20 @@ async function markReplacementPaid() {
     cardId:
       string,
     status:
-      "LOST" |
-      "REVOKED" |
-      "EXPIRED",
+      "REVOKED",
   ) {
     const actionReason =
-      reason.trim() ||
-      null;
+      reason.trim();
+
+    if (
+      actionReason.length <
+        3
+    ) {
+      setError(
+        "Enter a clear security or administrative reason before revoking this card.",
+      );
+      return;
+    }
 
     setBusy(
       true,
@@ -1037,23 +1048,25 @@ async function markReplacementPaid() {
           </p>
         </div>
 
-        <button
-          type="button"
-          disabled={busy || Boolean(pendingCard)}
-          onClick={() =>
-            void produce()
-          }
-          className="casa-button"
-        >
-          {busy
-            ? "Working..."
-            : pendingCard
-              ? "Awaiting handover"
-              : activeCard ||
-                  reissueRequired
-                ? "Reissue card with Passkey"
-                : "Create missing first card"}
-        </button>
+        {!activeCard &&
+        !replacementCase ? (
+          <button
+            type="button"
+            disabled={busy || Boolean(pendingCard)}
+            onClick={() =>
+              void produce()
+            }
+            className="casa-button"
+          >
+            {busy
+              ? "Working..."
+              : pendingCard
+                ? "Awaiting handover"
+                : reissueRequired
+                  ? "Reissue card with Passkey"
+                  : "Create missing first card"}
+          </button>
+        ) : null}
       </div>
 
       {error ? (
@@ -1221,7 +1234,7 @@ async function markReplacementPaid() {
                     event.target.value,
                   )
                 }
-                placeholder="Required for lost/damaged/security replacement; optional for status changes"
+                placeholder="Required for lost, damaged, or security revocation"
                 value={reason}
               />
             </label>
@@ -1268,19 +1281,6 @@ async function markReplacementPaid() {
               Revoke
             </button>
 
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() =>
-                void deactivate(
-                  activeCard.id,
-                  "EXPIRED",
-                )
-              }
-              className="casa-button-secondary"
-            >
-              Mark expired
-            </button>
           </div>
         </div>
       ) : replacementCase ? (
