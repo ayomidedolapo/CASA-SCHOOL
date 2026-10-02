@@ -1313,25 +1313,67 @@ export default function ScannerClient() {
         "serviceWorker" in
         navigator
       ) {
-        void navigator
-          .serviceWorker
-          .register(
-            "/scanner-sw.js",
-            {
-              scope:
-                "/scanner",
-              updateViaCache:
-                "none",
-            },
-          )
-          .then(
-            (registration) =>
-              registration.update(),
-          )
-          .catch(
-            () =>
-              undefined,
-          );
+        void (async () => {
+          const registrations =
+            await navigator
+              .serviceWorker
+              .getRegistrations();
+
+          for (
+            const registration of
+              registrations
+          ) {
+            const worker =
+              registration.active ??
+              registration.waiting ??
+              registration.installing;
+
+            if (!worker) {
+              continue;
+            }
+
+            const scriptPath =
+              new URL(
+                worker.scriptURL,
+              ).pathname;
+            const scopePath =
+              new URL(
+                registration.scope,
+              ).pathname.replace(
+                /\/+$/,
+                "",
+              );
+
+            if (
+              scriptPath ===
+                "/scanner-sw.js" &&
+              scopePath !==
+                "/scanner"
+            ) {
+              await registration
+                .unregister();
+            }
+          }
+
+          const registration =
+            await navigator
+              .serviceWorker
+              .register(
+                "/scanner-sw.js",
+                {
+                  scope:
+                    "/scanner",
+                  updateViaCache:
+                    "none",
+                },
+              );
+
+          await registration
+            .update();
+        })().catch(
+          () =>
+            undefined,
+        );
       }
 
       let cancelled =

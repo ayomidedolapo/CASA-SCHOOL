@@ -92,6 +92,54 @@ function isStandalone() {
   );
 }
 
+async function removeBroadScannerServiceWorkers() {
+  try {
+    const registrations =
+      await navigator
+        .serviceWorker
+        .getRegistrations();
+
+    for (
+      const registration of
+        registrations
+    ) {
+      const worker =
+        registration.active ??
+        registration.waiting ??
+        registration.installing;
+
+      if (!worker) {
+        continue;
+      }
+
+      const scriptPath =
+        new URL(
+          worker.scriptURL,
+        ).pathname;
+      const scopePath =
+        new URL(
+          registration.scope,
+        ).pathname.replace(
+          /\/+$/,
+          "",
+        );
+
+      if (
+        scriptPath ===
+          "/scanner-sw.js" &&
+        scopePath !==
+          "/scanner"
+      ) {
+        await registration
+          .unregister();
+      }
+    }
+  } catch {
+    // Best effort. Browser notification permission is origin-level;
+    // stale scanner registrations must not block the guardian flow.
+  }
+}
+
 export default function GuardianNotificationClient(
   {
     token,
@@ -362,6 +410,8 @@ export default function GuardianNotificationClient(
     setError("");
 
     try {
+      await removeBroadScannerServiceWorkers();
+
       const currentPermission =
         Notification.permission;
 

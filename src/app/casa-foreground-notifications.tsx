@@ -4,6 +4,9 @@ import {
   useEffect,
 } from "react";
 import {
+  usePathname,
+} from "next/navigation";
+import {
   getApp,
   getApps,
   initializeApp,
@@ -54,8 +57,21 @@ function ready() {
 }
 
 export default function CasaForegroundNotifications() {
+  const pathname =
+    usePathname();
+
   useEffect(
     () => {
+      if (
+        pathname ===
+          "/scanner" ||
+        pathname.startsWith(
+          "/guardian-notifications/",
+        )
+      ) {
+        return;
+      }
+
       let cancelled =
         false;
       let stop:
@@ -160,7 +176,9 @@ export default function CasaForegroundNotifications() {
         stop?.();
       };
     },
-    [],
+    [
+      pathname,
+    ],
   );
 
   return null;

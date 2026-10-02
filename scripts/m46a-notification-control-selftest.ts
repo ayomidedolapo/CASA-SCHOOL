@@ -66,7 +66,7 @@ for (
   const marker of [
     "more notification",
     "Collapse",
-    "Hide notification from floating view",
+    "Close floating notifications",
     "notificationId",
     "20_000",
     "View details",

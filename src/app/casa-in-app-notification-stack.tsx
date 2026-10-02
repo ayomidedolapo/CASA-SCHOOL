@@ -74,7 +74,12 @@ export default function CasaInAppNotificationStack() {
     pointerId: number;
     offsetX: number;
     offsetY: number;
+    startX: number;
+    startY: number;
+    moved: boolean;
   } | null>(null);
+  const suppressClickRef =
+    useRef(false);
 
   const endpoint = useMemo(
     () => endpointForPath(pathname),
@@ -130,14 +135,6 @@ export default function CasaInAppNotificationStack() {
     [items, hiddenIds],
   );
 
-  function hideNotification(notificationId: string) {
-    setHiddenIds((current) => {
-      const next = new Set(current);
-      next.add(notificationId);
-      return next;
-    });
-  }
-
   function hideAllFloating() {
     setHiddenIds((current) => {
       const next = new Set(current);
@@ -175,41 +172,157 @@ export default function CasaInAppNotificationStack() {
     }
   }
 
-  function startDrag(event: ReactPointerEvent<HTMLButtonElement>) {
+  function startDrag(event: ReactPointerEvent<HTMLDivElement>) {
     const aside = asideRef.current;
-    if (!aside) return;
 
-    const rect = aside.getBoundingClientRect();
+    if (
+      expanded ||
+      !aside
+    ) {
+      return;
+    }
+
+    const target =
+      event.target as
+        HTMLElement;
+
+    if (
+      target.closest(
+        '[data-floating-close="true"]',
+      )
+    ) {
+      return;
+    }
+
+    const rect =
+      aside.getBoundingClientRect();
+
+    suppressClickRef.current =
+      false;
+
     dragRef.current = {
-      pointerId: event.pointerId,
-      offsetX: event.clientX - rect.left,
-      offsetY: event.clientY - rect.top,
+      pointerId:
+        event.pointerId,
+      offsetX:
+        event.clientX -
+        rect.left,
+      offsetY:
+        event.clientY -
+        rect.top,
+      startX:
+        event.clientX,
+      startY:
+        event.clientY,
+      moved:
+        false,
     };
-    event.currentTarget.setPointerCapture(event.pointerId);
+
+    event.currentTarget
+      .setPointerCapture(
+        event.pointerId,
+      );
   }
 
-  function drag(event: ReactPointerEvent<HTMLButtonElement>) {
-    const state = dragRef.current;
-    const aside = asideRef.current;
-    if (!state || !aside || state.pointerId !== event.pointerId) return;
+  function drag(event: ReactPointerEvent<HTMLDivElement>) {
+    const state =
+      dragRef.current;
+    const aside =
+      asideRef.current;
 
-    const rect = aside.getBoundingClientRect();
-    const maxLeft = Math.max(8, window.innerWidth - rect.width - 8);
-    const maxTop = Math.max(
-      8,
-      window.innerHeight - Math.min(rect.height, window.innerHeight - 16) - 8,
-    );
+    if (
+      !state ||
+      !aside ||
+      state.pointerId !==
+        event.pointerId
+    ) {
+      return;
+    }
+
+    if (
+      !state.moved &&
+      Math.hypot(
+        event.clientX -
+          state.startX,
+        event.clientY -
+          state.startY,
+      ) <
+        6
+    ) {
+      return;
+    }
+
+    state.moved =
+      true;
+
+    event.preventDefault();
+
+    const rect =
+      aside.getBoundingClientRect();
+    const maxLeft =
+      Math.max(
+        8,
+        window.innerWidth -
+          rect.width -
+          8,
+      );
+    const maxTop =
+      Math.max(
+        8,
+        window.innerHeight -
+          Math.min(
+            rect.height,
+            window.innerHeight -
+              16,
+          ) -
+          8,
+      );
 
     setPosition({
-      left: Math.min(maxLeft, Math.max(8, event.clientX - state.offsetX)),
-      top: Math.min(maxTop, Math.max(8, event.clientY - state.offsetY)),
+      left:
+        Math.min(
+          maxLeft,
+          Math.max(
+            8,
+            event.clientX -
+              state.offsetX,
+          ),
+        ),
+      top:
+        Math.min(
+          maxTop,
+          Math.max(
+            8,
+            event.clientY -
+              state.offsetY,
+          ),
+        ),
     });
   }
 
-  function endDrag(event: ReactPointerEvent<HTMLButtonElement>) {
-    if (dragRef.current?.pointerId === event.pointerId) dragRef.current = null;
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
+  function endDrag(event: ReactPointerEvent<HTMLDivElement>) {
+    const state =
+      dragRef.current;
+
+    if (
+      state?.pointerId ===
+      event.pointerId
+    ) {
+      suppressClickRef.current =
+        state.moved;
+      dragRef.current =
+        null;
+    }
+
+    if (
+      event.currentTarget
+        .hasPointerCapture(
+          event.pointerId,
+        )
+    ) {
+      event.currentTarget
+        .releasePointerCapture(
+          event.pointerId,
+        );
     }
   }
 
@@ -227,38 +340,31 @@ export default function CasaInAppNotificationStack() {
       className={`pointer-events-none fixed z-[120] w-[min(390px,calc(100vw-2rem))] ${position ? "" : "right-4 top-[calc(1rem+var(--casa-network-banner-height,0px))]"}`}
       style={position ? { left: position.left, top: position.top } : undefined}
     >
-      <div className="pointer-events-auto mb-1 flex items-center justify-end gap-2">
-        <button
-          type="button"
-          aria-label="Drag notifications"
-          title="Drag notifications"
-          className="touch-none cursor-grab rounded-full border border-black/15 bg-white/95 px-3 py-1.5 font-mono text-[9px] uppercase tracking-[0.1em] shadow-sm active:cursor-grabbing"
-          onPointerDown={startDrag}
-          onPointerMove={drag}
-          onPointerUp={endDrag}
-          onPointerCancel={endDrag}
-        >
-          Drag
-        </button>
-
-        {!expanded ? (
-          <button
-            type="button"
-            aria-label="Hide all floating notifications"
-            title="Hide all from the floating view · stays unread"
-            className="rounded-full border border-black/15 bg-white/95 px-3 py-1.5 text-[10px] font-semibold shadow-sm"
-            onClick={hideAllFloating}
-          >
-            Hide all
-          </button>
-        ) : null}
-      </div>
-
       <div
         className={
           expanded
             ? "pointer-events-auto max-h-[75dvh] space-y-2 overflow-y-auto p-1"
-            : "pointer-events-auto relative h-[168px]"
+            : "pointer-events-auto relative h-[168px] touch-none cursor-grab select-none active:cursor-grabbing"
+        }
+        onPointerDown={
+          expanded
+            ? undefined
+            : startDrag
+        }
+        onPointerMove={
+          expanded
+            ? undefined
+            : drag
+        }
+        onPointerUp={
+          expanded
+            ? undefined
+            : endDrag
+        }
+        onPointerCancel={
+          expanded
+            ? undefined
+            : endDrag
         }
       >
         {visible.map((item, index) => (
@@ -283,11 +389,29 @@ export default function CasaInAppNotificationStack() {
               <button
                 type="button"
                 className="min-w-0 flex-1 text-left"
-                onClick={() =>
-                  floatingItems.length > 1
-                    ? setExpanded(true)
-                    : void viewDetails(item)
-                }
+                onClick={() => {
+                  if (
+                    suppressClickRef.current
+                  ) {
+                    suppressClickRef.current =
+                      false;
+                    return;
+                  }
+
+                  if (
+                    floatingItems.length >
+                    1
+                  ) {
+                    setExpanded(
+                      true,
+                    );
+                    return;
+                  }
+
+                  void viewDetails(
+                    item,
+                  );
+                }}
               >
                 <p className="font-mono text-[9px] uppercase tracking-[0.11em] text-black/40">
                   {item.severity ? `${item.severity} · ` : ""}
@@ -307,16 +431,30 @@ export default function CasaInAppNotificationStack() {
                 ) : null}
               </button>
 
-              <button
-                type="button"
-                aria-label="Hide notification from floating view"
-                title="Hide from floating view · stays unread"
-                disabled={busyId === item.id}
-                className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-black/15 text-lg leading-none disabled:opacity-40"
-                onClick={() => hideNotification(item.id)}
-              >
-                ×
-              </button>
+              {!expanded &&
+              index ===
+                0 ? (
+                <button
+                  type="button"
+                  data-floating-close="true"
+                  aria-label="Close floating notifications"
+                  title="Close floating notifications · stays unread"
+                  className="absolute -right-2 -top-2 z-50 grid h-8 w-8 shrink-0 place-items-center rounded-full border border-black/15 bg-white text-lg leading-none shadow-sm"
+                  onPointerDown={(
+                    event,
+                  ) =>
+                    event.stopPropagation()
+                  }
+                  onClick={(
+                    event,
+                  ) => {
+                    event.stopPropagation();
+                    hideAllFloating();
+                  }}
+                >
+                  ×
+                </button>
+              ) : null}
             </div>
 
             {expanded ? (
