@@ -274,7 +274,7 @@ export default function InternalOnboardingClient({
     completion,
     setCompletion,
   ] =
-    useState("INCOMPLETE");
+    useState("ALL");
   const [
     page,
     setPage,
