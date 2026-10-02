@@ -165,6 +165,10 @@ interface Terminal {
     | "ACTIVE"
     | "SUSPENDED"
     | "REVOKED";
+  connectivityStatus:
+    | "ONLINE"
+    | "OFFLINE"
+    | null;
   credentialVersion: number;
   branchId:
     string | null;
@@ -2436,11 +2440,29 @@ export default function TechnicianClient(
                           styles.caption
                         }
                       >
-                        {terminal.lastSeenAt
-                          ? `Seen ${new Date(
-                              terminal.lastSeenAt,
-                            ).toLocaleString()}`
-                          : "Never seen"}
+                        {terminal.connectivityStatus
+                          ? `${
+                              terminal.connectivityStatus ===
+                              "ONLINE"
+                                ? "Currently online"
+                                : "Currently offline"
+                            } · ${
+                              terminal.lastSeenAt
+                                ? `${
+                                    terminal.connectivityStatus ===
+                                    "ONLINE"
+                                      ? "Seen"
+                                      : "Last seen"
+                                  } ${new Date(
+                                    terminal.lastSeenAt,
+                                  ).toLocaleString()}`
+                                : "Never seen"
+                            }`
+                          : terminal.lastSeenAt
+                            ? `Seen ${new Date(
+                                terminal.lastSeenAt,
+                              ).toLocaleString()}`
+                            : "Never seen"}
                       </span>
                     </div>
 

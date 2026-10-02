@@ -38,7 +38,7 @@ for (const marker of [
   "read_at = coalesce(read_at, now())",
   "payload ->> 'terminalId'",
   "authenticated heartbeat for more than five minutes",
-  'actionUrl: "/internal/health"',
+  'actionUrl: "/internal/scanners"',
 ]) requireText(terminalHealth, marker, "M46C scanner state reconciliation");
 
 const home = read("src/app/internal/page.tsx");
@@ -46,7 +46,7 @@ for (const marker of [
   "attendance_terminals terminal",
   "terminal.last_seen_at is null",
   "interval '5 minutes'",
-  "not responding for more than five minutes",
+  "currently offline",
 ]) requireText(home, marker, "M46C current scanner count");
 rejectText(home, "attendance_terminal_health_states h where h.observed_status='OFFLINE'", "M46C stale scanner count");
 

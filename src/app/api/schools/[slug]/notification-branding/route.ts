@@ -30,6 +30,35 @@ const noStoreHeaders = {
     "no-store, no-cache, must-revalidate",
 } as const;
 
+function rowsOf<T>(
+  result: unknown,
+): T[] {
+  if (Array.isArray(result)) {
+    return result as T[];
+  }
+
+  if (
+    result &&
+    typeof result === "object" &&
+    "rows" in result &&
+    Array.isArray(
+      (
+        result as {
+          rows?: unknown;
+        }
+      ).rows,
+    )
+  ) {
+    return (
+      result as {
+        rows: T[];
+      }
+    ).rows;
+  }
+
+  return [];
+}
+
 function errorResponse(
   error: unknown,
 ) {
@@ -68,6 +97,182 @@ function errorResponse(
   }
 
   return null;
+}
+
+export async function GET(
+  _request: NextRequest,
+  context: {
+    params:
+      Promise<{
+        slug: string;
+      }>;
+  },
+) {
+  const {
+    slug,
+  } =
+    await context.params;
+
+  try {
+    const access =
+      await requireSchoolRole(
+        slug,
+        [
+          "OWNER",
+          "ADMIN",
+        ],
+      );
+    const visible =
+      await listVisibleBranches(
+        slug,
+      );
+    const db =
+      getDb();
+
+    const schoolBranding =
+      rowsOf<{
+        updated_at:
+          string |
+          Date;
+      }>(
+        await db.execute(sql`
+          select
+            updated_at
+          from school_notification_branding
+          where
+            school_id =
+              ${access.school.id}::uuid
+          limit 1
+        `),
+      )[0];
+
+    const branchBranding =
+      rowsOf<{
+        branch_id: string;
+        updated_at:
+          string |
+          Date;
+      }>(
+        await db.execute(sql`
+          select
+            branch_id::text
+              as branch_id,
+            updated_at
+          from school_branch_notification_branding
+          where
+            school_id =
+              ${access.school.id}::uuid
+        `),
+      );
+
+    const byBranch =
+      new Map(
+        branchBranding.map(
+          (
+            row,
+          ) => [
+            row.branch_id,
+            row,
+          ],
+        ),
+      );
+    const schoolVersion =
+      schoolBranding
+        ? encodeURIComponent(
+            String(
+              schoolBranding.updated_at,
+            ),
+          )
+        : "fallback";
+
+    return NextResponse.json(
+      {
+        organizationAdmin:
+          visible.organizationAdmin,
+        school: {
+          id:
+            access.school.id,
+          name:
+            access.school.name,
+          schoolLogoConfigured:
+            Boolean(
+              schoolBranding,
+            ),
+          logoUrl:
+            `/api/public/schools/${encodeURIComponent(
+              access.school.id,
+            )}/notification-logo?v=${schoolVersion}`,
+        },
+        branches:
+          (
+            visible.branches as
+              Array<{
+                id: unknown;
+                name: unknown;
+                code: unknown;
+              }>
+          ).map(
+            (
+              branch,
+            ) => {
+              const id =
+                String(
+                  branch.id,
+                );
+              const branding =
+                byBranch.get(
+                  id,
+                );
+              const version =
+                branding
+                  ? encodeURIComponent(
+                      String(
+                        branding.updated_at,
+                      ),
+                    )
+                  : schoolVersion;
+
+              return {
+                id,
+                name:
+                  String(
+                    branch.name,
+                  ),
+                code:
+                  String(
+                    branch.code,
+                  ),
+                branchLogoConfigured:
+                  Boolean(
+                    branding,
+                  ),
+                logoUrl:
+                  `/api/public/schools/${encodeURIComponent(
+                    access.school.id,
+                  )}/notification-logo?branchId=${encodeURIComponent(
+                    id,
+                  )}&v=${version}`,
+              };
+            },
+          ),
+      },
+      {
+        headers:
+          noStoreHeaders,
+      },
+    );
+  } catch (error) {
+    const response =
+      errorResponse(
+        error,
+      );
+
+    if (response) {
+      return response;
+    }
+
+    throw error;
+  }
 }
 
 export async function POST(

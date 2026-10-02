@@ -144,7 +144,7 @@ export async function reconcileTerminalHealthNotifications(input?: {
       },
       title,
       body,
-      actionUrl: "/internal/health",
+      actionUrl: "/internal/scanners",
       dedupKey: `terminal-health:${terminal.terminal_id}:${observed}`,
       payload: {
         terminalId: terminal.terminal_id,

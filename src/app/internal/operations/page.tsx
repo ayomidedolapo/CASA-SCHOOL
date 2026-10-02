@@ -11,6 +11,7 @@ type Module = {title:string;label:string;description:string;href:string;capabili
 const modules: Module[] = [
   {title:"Organizations",label:"Schools",description:"See every registered organization and platform-wide counts. Every active CASA Team member can open active schools for onboarding.",href:"/internal/schools",capability:null},
   {title:"Student onboarding",label:"Implementation",description:"Continue student, guardian, enrollment, identity and rollout work across every active CASA school.",href:"/internal/onboarding",capability:null},
+{title:"Scanner health",label:"Attendance devices",description:"See current online/offline scanner heartbeat state within your CASA operational scope.",href:"/internal/scanners",capability:null},
   {title:"Card production",label:"Production",description:"Operate central card jobs, filter by branch, preview outputs and export XLSX manifests.",href:"/internal/card-production",capability:"CARD_PRODUCTION_ADMIN"},
   {title:"Card templates",label:"Design control",description:"Create, revise, activate and safely retire school-owned CASA card designs.",href:"/internal/templates",capability:"MASTER_TEMPLATE_ADMIN"},
   {title:"Security & Passkeys",label:"Account security",description:"Register or add Passkeys for this account. Password remains an available fallback where the role supports it.",href:"/security/passkeys",capability:null},

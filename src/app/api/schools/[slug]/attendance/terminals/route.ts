@@ -136,6 +136,10 @@ export async function GET(
           | "ACTIVE"
           | "SUSPENDED"
           | "REVOKED";
+        connectivityStatus:
+          | "ONLINE"
+          | "OFFLINE"
+          | null;
         credentialVersion:
           number;
         lastSeenAt:
@@ -155,6 +159,21 @@ export async function GET(
             t.name as "name",
             t.terminal_code as "terminalCode",
             t.status::text as "status",
+            case
+              when
+                t.status =
+                  'ACTIVE'::attendance_terminal_status
+                and t.last_seen_at is not null
+                and t.last_seen_at >=
+                  now() -
+                    interval '5 minutes'
+                then 'ONLINE'
+              when
+                t.status =
+                  'ACTIVE'::attendance_terminal_status
+                then 'OFFLINE'
+              else null
+            end as "connectivityStatus",
             t.credential_version as "credentialVersion",
             t.last_seen_at as "lastSeenAt",
             t.created_at as "createdAt",

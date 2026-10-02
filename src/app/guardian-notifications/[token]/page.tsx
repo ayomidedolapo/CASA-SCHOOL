@@ -85,12 +85,16 @@ export async function generateMetadata(
     rowsOf<{
       school_id: string;
       school_name: string;
+      branch_id:
+        string | null;
     }>(
       await getDb()
         .execute(sql`
           select
             school.id as school_id,
-            school.name as school_name
+            school.name as school_name,
+            link.branch_id
+              as branch_id
           from guardian_push_enrollment_links link
           join schools school
             on school.id =
@@ -100,9 +104,7 @@ export async function generateMetadata(
               ${digest(
                 token,
               )}
-            and link.claimed_at is null
             and link.revoked_at is null
-            and link.expires_at > now()
           limit 1
         `),
     );
@@ -153,7 +155,13 @@ export async function generateMetadata(
   const logoUrl =
     `${origin}/api/public/schools/${encodeURIComponent(
       invite.school_id,
-    )}/notification-logo`;
+    )}/notification-logo${
+      invite.branch_id
+        ? `?branchId=${encodeURIComponent(
+            invite.branch_id,
+          )}`
+        : ""
+    }`;
 
   const title =
     `${invite.school_name} · Guardian notification setup`;

@@ -87,6 +87,13 @@ export async function GET() {
             current;
 
           if (
+            eventType.includes(
+              "TERMINAL",
+            )
+          ) {
+            actionUrl =
+              "/internal/scanners";
+          } else if (
             !actionUrl ||
             actionUrl ===
               "/internal/notifications"
@@ -99,9 +106,6 @@ export async function GET() {
               actionUrl =
                 "/internal/card-production";
             } else if (
-              eventType.includes(
-                "TERMINAL",
-              ) ||
               eventType.startsWith(
                 "PLATFORM_",
               )

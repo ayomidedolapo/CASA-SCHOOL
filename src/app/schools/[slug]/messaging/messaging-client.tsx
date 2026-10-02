@@ -578,6 +578,15 @@ export default function MessagingClient({
             >
               Calendar
             </Link>
+
+            <Link
+              className="casa-button"
+              href={`/schools/${encodeURIComponent(
+                slug,
+              )}/notification-branding`}
+            >
+              Notification branding
+            </Link>
           </nav>
         </div>
       </header>
