@@ -34,6 +34,7 @@ export function GET() {
     );
 
   const source = `
+// CASA_M50_GUARDIAN_DELIVERY_ATTENDANCE_CLOSURE
 self.addEventListener("notificationclick", (event) => {
   event.preventDefault();
   event.stopImmediatePropagation();

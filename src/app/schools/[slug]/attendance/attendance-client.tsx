@@ -2606,7 +2606,22 @@ export default function AttendanceClient(
                           data.todayDate,
                       )
                     }
-                    onClick={() => void mutateSession("PREPARE", null, "INSTRUCTIONAL")}
+                    onClick={() => {
+                      if (
+                        data?.clock.weekday === 6 &&
+                        !window.confirm(
+                          "This Saturday session will count toward official attendance and punctuality. Use Prepare presence-only instead if students are only being tracked on campus. Continue with graded Saturday attendance?",
+                        )
+                      ) {
+                        return;
+                      }
+
+                      void mutateSession(
+                        "PREPARE",
+                        null,
+                        "INSTRUCTIONAL",
+                      );
+                    }}
                   >
                     Prepare attendance
                   </button>

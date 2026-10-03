@@ -96,6 +96,111 @@ function absolutePublicUrl(
   }
 }
 
+function wait(
+  milliseconds: number,
+) {
+  return new Promise<void>(
+    (resolve) =>
+      setTimeout(
+        resolve,
+        milliseconds,
+      ),
+  );
+}
+
+function transientFcmStatus(
+  status: number,
+) {
+  return (
+    status === 408 ||
+    status === 429 ||
+    status >= 500
+  );
+}
+
+async function sendFcmWithImmediateRetry(
+  input:
+    Parameters<
+      typeof sendFcmToFid
+    >[0],
+) {
+  let last:
+    Awaited<
+      ReturnType<
+        typeof sendFcmToFid
+      >
+    > | null =
+      null;
+
+  for (
+    let attempt = 1;
+    attempt <= 3;
+    attempt += 1
+  ) {
+    try {
+      last =
+        await sendFcmToFid(
+          input,
+        );
+
+      if (
+        last.ok ||
+        !transientFcmStatus(
+          last.status,
+        ) ||
+        attempt >= 3
+      ) {
+        return last;
+      }
+    } catch (error) {
+      if (attempt >= 3) {
+        throw error;
+      }
+    }
+
+    await wait(
+      attempt * 250,
+    );
+  }
+
+  if (!last) {
+    throw new Error(
+      "FCM immediate delivery produced no result.",
+    );
+  }
+
+  return last;
+}
+
+async function recoverStaleGuardianPushClaims(
+  db:
+    ReturnType<
+      typeof getDb
+    >,
+) {
+  await db.execute(sql`
+    update guardian_push_outbox
+    set
+      status = 'RETRY',
+      locked_at = null,
+      available_at =
+        least(
+          available_at,
+          now()
+        ),
+      last_error =
+        coalesce(
+          last_error,
+          'Recovered stale PROCESSING guardian push claim.'
+        ),
+      updated_at = now()
+    where
+      status = 'PROCESSING'
+      and locked_at <
+        now() - interval '5 minutes'
+  `);
+}
+
 export async function runGuardianPushOutbox(
   input: {
     limit?: number;
@@ -113,6 +218,10 @@ export async function runGuardianPushOutbox(
         input.limit ?? 50,
       ),
     );
+
+  await recoverStaleGuardianPushClaims(
+    db,
+  );
 
   const reconciled =
     input.calendarEventId
@@ -239,7 +348,7 @@ export async function runGuardianPushOutbox(
 
   for (const row of claimed) {
     try {
-      const delivery = await sendFcmToFid({
+      const delivery = await sendFcmWithImmediateRetry({
         fid: row.firebase_installation_id,
         title: row.title,
         body: row.body,

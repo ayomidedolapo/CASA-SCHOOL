@@ -281,9 +281,23 @@ export async function queueGuardianPresencePushBestEffort(
       )[0]?.count ??
         0,
     );
-  } catch {
-    // Attendance must remain authoritative even if push queueing is
-    // temporarily unavailable. A zero count is surfaced to the scanner.
+  } catch (error) {
+    console.error(
+      "CASA_GUARDIAN_PUSH_QUEUE_FAILED",
+      {
+        schoolId: input.schoolId,
+        studentId: input.studentId,
+        presenceEventId: input.presenceEventId,
+        eventType: input.eventType,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      },
+    );
+
+    // Attendance remains authoritative even when notification queueing fails.
+    // The database trigger and later reconciliation remain available.
     return 0;
   }
 }

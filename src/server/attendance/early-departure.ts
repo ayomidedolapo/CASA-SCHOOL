@@ -765,94 +765,46 @@ export async function cancelEarlyDeparture(
     };
   }
 
-  const result =
+  const cancelledResult =
     await db.execute(sql`
-      with grant_check as (
-        select grant.id
-        from auth_passkey_step_up_grants
-          grant
-        where
-          grant.id =
-            ${passkeyGrantId}::uuid
-          and grant.user_id =
-            ${input.access.session.userId}::uuid
-          and grant.school_id =
-            ${input.access.school.id}::uuid
-          and grant.membership_id =
-            ${input.access.membership.id}::uuid
-          and grant.action =
-            'EARLY_DEPARTURE'
-          and grant.consumed_at
-            is not null
-        limit 1
-      ),
-      updated as (
-        update attendance_verification_attempts
-          attempt
-        set
-          outcome =
-            'REJECTED'::attendance_attempt_outcome,
-          reason_code =
-            'EARLY_DEPARTURE_CANCELLED_BY_STAFF',
-          manual_verified_by_membership_id =
-            ${input.access.membership.id}::uuid,
-          completed_at =
-            now()
-        where
-          attempt.school_id =
-            ${input.access.school.id}::uuid
-          and attempt.id =
-            ${input.attemptId}::uuid
-          and attempt.outcome =
-            'PENDING'::attendance_attempt_outcome
-          and attempt.operation =
-            'CHECK_OUT'::attendance_operation
-          and (
-            attempt.reason_code =
-              'EARLY_DEPARTURE_AUTH_REQUIRED'
-            or
-            (
-              attempt.departure_result =
-                'EARLY'::attendance_departure_result
-              and attempt.reason_code
-                is null
-            )
+      update attendance_verification_attempts
+        attempt
+      set
+        outcome =
+          'REJECTED'::attendance_attempt_outcome,
+        departure_result =
+          'NOT_RUN'::attendance_departure_result,
+        reason_code =
+          'EARLY_DEPARTURE_CANCELLED_BY_STAFF',
+        manual_verified_by_membership_id =
+          ${input.access.membership.id}::uuid,
+        completed_at =
+          now()
+      where
+        attempt.school_id =
+          ${input.access.school.id}::uuid
+        and attempt.id =
+          ${input.attemptId}::uuid
+        and attempt.outcome =
+          'PENDING'::attendance_attempt_outcome
+        and attempt.operation =
+          'CHECK_OUT'::attendance_operation
+        and (
+          attempt.reason_code =
+            'EARLY_DEPARTURE_AUTH_REQUIRED'
+          or
+          (
+            attempt.departure_result =
+              'EARLY'::attendance_departure_result
+            and attempt.reason_code is null
           )
-          and exists (
-            select 1
-            from grant_check
-          )
-        returning attempt.id
-      ),
-      cancelled_liveness as (
-        update biometric_liveness_sessions
-          session
-        set
-          status = 'FAILED',
-          failure_code =
-            'EARLY_DEPARTURE_CANCELLED_BY_STAFF',
-          updated_at = now()
-        from updated
-        where
-          session.school_id =
-            ${input.access.school.id}::uuid
-          and session.attempt_id =
-            updated.id
-          and session.purpose =
-            'VERIFICATION'
-          and session.status =
-            'CREATED'
-        returning session.id
-      )
-      select id
-      from updated
+        )
+      returning attempt.id
     `);
 
   const cancelled =
-    rowsOf<{
-      id: string;
-    }>(
-      result,
+    rowsOf<{ id: string }>(
+      cancelledResult,
     )[0];
 
   if (!cancelled) {
@@ -864,12 +816,45 @@ export async function cancelEarlyDeparture(
     };
   }
 
+  try {
+    await db.execute(sql`
+      update biometric_liveness_sessions
+      set
+        status = 'FAILED',
+        failure_code =
+          'EARLY_DEPARTURE_CANCELLED_BY_STAFF',
+        updated_at = now()
+      where
+        school_id =
+          ${input.access.school.id}::uuid
+        and attempt_id =
+          ${input.attemptId}::uuid
+        and purpose = 'VERIFICATION'
+        and status = 'CREATED'
+    `);
+  } catch (error) {
+    console.error(
+      "CASA_EARLY_DEPARTURE_LIVENESS_CLEANUP_FAILED",
+      {
+        schoolId:
+          input.access.school.id,
+        attemptId:
+          input.attemptId,
+        error:
+          error instanceof Error
+            ? error.message
+            : String(error),
+      },
+    );
+  }
+
   return {
     ok: true as const,
     cancelled: true,
     attemptId:
       cancelled.id,
   };
+
 }
 
 export async function preauthorizeEarlyDepartures(
