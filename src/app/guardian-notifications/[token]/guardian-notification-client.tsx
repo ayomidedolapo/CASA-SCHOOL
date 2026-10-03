@@ -17,6 +17,29 @@ import {
   register,
 } from "firebase/messaging";
 
+type NotificationDiagnostics = {
+  serviceWorker:
+    | "NOT_CHECKED"
+    | "REGISTERING"
+    | "REGISTERED"
+    | "FAILED";
+  workerScope: string;
+  firebaseRegistration:
+    | "NOT_STARTED"
+    | "REGISTERING"
+    | "REGISTERED"
+    | "FAILED";
+  installationId:
+    | "NOT_RECEIVED"
+    | "RECEIVED";
+  casaDeviceSave:
+    | "NOT_STARTED"
+    | "SAVING"
+    | "SAVED"
+    | "FAILED";
+  lastError: string;
+};
+
 interface LinkData {
   school: {
     id: string;
@@ -196,6 +219,25 @@ export default function GuardianNotificationClient(
     >(
       null,
     );
+
+  const [
+    diagnostics,
+    setDiagnostics,
+  ] =
+    useState<NotificationDiagnostics>({
+      serviceWorker:
+        "NOT_CHECKED",
+      workerScope:
+        "—",
+      firebaseRegistration:
+        "NOT_STARTED",
+      installationId:
+        "NOT_RECEIVED",
+      casaDeviceSave:
+        "NOT_STARTED",
+      lastError:
+        "—",
+    });
 
   useEffect(
     () => {
@@ -408,6 +450,20 @@ export default function GuardianNotificationClient(
 
     setBusy(true);
     setError("");
+    setDiagnostics({
+      serviceWorker:
+        "NOT_CHECKED",
+      workerScope:
+        "—",
+      firebaseRegistration:
+        "NOT_STARTED",
+      installationId:
+        "NOT_RECEIVED",
+      casaDeviceSave:
+        "NOT_STARTED",
+      lastError:
+        "—",
+    });
 
     try {
       await removeBroadScannerServiceWorkers();
@@ -473,12 +529,57 @@ export default function GuardianNotificationClient(
       setPermissionRecovery(
         null,
       );
-const serviceWorker =
-        await navigator
-          .serviceWorker
-          .register(
-            "/firebase-messaging-sw.js",
-          );
+
+      setDiagnostics(
+        (current) => ({
+          ...current,
+          serviceWorker:
+            "REGISTERING",
+          lastError:
+            "—",
+        }),
+      );
+
+      let serviceWorker:
+        ServiceWorkerRegistration;
+
+      try {
+        serviceWorker =
+          await navigator
+            .serviceWorker
+            .register(
+              "/firebase-messaging-sw.js",
+            );
+
+        setDiagnostics(
+          (current) => ({
+            ...current,
+            serviceWorker:
+              "REGISTERED",
+            workerScope:
+              new URL(
+                serviceWorker.scope,
+              ).pathname ||
+              "/",
+          }),
+        );
+      } catch (
+        cause
+      ) {
+        setDiagnostics(
+          (current) => ({
+            ...current,
+            serviceWorker:
+              "FAILED",
+            lastError:
+              cause instanceof Error
+                ? cause.message
+                : "Firebase service worker registration failed.",
+          }),
+        );
+
+        throw cause;
+      }
 
       const app =
         getApps().length >
@@ -534,79 +635,128 @@ const serviceWorker =
         },
       );
 
-      const fid =
-        await new Promise<string>(
-          async (
-            resolve,
-            reject,
-          ) => {
-            let complete =
-              false;
+      setDiagnostics(
+        (current) => ({
+          ...current,
+          firebaseRegistration:
+            "REGISTERING",
+        }),
+      );
 
-            const stop =
-              onRegistered(
-                messaging,
-                (
-                  installationId,
-                ) => {
-                  if (complete) {
-                    return;
-                  }
+      let fid:
+        string;
 
-                  complete =
-                    true;
-                  stop();
-                  resolve(
+      try {
+        fid =
+          await new Promise<string>(
+            async (
+              resolve,
+              reject,
+            ) => {
+              let complete =
+                false;
+
+              const stop =
+                onRegistered(
+                  messaging,
+                  (
                     installationId,
-                  );
-                },
-              );
+                  ) => {
+                    if (complete) {
+                      return;
+                    }
 
-            const timeout =
-              window.setTimeout(
-                () => {
-                  if (!complete) {
                     complete =
                       true;
                     stop();
-                    reject(
-                      new Error(
-                        "Firebase did not finish registering this device.",
-                      ),
+                    resolve(
+                      installationId,
                     );
-                  }
-                },
-                15000,
-              );
+                  },
+                );
 
-            try {
-              await register(
-                messaging,
-                {
-                  vapidKey:
-                    data.firebase
-                      .vapidKey,
-                  serviceWorkerRegistration:
-                    serviceWorker,
-                },
-              );
-            } catch (
-              cause
-            ) {
-              if (!complete) {
-                complete =
-                  true;
-                stop();
-                window.clearTimeout(
-                  timeout,
+              const timeout =
+                window.setTimeout(
+                  () => {
+                    if (!complete) {
+                      complete =
+                        true;
+                      stop();
+                      reject(
+                        new Error(
+                          "Firebase did not finish registering this device.",
+                        ),
+                      );
+                    }
+                  },
+                  15000,
                 );
-                reject(
-                  cause,
+
+              try {
+                await register(
+                  messaging,
+                  {
+                    vapidKey:
+                      data.firebase
+                        .vapidKey,
+                    serviceWorkerRegistration:
+                      serviceWorker,
+                  },
                 );
+              } catch (
+                cause
+              ) {
+                if (!complete) {
+                  complete =
+                    true;
+                  stop();
+                  window.clearTimeout(
+                    timeout,
+                  );
+                  reject(
+                    cause,
+                  );
+                }
               }
-            }
-          },
+            },
+          );
+
+        setDiagnostics(
+          (current) => ({
+            ...current,
+            firebaseRegistration:
+              "REGISTERED",
+            installationId:
+              "RECEIVED",
+          }),
         );
+      } catch (
+        cause
+      ) {
+        setDiagnostics(
+          (current) => ({
+            ...current,
+            firebaseRegistration:
+              "FAILED",
+            installationId:
+              "NOT_RECEIVED",
+            lastError:
+              cause instanceof Error
+                ? cause.message
+                : "Firebase device registration failed.",
+          }),
+        );
+
+        throw cause;
+      }
+
+      setDiagnostics(
+        (current) => ({
+          ...current,
+          casaDeviceSave:
+            "SAVING",
+        }),
+      );
 
       const response =
         await fetch(
@@ -631,11 +781,34 @@ const serviceWorker =
         await response.json();
 
       if (!response.ok) {
-        throw new Error(
+        const message =
           body.message ??
-            "CASA could not save this device.",
+          "CASA could not save this device.";
+
+        setDiagnostics(
+          (current) => ({
+            ...current,
+            casaDeviceSave:
+              "FAILED",
+            lastError:
+              message,
+          }),
+        );
+
+        throw new Error(
+          message,
         );
       }
+
+      setDiagnostics(
+        (current) => ({
+          ...current,
+          casaDeviceSave:
+            "SAVED",
+          lastError:
+            "—",
+        }),
+      );
 
       setEnabled(
         true,
@@ -643,10 +816,24 @@ const serviceWorker =
     } catch (
       cause
     ) {
-      setError(
+      const message =
         cause instanceof Error
           ? cause.message
-          : "Notification setup failed.",
+          : "Notification setup failed.";
+
+      setDiagnostics(
+        (current) => ({
+          ...current,
+          lastError:
+            current.lastError ===
+              "—"
+              ? message
+              : current.lastError,
+        }),
+      );
+
+      setError(
+        message,
       );
     } finally {
       setBusy(
@@ -670,6 +857,32 @@ const serviceWorker =
           <p className="mt-5 text-sm leading-6 text-black/55">
             This one-time link is now closed. You can close CASA; notifications can arrive in the background.
           </p>
+
+          <details className="mt-6 border border-black/15 p-4">
+            <summary className="cursor-pointer text-xs font-semibold">
+              Notification diagnostics
+            </summary>
+            <dl className="mt-4 grid grid-cols-[1fr_auto] gap-x-4 gap-y-2 text-xs">
+              <dt className="text-black/50">Browser permission</dt>
+              <dd className="font-mono">{permissionState}</dd>
+              <dt className="text-black/50">Firebase worker</dt>
+              <dd className="font-mono">{diagnostics.serviceWorker}</dd>
+              <dt className="text-black/50">Worker scope</dt>
+              <dd className="font-mono">{diagnostics.workerScope}</dd>
+              <dt className="text-black/50">Firebase registration</dt>
+              <dd className="font-mono">{diagnostics.firebaseRegistration}</dd>
+              <dt className="text-black/50">Installation ID received</dt>
+              <dd className="font-mono">
+                {diagnostics.installationId === "RECEIVED" ? "YES" : "NO"}
+              </dd>
+              <dt className="text-black/50">CASA device save</dt>
+              <dd className="font-mono">{diagnostics.casaDeviceSave}</dd>
+              <dt className="text-black/50">Last error</dt>
+              <dd className="max-w-[16rem] break-words text-right font-mono">
+                {diagnostics.lastError}
+              </dd>
+            </dl>
+          </details>
         </section>
       </main>
     );
@@ -766,6 +979,32 @@ const serviceWorker =
           )}
         </div>
       ) : null}
+
+          <details className="mt-5 border border-black/15 p-4">
+            <summary className="cursor-pointer text-xs font-semibold">
+              Notification diagnostics
+            </summary>
+            <dl className="mt-4 grid grid-cols-[1fr_auto] gap-x-4 gap-y-2 text-xs">
+              <dt className="text-black/50">Browser permission</dt>
+              <dd className="font-mono">{permissionState}</dd>
+              <dt className="text-black/50">Firebase worker</dt>
+              <dd className="font-mono">{diagnostics.serviceWorker}</dd>
+              <dt className="text-black/50">Worker scope</dt>
+              <dd className="font-mono">{diagnostics.workerScope}</dd>
+              <dt className="text-black/50">Firebase registration</dt>
+              <dd className="font-mono">{diagnostics.firebaseRegistration}</dd>
+              <dt className="text-black/50">Installation ID received</dt>
+              <dd className="font-mono">
+                {diagnostics.installationId === "RECEIVED" ? "YES" : "NO"}
+              </dd>
+              <dt className="text-black/50">CASA device save</dt>
+              <dd className="font-mono">{diagnostics.casaDeviceSave}</dd>
+              <dt className="text-black/50">Last error</dt>
+              <dd className="max-w-[16rem] break-words text-right font-mono">
+                {diagnostics.lastError}
+              </dd>
+            </dl>
+          </details>
 
       <button
               type="button"
