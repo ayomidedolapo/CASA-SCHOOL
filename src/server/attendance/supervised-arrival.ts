@@ -2,6 +2,9 @@ import { sql } from "drizzle-orm";
 
 import { getDb } from "@/db";
 import {
+  runGuardianPushOutbox,
+} from "@/server/messaging/guardian-push-worker";
+import {
   requireSchoolAccess,
   type SchoolAccess,
 } from "@/server/auth/authorization";
@@ -189,19 +192,26 @@ async function requireOpenSessionWindow(
   const result = await db.execute(sql`
     select
       session.id,
-      session.policy_id,
+      coalesce(branch_session.policy_id, session.policy_id) as policy_id,
+      branch_session.mode::text as mode,
       day.check_in_opens_at::text as check_in_opens_at,
       day.check_in_closes_at::text as check_in_closes_at,
       day.check_out_closes_at::text as check_out_closes_at
     from attendance_sessions session
-    join attendance_policy_days day
+    join attendance_branch_sessions branch_session
+      on branch_session.school_id = session.school_id
+     and branch_session.session_id = session.id
+     and branch_session.branch_id = ${branchId}::uuid
+    left join attendance_policy_days day
       on day.school_id = session.school_id
-     and day.policy_id = session.policy_id
+     and day.policy_id = coalesce(branch_session.policy_id, session.policy_id)
      and day.weekday = ${clock.weekday}
     where
       session.school_id = ${input.access.school.id}::uuid
       and session.attendance_date = ${clock.date}::date
       and session.status = 'OPEN'::attendance_session_status
+      and branch_session.status = 'OPEN'
+      and branch_session.mode in ('INSTRUCTIONAL', 'PRESENCE_ONLY')
       and not exists (
         select 1
         from school_calendar_events event
@@ -219,47 +229,73 @@ async function requireOpenSessionWindow(
 
   const session = rowsOf<{
     id: string;
-    policy_id: string;
-    check_in_opens_at: string;
-    check_in_closes_at: string;
-    check_out_closes_at: string;
+    policy_id: string | null;
+    mode: "INSTRUCTIONAL" | "PRESENCE_ONLY";
+    check_in_opens_at: string | null;
+    check_in_closes_at: string | null;
+    check_out_closes_at: string | null;
   }>(result)[0];
 
   if (!session) {
     throw new SupervisedArrivalError(
-      "No open instructional attendance session exists for this student today.",
+      "No open branch attendance session exists for this student today.",
       409,
-      "OPEN_INSTRUCTIONAL_ATTENDANCE_SESSION_REQUIRED",
-    );
-  }
-
-  const opensAt = session.check_in_opens_at.slice(0, 5);
-  const closesAt = session.check_in_closes_at.slice(0, 5);
-  const checkoutClosesAt = session.check_out_closes_at.slice(0, 5);
-
-  if (
-    input.mode === "FIRST_CARD" &&
-    (clock.clock < opensAt || clock.clock > closesAt)
-  ) {
-    throw new SupervisedArrivalError(
-      "First-card supervised attendance is only available during the normal check-in window. Use supervised late arrival after the window closes.",
-      409,
-      "FIRST_CARD_ATTENDANCE_WINDOW_REQUIRED",
+      "OPEN_BRANCH_ATTENDANCE_SESSION_REQUIRED",
     );
   }
 
   if (
     input.mode === "LATE" &&
-    (
-      clock.clock <= closesAt ||
-      clock.clock > checkoutClosesAt
-    )
+    session.mode !== "INSTRUCTIONAL"
   ) {
     throw new SupervisedArrivalError(
-      "Supervised late arrival is only available after check-in closes and before the attendance checkout window closes.",
+      "Supervised late arrival is only available during an instructional attendance session.",
       409,
-      "SUPERVISED_LATE_WINDOW_REQUIRED",
+      "SUPERVISED_LATE_INSTRUCTIONAL_ONLY",
     );
+  }
+
+  if (session.mode === "INSTRUCTIONAL") {
+    if (
+      !session.check_in_opens_at ||
+      !session.check_in_closes_at ||
+      !session.check_out_closes_at
+    ) {
+      throw new SupervisedArrivalError(
+        "The open instructional attendance session has no complete policy window for today.",
+        409,
+        "INSTRUCTIONAL_ATTENDANCE_WINDOW_REQUIRED",
+      );
+    }
+
+    const opensAt = session.check_in_opens_at.slice(0, 5);
+    const closesAt = session.check_in_closes_at.slice(0, 5);
+    const checkoutClosesAt = session.check_out_closes_at.slice(0, 5);
+
+    if (
+      input.mode === "FIRST_CARD" &&
+      (clock.clock < opensAt || clock.clock > closesAt)
+    ) {
+      throw new SupervisedArrivalError(
+        "First-card supervised attendance is only available during the normal check-in window. Use supervised late arrival after the window closes.",
+        409,
+        "FIRST_CARD_ATTENDANCE_WINDOW_REQUIRED",
+      );
+    }
+
+    if (
+      input.mode === "LATE" &&
+      (
+        clock.clock <= closesAt ||
+        clock.clock > checkoutClosesAt
+      )
+    ) {
+      throw new SupervisedArrivalError(
+        "Supervised late arrival is only available after check-in closes and before the attendance checkout window closes.",
+        409,
+        "SUPERVISED_LATE_WINDOW_REQUIRED",
+      );
+    }
   }
 
   return {
@@ -575,6 +611,17 @@ export async function recordFirstCardAttendanceException(
       409,
       "FIRST_CARD_EXCEPTION_STATE_CHANGED",
     );
+  }
+
+  try {
+    await runGuardianPushOutbox({
+      schoolId: input.access.school.id,
+      presenceEventId: row.presence_event_id,
+      limit: 50,
+    });
+  } catch {
+    // Physical presence is authoritative. Guardian push is best-effort and
+    // must never roll back a completed supervised first-card record.
   }
 
   return {

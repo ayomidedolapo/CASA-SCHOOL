@@ -579,7 +579,7 @@ export async function countInstructionalGraceDays(
   return count;
 }
 
-async function requireOpenInstructionalSession(
+async function requireOpenAttendanceSessionForCardException(
   input: {
     access: SchoolAccess;
     studentId: string;
@@ -623,38 +623,41 @@ async function requireOpenInstructionalSession(
     await db.execute(sql`
       select
         session.id,
-        session.policy_id,
-        session.attendance_date::text
-          as attendance_date
+        coalesce(branch_session.policy_id, session.policy_id) as policy_id,
+        session.attendance_date::text as attendance_date,
+        branch_session.mode::text as mode
       from attendance_sessions session
-      join attendance_policy_days day
-        on day.school_id =
-           session.school_id
-       and day.policy_id =
-           session.policy_id
-       and day.weekday =
-           ${clock.weekday}
+      join attendance_branch_sessions branch_session
+        on branch_session.school_id = session.school_id
+       and branch_session.session_id = session.id
+       and branch_session.branch_id = ${branchId}::uuid
       where
-        session.school_id =
-          ${input.access.school.id}::uuid
-        and session.attendance_date =
-          ${clock.date}::date
-        and session.status =
-          'OPEN'::attendance_session_status
+        session.school_id = ${input.access.school.id}::uuid
+        and session.attendance_date = ${clock.date}::date
+        and session.status = 'OPEN'::attendance_session_status
+        and branch_session.status = 'OPEN'
+        and branch_session.mode in ('INSTRUCTIONAL', 'PRESENCE_ONLY')
+        and (
+          branch_session.mode = 'PRESENCE_ONLY'
+          or exists (
+            select 1
+            from attendance_policy_days day
+            where
+              day.school_id = session.school_id
+              and day.policy_id = coalesce(branch_session.policy_id, session.policy_id)
+              and day.weekday = ${clock.weekday}
+          )
+        )
         and not exists (
           select 1
           from school_calendar_events event
           where
-            event.school_id =
-              session.school_id
-            and event.starts_on <=
-              session.attendance_date
-            and event.ends_on >=
-              session.attendance_date
+            event.school_id = session.school_id
+            and event.starts_on <= session.attendance_date
+            and event.ends_on >= session.attendance_date
             and (
               event.branch_id is null
-              or event.branch_id =
-                 ${branchId}::uuid
+              or event.branch_id = ${branchId}::uuid
             )
         )
       limit 1
@@ -663,16 +666,18 @@ async function requireOpenInstructionalSession(
   const session =
     rowsOf<{
       id: string;
-      policy_id: string;
+      policy_id: string | null;
       attendance_date:
         string;
+      mode:
+        "INSTRUCTIONAL" | "PRESENCE_ONLY";
     }>(result)[0];
 
   if (!session) {
     throw new CardReplacementAttendanceError(
-      "No open instructional attendance session exists for this student today.",
+      "No open branch attendance session exists for this student today.",
       409,
-      "OPEN_INSTRUCTIONAL_ATTENDANCE_SESSION_REQUIRED",
+      "OPEN_BRANCH_ATTENDANCE_SESSION_REQUIRED",
     );
   }
 
@@ -731,7 +736,7 @@ export async function recordCardReplacementAttendanceException(
     branchId,
     session,
   } =
-    await requireOpenInstructionalSession({
+    await requireOpenAttendanceSessionForCardException({
       access:
         input.access,
       studentId:
@@ -781,7 +786,7 @@ export async function recordCardReplacementAttendanceException(
     number | null =
       null;
 
-  if (!replacementPaid) {
+  if (!replacementPaid && session.mode === "INSTRUCTIONAL") {
     graceDayNumber =
       await countInstructionalGraceDays({
         schoolId:

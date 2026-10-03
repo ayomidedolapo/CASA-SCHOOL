@@ -56,6 +56,48 @@ function ready() {
     );
 }
 
+async function acknowledgeDisplayedPush(
+  data:
+    Record<string, string> |
+    undefined,
+) {
+  const outboxId =
+    data?.casaOutboxId;
+  const receiptToken =
+    data?.casaReceiptToken;
+
+  if (
+    !outboxId ||
+    !receiptToken
+  ) {
+    return;
+  }
+
+  try {
+    await fetch(
+      "/api/guardian-notifications/delivery-ack",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type":
+            "application/json",
+        },
+        body:
+          JSON.stringify({
+            outboxId,
+            receiptToken,
+            source:
+              "FOREGROUND",
+          }),
+        keepalive: true,
+        cache: "no-store",
+      },
+    );
+  } catch {
+    // A later registration catch-up sync remains available.
+  }
+}
+
 export default function CasaForegroundNotifications() {
   const pathname =
     usePathname();
@@ -64,10 +106,7 @@ export default function CasaForegroundNotifications() {
     () => {
       if (
         pathname ===
-          "/scanner" ||
-        pathname.startsWith(
-          "/guardian-notifications/",
-        )
+          "/scanner"
       ) {
         return;
       }
@@ -142,19 +181,35 @@ export default function CasaForegroundNotifications() {
               const icon =
                 payload.data
                   ?.casaIconUrl;
-              void registration
-                .showNotification(
-                  title,
-                  {
-                    body,
-                    icon:
-                      icon ??
-                      undefined,
-                    badge:
-                      icon ??
-                      undefined,
-                  },
+              const presenceEventId =
+                payload.data
+                  ?.presenceEventId ??
+                payload.data
+                  ?.casaPresenceEventId;
+
+              void (async () => {
+                await registration
+                  .showNotification(
+                    title,
+                    {
+                      body,
+                      icon:
+                        icon ??
+                        undefined,
+                      badge:
+                        icon ??
+                        undefined,
+                      tag:
+                        presenceEventId
+                          ? `casa-presence-${presenceEventId}`
+                          : undefined,
+                    },
+                  );
+
+                await acknowledgeDisplayedPush(
+                  payload.data,
                 );
+              })();
             },
           );
       }

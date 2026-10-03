@@ -23,6 +23,7 @@ type PushRow = {
   icon_url: string | null;
   click_url: string | null;
   payload: Record<string, unknown> | null;
+  delivery_receipt_token: string;
   attempt_count: number;
 };
 
@@ -115,6 +116,22 @@ function transientFcmStatus(
     status === 408 ||
     status === 429 ||
     status >= 500
+  );
+}
+
+function terminalFcmRegistrationFailure(
+  delivery: {
+    status: number;
+    error: string | null;
+    errorStatus: string | null;
+  },
+) {
+  return (
+    delivery.status === 404 ||
+    delivery.errorStatus === "NOT_FOUND" ||
+    /UNREGISTERED|not registered|registration.*invalid/i.test(
+      delivery.error ?? "",
+    )
   );
 }
 
@@ -336,6 +353,7 @@ export async function runGuardianPushOutbox(
       outbox.icon_url,
       outbox.click_url,
       outbox.payload,
+      outbox.delivery_receipt_token::text,
       outbox.attempt_count
   `),
     );
@@ -365,7 +383,20 @@ export async function runGuardianPushOutbox(
                 )}`
               : ""
           }`,
-        data: stringData(row.payload),
+        data: {
+          ...stringData(row.payload),
+          casaOutboxId:
+            row.id,
+          casaReceiptToken:
+            row.delivery_receipt_token,
+          ...((row.payload?.presenceEventId &&
+          typeof row.payload.presenceEventId === "string")
+            ? {
+                casaPresenceEventId:
+                  row.payload.presenceEventId,
+              }
+            : {}),
+        },
       });
 
       if (delivery.ok) {
@@ -382,6 +413,70 @@ export async function runGuardianPushOutbox(
           where id = ${row.id}::uuid
             and status = 'PROCESSING'
         `);
+        continue;
+      }
+
+      if (
+        terminalFcmRegistrationFailure(
+          delivery,
+        )
+      ) {
+        failed += 1;
+        failedBySchool.set(
+          row.school_id,
+          (failedBySchool.get(
+            row.school_id,
+          ) ?? 0) + 1,
+        );
+
+        await db.execute(sql`
+          with disabled_device as (
+            update guardian_push_devices device
+            set
+              status = 'DISABLED',
+              updated_at = now()
+            where device.id = ${row.device_id}::uuid
+              and device.firebase_installation_id =
+                  ${row.firebase_installation_id}
+            returning device.browser_registration_id
+          ),
+          stale_browser as (
+            update guardian_push_browser_registrations browser
+            set
+              status = 'STALE',
+              unregistered_at = coalesce(
+                browser.unregistered_at,
+                now()
+              ),
+              updated_at = now()
+            where browser.id in (
+                select browser_registration_id
+                from disabled_device
+                where browser_registration_id is not null
+              )
+              and browser.firebase_installation_id =
+                  ${row.firebase_installation_id}
+              and browser.status <> 'REVOKED'
+            returning browser.id
+          )
+          update guardian_push_outbox outbox
+          set
+            status = case
+              when outbox.id = ${row.id}::uuid
+                then 'FAILED'
+              else 'CANCELLED'
+            end,
+            last_error = ${delivery.error?.slice(0, 1000) ?? `FCM HTTP ${delivery.status}`},
+            locked_at = null,
+            updated_at = now()
+          where outbox.device_id = ${row.device_id}::uuid
+            and outbox.status in (
+              'PENDING',
+              'RETRY',
+              'PROCESSING'
+            )
+        `);
+
         continue;
       }
 

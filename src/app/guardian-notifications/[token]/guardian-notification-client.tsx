@@ -12,7 +12,6 @@ import {
 } from "firebase/app";
 import {
   getMessaging,
-  onMessage,
   onRegistered,
   register,
 } from "firebase/messaging";
@@ -90,6 +89,52 @@ function isStandalone() {
       ).standalone,
     )
   );
+}
+
+const REGISTRATION_STORAGE_KEY =
+  "casa:guardian-push-registration-credentials:v1";
+
+function createBrowserCredential() {
+  return `${window.crypto.randomUUID()}.${window.crypto.randomUUID()}`;
+}
+
+function rememberBrowserCredential(
+  credential: string,
+) {
+  try {
+    const raw =
+      window.localStorage.getItem(
+        REGISTRATION_STORAGE_KEY,
+      );
+    const parsed =
+      raw
+        ? JSON.parse(raw)
+        : [];
+    const current =
+      Array.isArray(parsed)
+        ? parsed.filter(
+            (value): value is string =>
+              typeof value === "string" &&
+              value.trim().length >= 32,
+          )
+        : [];
+
+    window.localStorage.setItem(
+      REGISTRATION_STORAGE_KEY,
+      JSON.stringify(
+        Array.from(
+          new Set([
+            ...current,
+            credential,
+          ]),
+        ).slice(0, 12),
+      ),
+    );
+  } catch {
+    throw new Error(
+      "This browser is blocking the local storage CASA needs to keep notification registration fresh. Allow site storage for CASA and try again before completing notification setup.",
+    );
+  }
 }
 
 async function removeBroadScannerServiceWorkers() {
@@ -506,36 +551,6 @@ export default function GuardianNotificationClient(
           app,
         );
 
-      onMessage(
-        messaging,
-        (payload) => {
-          const title =
-            payload.notification
-              ?.title ??
-            data.school.name;
-          const body =
-            payload.notification
-              ?.body ??
-            "CASA school notification";
-
-          const icon =
-            payload.data
-              ?.casaIconUrl ??
-            data.school
-              .logoUrl ??
-            undefined;
-          void serviceWorker
-            .showNotification(
-              title,
-              {
-                body,
-                icon,
-                badge:
-                  icon,
-              },
-            );
-        },
-      );
 
 
       let fid:
@@ -624,6 +639,13 @@ export default function GuardianNotificationClient(
       }
 
 
+      const browserCredential =
+        createBrowserCredential();
+
+      rememberBrowserCredential(
+        browserCredential,
+      );
+
       const response =
         await fetch(
           `/api/guardian-notifications/${encodeURIComponent(
@@ -639,6 +661,7 @@ export default function GuardianNotificationClient(
             body:
               JSON.stringify({
                 fid,
+                browserCredential,
               }),
           },
         );
@@ -693,7 +716,7 @@ export default function GuardianNotificationClient(
             Notifications enabled.
           </h1>
           <p className="mt-5 text-sm leading-6 text-black/55">
-            This one-time link is now closed. You can close CASA; notifications can arrive in the background.
+            This setup link is now closed. Keep this CASA link available on this browser: opening it again can refresh the browser registration and catch up missed presence alerts after reconnecting. Background push remains best-effort; Firebase acceptance alone is not treated as proof that the browser displayed an alert.
           </p>
         </section>
       </main>

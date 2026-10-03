@@ -79,6 +79,11 @@ const claim =
         .trim()
         .min(10)
         .max(255),
+    browserCredential:
+      z.string()
+        .trim()
+        .min(32)
+        .max(220),
   });
 
 export async function GET(
@@ -354,6 +359,58 @@ export async function POST(
     );
   }
 
+  const browserRegistration =
+    rowsOf<{
+      id: string;
+    }>(
+      await getDb()
+        .execute(sql`
+          insert into guardian_push_browser_registrations (
+            school_id,
+            guardian_id,
+            enrollment_link_id,
+            credential_hash,
+            firebase_installation_id,
+            status,
+            user_agent,
+            registered_at,
+            last_seen_at,
+            created_at,
+            updated_at
+          )
+          values (
+            ${link.school_id}::uuid,
+            ${link.guardian_id}::uuid,
+            ${link.id}::uuid,
+            ${digest(parsed.data.browserCredential)},
+            ${parsed.data.fid},
+            'ACTIVE',
+            ${userAgent},
+            now(),
+            now(),
+            now(),
+            now()
+          )
+          returning id::text
+        `),
+    )[0];
+
+  if (!browserRegistration) {
+    return NextResponse.json(
+      {
+        message:
+          "CASA could not create the durable browser registration.",
+      },
+      {
+        status: 409,
+        headers: {
+          "Cache-Control":
+            "no-store",
+        },
+      },
+    );
+  }
+
   await getDb()
     .execute(sql`
       insert into guardian_push_devices (
@@ -363,6 +420,7 @@ export async function POST(
         guardian_id,
         student_guardian_link_id,
         enrollment_link_id,
+        browser_registration_id,
         firebase_installation_id,
         status,
         user_agent,
@@ -377,6 +435,7 @@ export async function POST(
         ${link.guardian_id}::uuid,
         ${link.student_guardian_link_id}::uuid,
         ${link.id}::uuid,
+        ${browserRegistration.id}::uuid,
         ${parsed.data.fid},
         'ACTIVE',
         ${userAgent},
@@ -394,6 +453,8 @@ export async function POST(
           excluded.branch_id,
         enrollment_link_id =
           excluded.enrollment_link_id,
+        browser_registration_id =
+          excluded.browser_registration_id,
         status =
           'ACTIVE',
         user_agent =
@@ -426,6 +487,28 @@ export async function POST(
     });
 
   if (!test.ok) {
+    if (test.status === 404) {
+      await getDb()
+        .execute(sql`
+          with stale as (
+            update guardian_push_browser_registrations
+            set
+              status = 'STALE',
+              unregistered_at = now(),
+              updated_at = now()
+            where id = ${browserRegistration.id}::uuid
+            returning id
+          )
+          update guardian_push_devices device
+          set
+            status = 'DISABLED',
+            updated_at = now()
+          from stale browser
+          where device.browser_registration_id = browser.id
+            and device.firebase_installation_id = ${parsed.data.fid}
+        `);
+    }
+
     return NextResponse.json(
       {
         message:
@@ -442,6 +525,34 @@ export async function POST(
       },
     );
   }
+
+  await getDb()
+    .execute(sql`
+      with revoked as (
+        update guardian_push_browser_registrations other
+        set
+          status = 'REVOKED',
+          unregistered_at = coalesce(
+            other.unregistered_at,
+            now()
+          ),
+          updated_at = now()
+        where other.school_id = ${link.school_id}::uuid
+          and other.guardian_id = ${link.guardian_id}::uuid
+          and other.firebase_installation_id = ${parsed.data.fid}
+          and other.id <> ${browserRegistration.id}::uuid
+          and other.status <> 'REVOKED'
+        returning other.id
+      )
+      update guardian_push_devices device
+      set
+        status = 'DISABLED',
+        updated_at = now()
+      where device.browser_registration_id in (
+          select id from revoked
+        )
+        and device.status = 'ACTIVE'
+    `);
 
   const claimed =
     await getDb()
@@ -498,7 +609,9 @@ export async function POST(
   return NextResponse.json(
     {
       enabled: true,
-      testPushDelivered:
+      testPushAcceptedByFirebase:
+        true,
+      durableRegistration:
         true,
     },
     {

@@ -1176,7 +1176,9 @@ export default function AttendanceClient(
       }
 
       setNotice(
-        "Supervised first-card attendance recorded with face-confirmation audit.",
+        data?.session?.mode === "PRESENCE_ONLY"
+          ? "Supervised first-card physical presence recorded with face-confirmation audit. This presence-only session does not grade attendance or punctuality."
+          : "Supervised first-card attendance recorded with face-confirmation audit.",
       );
       await refreshToday();
     } catch (caught) {
@@ -1251,9 +1253,11 @@ export default function AttendanceClient(
       }
 
       setNotice(
-        body.replacementRequested
-          ? "Lost-card attendance recorded with face confirmation. The formal replacement request remains authoritative."
-          : `Lost-card attendance recorded with face confirmation${body.graceDayNumber ? ` on instructional grace day ${body.graceDayNumber} of 3` : ""}.`,
+        data?.session?.mode === "PRESENCE_ONLY"
+          ? "Lost-card physical presence recorded with face confirmation. This presence-only session does not grade attendance or punctuality, and no instructional grace day was consumed."
+          : body.replacementRequested
+            ? "Lost-card attendance recorded with face confirmation. The formal replacement request remains authoritative."
+            : `Lost-card attendance recorded with face confirmation${body.graceDayNumber ? ` on instructional grace day ${body.graceDayNumber} of 3` : ""}.`,
       );
 
       await refreshToday();
@@ -3446,7 +3450,8 @@ export default function AttendanceClient(
 
                             {canSuperviseAttendance &&
                               !data?.readOnly &&
-                              data?.session?.mode === "INSTRUCTIONAL" &&
+                              (data?.session?.mode === "INSTRUCTIONAL" ||
+                                data?.session?.mode === "PRESENCE_ONLY") &&
                               data?.session?.status === "OPEN" &&
                               (student.presenceStatus === "NOT_ARRIVED" || student.presenceStatus === "ABSENT") && (
                                 <>
@@ -3457,7 +3462,9 @@ export default function AttendanceClient(
                                       disabled={busy}
                                       onClick={() => setPendingConfirm({ kind: "FIRST_CARD", student })}
                                     >
-                                      First-card face
+                                      {data.session.mode === "PRESENCE_ONLY"
+                                        ? "First-card presence"
+                                        : "First-card face"}
                                     </button>
                                   )}
                                   {student.cardReplacement && (
@@ -3467,19 +3474,23 @@ export default function AttendanceClient(
                                       disabled={busy}
                                       onClick={() => setPendingConfirm({ kind: "CARD_REPLACEMENT", student })}
                                     >
-                                      {student.cardReplacement.replacementRequested
-                                        ? "Lost-card face - replacement pending"
-                                        : "Lost-card face - 3-day grace"}
+                                      {data.session.mode === "PRESENCE_ONLY"
+                                        ? "Lost-card presence"
+                                        : student.cardReplacement.replacementRequested
+                                          ? "Lost-card face - replacement pending"
+                                          : "Lost-card face - 3-day grace"}
                                     </button>
                                   )}
-                                  <button
-                                    type="button"
-                                    className={styles.secondaryButton}
-                                    disabled={busy}
-                                    onClick={() => setPendingInput({ kind: "SUPERVISED_LATE", student })}
-                                  >
-                                    Record late
-                                  </button>
+                                  {data.session.mode === "INSTRUCTIONAL" && (
+                                    <button
+                                      type="button"
+                                      className={styles.secondaryButton}
+                                      disabled={busy}
+                                      onClick={() => setPendingInput({ kind: "SUPERVISED_LATE", student })}
+                                    >
+                                      Record late
+                                    </button>
+                                  )}
                                 </>
                               )}
                           </div>
@@ -4168,18 +4179,26 @@ export default function AttendanceClient(
       <CasaConfirmDialog
         open={pendingConfirm !== null}
         title={
-          pendingConfirm?.kind === "CARD_REPLACEMENT"
-            ? "Record lost-card attendance?"
-            : "Record first-card attendance?"
+          data?.session?.mode === "PRESENCE_ONLY"
+            ? pendingConfirm?.kind === "CARD_REPLACEMENT"
+              ? "Record lost-card physical presence?"
+              : "Record first-card physical presence?"
+            : pendingConfirm?.kind === "CARD_REPLACEMENT"
+              ? "Record lost-card attendance?"
+              : "Record first-card attendance?"
         }
         message={
           pendingConfirm?.kind === "CARD_REPLACEMENT"
-            ? `Confirm that ${studentName(pendingConfirm.student)} is physically present and their face matches the existing enrolled biometric profile. CASA will enforce the three-instructional-day grace rule unless a formal replacement request already exists.`
+            ? data?.session?.mode === "PRESENCE_ONLY"
+              ? `Confirm that ${studentName(pendingConfirm.student)} is physically present and their face matches the existing enrolled biometric profile. This records ON_CAMPUS presence only; it does not grade attendance or punctuality and does not consume an instructional replacement grace day.`
+              : `Confirm that ${studentName(pendingConfirm.student)} is physically present and their face matches the existing enrolled biometric profile. CASA will enforce the three-instructional-day grace rule unless a formal replacement request already exists.`
             : pendingConfirm?.kind === "FIRST_CARD"
-              ? `Confirm that ${studentName(pendingConfirm.student)} is physically present and their face matches the existing enrolled biometric profile.`
+              ? data?.session?.mode === "PRESENCE_ONLY"
+                ? `Confirm that ${studentName(pendingConfirm.student)} is physically present and their face matches the existing enrolled biometric profile. This records ON_CAMPUS presence only and does not grade attendance or punctuality.`
+                : `Confirm that ${studentName(pendingConfirm.student)} is physically present and their face matches the existing enrolled biometric profile.`
               : ""
         }
-        confirmLabel="Record attendance"
+        confirmLabel={data?.session?.mode === "PRESENCE_ONLY" ? "Record presence" : "Record attendance"}
         busy={busy}
         onCancel={() => setPendingConfirm(null)}
         onConfirm={() => {

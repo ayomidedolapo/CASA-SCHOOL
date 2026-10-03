@@ -356,6 +356,7 @@ export async function sendFcmToFid(
         name?: string;
         error?: {
           message?: string;
+          status?: string;
         };
       }
     | null = null;
@@ -388,5 +389,11 @@ export async function sendFcmToFid(
             900,
           ) ??
           "FCM send failed.",
+    errorStatus:
+      response.ok
+        ? null
+        : body?.error
+            ?.status ??
+          null,
   };
 }

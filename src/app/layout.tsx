@@ -4,6 +4,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
 import CasaForegroundNotifications from "./casa-foreground-notifications";
+import GuardianDeviceRegistrationKeeper from "./guardian-device-registration-keeper";
 import CasaInAppNotificationStack from "./casa-in-app-notification-stack";
 import CasaNetworkStatus from "./casa-network-status";
 import CasaSessionActivityGuard from "./casa-session-activity-guard";
@@ -45,6 +46,7 @@ export default function RootLayout({
         <CasaNetworkStatus />
         <CasaSessionActivityGuard />
         <CasaForegroundNotifications />
+        <GuardianDeviceRegistrationKeeper />
         <CasaInAppNotificationStack />
         {children}
       </body>
