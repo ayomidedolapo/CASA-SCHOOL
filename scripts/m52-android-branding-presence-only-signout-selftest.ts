@@ -114,8 +114,8 @@ requireText(
 );
 requireText(
   fcm,
-  "badge:\n                          input.badgeUrl",
-  "FCM webpush badge is distinct from full school icon",
+  "casaIconUrl:",
+  "FCM data carries full school notification icon URL",
 );
 forbidText(
   fcm,

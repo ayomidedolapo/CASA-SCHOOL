@@ -365,44 +365,69 @@ export async function POST(
     const acknowledged =
       rowsOf<{ id: string }>(
         await getDb().execute(sql`
-          insert into guardian_push_delivery_receipts (
-            school_id,
-            guardian_id,
-            browser_registration_id,
-            presence_event_id,
-            display_source,
-            displayed_at,
-            created_at
-          )
-          select
-            browser.school_id,
-            browser.guardian_id,
-            browser.id,
-            event.id,
-            'CATCH_UP',
-            now(),
-            now()
-          from guardian_push_browser_registrations browser
-          join student_presence_events event
-            on event.school_id = browser.school_id
-           and event.id = ${parsed.data.presenceEventId}::uuid
-          join student_guardians relationship
-            on relationship.school_id = browser.school_id
-           and relationship.student_id = event.student_id
-           and relationship.guardian_id = browser.guardian_id
-           and relationship.receives_notifications = true
-          where browser.id = ${registration.id}::uuid
-            and browser.status <> 'REVOKED'
-          on conflict (
-            browser_registration_id,
-            presence_event_id
-          ) do update set
-            display_source = 'CATCH_UP',
-            displayed_at = least(
-              guardian_push_delivery_receipts.displayed_at,
-              excluded.displayed_at
+          with receipt as (
+            insert into guardian_push_delivery_receipts (
+              school_id,
+              guardian_id,
+              browser_registration_id,
+              presence_event_id,
+              display_source,
+              displayed_at,
+              created_at
             )
-          returning id::text
+            select
+              browser.school_id,
+              browser.guardian_id,
+              browser.id,
+              event.id,
+              'CATCH_UP',
+              now(),
+              now()
+            from guardian_push_browser_registrations browser
+            join student_presence_events event
+              on event.school_id = browser.school_id
+             and event.id = ${parsed.data.presenceEventId}::uuid
+            join student_guardians relationship
+              on relationship.school_id = browser.school_id
+             and relationship.student_id = event.student_id
+             and relationship.guardian_id = browser.guardian_id
+             and relationship.receives_notifications = true
+            where browser.id = ${registration.id}::uuid
+              and browser.status <> 'REVOKED'
+            on conflict (
+              browser_registration_id,
+              presence_event_id
+            ) do update set
+              display_source = 'CATCH_UP',
+              displayed_at = least(
+                guardian_push_delivery_receipts.displayed_at,
+                excluded.displayed_at
+              )
+            returning id
+          ),
+          displayed_outbox as (
+            update guardian_push_outbox outbox
+            set
+              device_displayed_at = coalesce(
+                outbox.device_displayed_at,
+                now()
+              ),
+              updated_at = now()
+            from guardian_push_devices device
+            where device.browser_registration_id =
+                  ${registration.id}::uuid
+              and device.status = 'ACTIVE'
+              and outbox.device_id = device.id
+              and outbox.presence_event_id =
+                  ${parsed.data.presenceEventId}::uuid
+            returning outbox.id
+          )
+          select receipt.id::text as id
+          from receipt
+          cross join (
+            select count(*)::int
+            from displayed_outbox
+          ) outbox_proof
         `),
       ).length > 0;
 

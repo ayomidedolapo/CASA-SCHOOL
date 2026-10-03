@@ -37,6 +37,7 @@ export function GET() {
 // CASA_M50_GUARDIAN_DELIVERY_ATTENDANCE_CLOSURE
 // CASA_M51_GUARDIAN_REGISTRATION_CATCHUP_PRESENCE_ONLY
 // CASA_M52_ANDROID_NOTIFICATION_BRANDING_PRESENCE_ONLY_SIGNOUT
+// CASA_M53_GUARDIAN_DISPLAY_RETRY_AUTHORITY
 self.addEventListener("notificationclick", (event) => {
   event.preventDefault();
   event.stopImmediatePropagation();

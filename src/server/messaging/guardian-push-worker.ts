@@ -192,6 +192,58 @@ function terminalFcmRegistrationFailure(
   );
 }
 
+function retryDelayMinutes(
+  attemptCount: number,
+) {
+  const schedule = [
+    1,
+    2,
+    5,
+    10,
+    20,
+    30,
+    60,
+    120,
+    240,
+    360,
+  ];
+
+  return schedule[
+    Math.min(
+      schedule.length - 1,
+      Math.max(
+        0,
+        attemptCount - 1,
+      ),
+    )
+  ] ?? 360;
+}
+
+function displayRetryDelayMinutes(
+  attemptCount: number,
+) {
+  const schedule = [
+    2,
+    5,
+    15,
+    30,
+    60,
+    120,
+    240,
+    360,
+  ];
+
+  return schedule[
+    Math.min(
+      schedule.length - 1,
+      Math.max(
+        0,
+        attemptCount - 1,
+      ),
+    )
+  ] ?? 360;
+}
+
 async function sendFcmWithImmediateRetry(
   input:
     Parameters<
@@ -297,6 +349,27 @@ export async function runGuardianPushOutbox(
     db,
   );
 
+  await db.execute(sql`
+    update guardian_push_outbox
+    set
+      status = 'CANCELLED',
+      locked_at = null,
+      last_error = coalesce(
+        last_error,
+        'Browser display was not confirmed within the 7-day notification reliability window.'
+      ),
+      updated_at = now()
+    where device_displayed_at is null
+      and status in (
+        'PENDING',
+        'RETRY',
+        'FAILED',
+        'SENT'
+      )
+      and created_at <
+        now() - interval '7 days'
+  `);
+
   const reconciled =
     input.calendarEventId
       ? 0
@@ -381,8 +454,16 @@ export async function runGuardianPushOutbox(
            relationship.guardian_id
        and guardian.status =
            'ACTIVE'::guardian_status
-      where outbox.status in ('PENDING', 'RETRY')
+      where outbox.status in (
+          'PENDING',
+          'RETRY',
+          'FAILED',
+          'SENT'
+        )
+        and outbox.device_displayed_at is null
         and outbox.available_at <= now()
+        and outbox.created_at >=
+          now() - interval '7 days'
         ${schoolFilter}
         ${presenceEventFilter}
         ${calendarEventFilter}
@@ -452,6 +533,16 @@ export async function runGuardianPushOutbox(
         body: row.body,
         iconUrl,
         badgeUrl,
+        collapseTopic:
+          row.id
+            .replace(
+              /-/g,
+              "",
+            )
+            .slice(
+              0,
+              32,
+            ),
         data: {
           ...stringData(row.payload),
           casaOutboxId:
@@ -470,12 +561,26 @@ export async function runGuardianPushOutbox(
 
       if (delivery.ok) {
         sent += 1;
+
+        const displayRetryMinutes =
+          displayRetryDelayMinutes(
+            row.attempt_count,
+          );
+        const nextDisplayAttempt =
+          new Date(
+            Date.now() +
+              displayRetryMinutes *
+                60_000,
+          ).toISOString();
+
         await db.execute(sql`
           update guardian_push_outbox
           set
             status = 'SENT',
             sent_at = now(),
             provider_message_id = ${delivery.messageId},
+            available_at =
+              ${nextDisplayAttempt}::timestamptz,
             last_error = null,
             locked_at = null,
             updated_at = now()
@@ -549,25 +654,17 @@ export async function runGuardianPushOutbox(
         continue;
       }
 
-      const terminalFailure = row.attempt_count >= 5;
-      const delayMinutes = Math.min(60, Math.max(1, 2 ** Math.max(0, row.attempt_count - 1)));
-      const nextAttempt = new Date(Date.now() + delayMinutes * 60_000).toISOString();
-      if (terminalFailure) {
-        failed += 1;
-        failedBySchool.set(
-          row.school_id,
-          (failedBySchool.get(
-            row.school_id,
-          ) ?? 0) + 1,
+      const delayMinutes =
+        retryDelayMinutes(
+          row.attempt_count,
         );
-      } else {
-        retried += 1;
-      }
+      const nextAttempt = new Date(Date.now() + delayMinutes * 60_000).toISOString();
+      retried += 1;
 
       await db.execute(sql`
         update guardian_push_outbox
         set
-          status = ${terminalFailure ? "FAILED" : "RETRY"},
+          status = 'RETRY',
           available_at = ${nextAttempt}::timestamptz,
           last_error = ${delivery.error?.slice(0, 1000) ?? `FCM HTTP ${delivery.status}`},
           locked_at = null,
@@ -576,26 +673,18 @@ export async function runGuardianPushOutbox(
           and status = 'PROCESSING'
       `);
     } catch (error) {
-      const terminalFailure = row.attempt_count >= 5;
-      const delayMinutes = Math.min(60, Math.max(1, 2 ** Math.max(0, row.attempt_count - 1)));
-      const nextAttempt = new Date(Date.now() + delayMinutes * 60_000).toISOString();
-      if (terminalFailure) {
-        failed += 1;
-        failedBySchool.set(
-          row.school_id,
-          (failedBySchool.get(
-            row.school_id,
-          ) ?? 0) + 1,
+      const delayMinutes =
+        retryDelayMinutes(
+          row.attempt_count,
         );
-      } else {
-        retried += 1;
-      }
+      const nextAttempt = new Date(Date.now() + delayMinutes * 60_000).toISOString();
+      retried += 1;
       const message = error instanceof Error ? error.message : "FCM worker failure";
 
       await db.execute(sql`
         update guardian_push_outbox
         set
-          status = ${terminalFailure ? "FAILED" : "RETRY"},
+          status = 'RETRY',
           available_at = ${nextAttempt}::timestamptz,
           last_error = ${message.slice(0, 1000)},
           locked_at = null,
@@ -621,9 +710,9 @@ export async function runGuardianPushOutbox(
         schoolId,
       },
       title:
-        "Guardian push delivery failed",
+        "Guardian notification device needs reconnection",
       body:
-        `${failedCount} guardian push notification(s) reached terminal failure during the latest delivery run.`,
+        `${failedCount} guardian notification device registration(s) were rejected as invalid by Firebase. CASA disabled the stale device registration; reconnect notifications on that browser to restore delivery.`,
       actionUrl:
         "/internal/notifications",
       dedupKey:

@@ -275,6 +275,7 @@ export async function sendFcmToFid(
     body: string;
     iconUrl?: string | null;
     badgeUrl?: string | null;
+    collapseTopic?: string | null;
     data?:
       Record<string, string>;
   },
@@ -300,12 +301,6 @@ export async function sendFcmToFid(
             message: {
               fid:
                 input.fid,
-              notification: {
-                title:
-                  input.title,
-                body:
-                  input.body,
-              },
               data: {
                 ...(
                   input.data ??
@@ -338,20 +333,14 @@ export async function sendFcmToFid(
                     "86400",
                   Urgency:
                     "high",
-                },
-                notification: {
-                  ...(input.iconUrl
-                    ? {
-                        icon:
-                          input.iconUrl,
-                      }
-                    : {}),
-                  ...(input.badgeUrl
-                    ? {
-                        badge:
-                          input.badgeUrl,
-                      }
-                    : {}),
+                  ...(
+                    input.collapseTopic
+                      ? {
+                          Topic:
+                            input.collapseTopic,
+                        }
+                      : {}
+                  ),
                 },
               },
             },
