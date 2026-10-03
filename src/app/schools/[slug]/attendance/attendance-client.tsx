@@ -3450,6 +3450,27 @@ export default function AttendanceClient(
 
                             {canSuperviseAttendance &&
                               !data?.readOnly &&
+                              data?.session?.mode === "PRESENCE_ONLY" &&
+                              (data?.session?.status === "OPEN" ||
+                                data?.session?.status === "CLOSED") &&
+                              student.presenceStatus === "ON_CAMPUS" &&
+                              !student.scannerCheckoutEligible && (
+                                <button
+                                  type="button"
+                                  className={styles.secondaryButton}
+                                  disabled={busy}
+                                  onClick={() =>
+                                    setAssistedCheckoutStudent(
+                                      student,
+                                    )
+                                  }
+                                >
+                                  Assisted sign-out
+                                </button>
+                              )}
+
+                            {canSuperviseAttendance &&
+                              !data?.readOnly &&
                               (data?.session?.mode === "INSTRUCTIONAL" ||
                                 data?.session?.mode === "PRESENCE_ONLY") &&
                               data?.session?.status === "OPEN" &&

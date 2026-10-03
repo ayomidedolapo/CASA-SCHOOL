@@ -410,6 +410,8 @@ export async function recordAssistedCheckout(
     }
 
     if (
+      candidate.branch_mode !==
+        "PRESENCE_ONLY" &&
       paymentStatus === "UNPAID"
     ) {
       const reportedLostOn =

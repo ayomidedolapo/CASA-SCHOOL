@@ -181,6 +181,9 @@ export default function CasaForegroundNotifications() {
               const icon =
                 payload.data
                   ?.casaIconUrl;
+              const badge =
+                payload.data
+                  ?.casaBadgeUrl;
               const presenceEventId =
                 payload.data
                   ?.presenceEventId ??
@@ -197,7 +200,7 @@ export default function CasaForegroundNotifications() {
                         icon ??
                         undefined,
                       badge:
-                        icon ??
+                        badge ??
                         undefined,
                       tag:
                         presenceEventId

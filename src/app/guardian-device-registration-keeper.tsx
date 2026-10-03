@@ -220,6 +220,7 @@ export default function GuardianDeviceRegistrationKeeper() {
               title?: unknown;
               body?: unknown;
               iconUrl?: unknown;
+              badgeUrl?: unknown;
             };
 
           if (
@@ -250,6 +251,11 @@ export default function GuardianDeviceRegistrationKeeper() {
               "string"
               ? record.iconUrl
               : undefined;
+          const badge =
+            typeof record.badgeUrl ===
+              "string"
+              ? record.badgeUrl
+              : undefined;
 
           try {
             await registration
@@ -259,8 +265,7 @@ export default function GuardianDeviceRegistrationKeeper() {
                   body:
                     record.body,
                   icon,
-                  badge:
-                    icon,
+                  badge,
                   tag:
                     `casa-presence-${record.presenceEventId}`,
                 },

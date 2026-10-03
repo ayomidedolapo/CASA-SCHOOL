@@ -97,6 +97,63 @@ function absolutePublicUrl(
   }
 }
 
+function notificationLogoUrl(
+  input: {
+    schoolId: string;
+    branchId:
+      string | null;
+    storedUrl:
+      string | null;
+    variant:
+      | "icon"
+      | "badge";
+  },
+) {
+  const fallback =
+    `${publicAppOrigin()}/api/public/schools/${encodeURIComponent(
+      input.schoolId,
+    )}/notification-logo${
+      input.branchId
+        ? `?branchId=${encodeURIComponent(
+            input.branchId,
+          )}`
+        : ""
+    }`;
+
+  const resolved =
+    input.variant ===
+      "icon"
+      ? (
+          absolutePublicUrl(
+            input.storedUrl,
+          ) ??
+          fallback
+        )
+      : fallback;
+
+  const url =
+    new URL(
+      resolved,
+    );
+
+  if (
+    url.pathname.endsWith(
+      "/notification-logo",
+    )
+  ) {
+    url.searchParams.set(
+      "variant",
+      input.variant,
+    );
+    url.searchParams.set(
+      "v",
+      "m52",
+    );
+  }
+
+  return url.toString();
+}
+
 function wait(
   milliseconds: number,
 ) {
@@ -366,23 +423,35 @@ export async function runGuardianPushOutbox(
 
   for (const row of claimed) {
     try {
+      const iconUrl =
+        notificationLogoUrl({
+          schoolId:
+            row.school_id,
+          branchId:
+            row.branch_id,
+          storedUrl:
+            row.icon_url,
+          variant:
+            "icon",
+        });
+      const badgeUrl =
+        notificationLogoUrl({
+          schoolId:
+            row.school_id,
+          branchId:
+            row.branch_id,
+          storedUrl:
+            row.icon_url,
+          variant:
+            "badge",
+        });
+
       const delivery = await sendFcmWithImmediateRetry({
         fid: row.firebase_installation_id,
         title: row.title,
         body: row.body,
-        iconUrl:
-          absolutePublicUrl(
-            row.icon_url,
-          ) ??
-          `${publicAppOrigin()}/api/public/schools/${encodeURIComponent(
-            row.school_id,
-          )}/notification-logo${
-            row.branch_id
-              ? `?branchId=${encodeURIComponent(
-                  row.branch_id,
-                )}`
-              : ""
-          }`,
+        iconUrl,
+        badgeUrl,
         data: {
           ...stringData(row.payload),
           casaOutboxId:

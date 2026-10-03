@@ -94,6 +94,35 @@ function digest(
     .digest("hex");
 }
 
+function notificationAssetPath(
+  value:
+    string | null,
+  variant:
+    | "icon"
+    | "badge",
+) {
+  if (!value) {
+    return undefined;
+  }
+
+  const url =
+    new URL(
+      value,
+      "https://casa.invalid",
+    );
+
+  url.searchParams.set(
+    "variant",
+    variant,
+  );
+  url.searchParams.set(
+    "v",
+    "m52",
+  );
+
+  return `${url.pathname}${url.search}`;
+}
+
 function noStoreJson(
   body: unknown,
   status = 200,
@@ -276,7 +305,15 @@ async function catchUpForRegistration(
       body:
         row.body,
       iconUrl:
-        row.icon_url,
+        notificationAssetPath(
+          row.icon_url,
+          "icon",
+        ),
+      badgeUrl:
+        notificationAssetPath(
+          row.icon_url,
+          "badge",
+        ),
       occurredAt:
         row.occurred_at instanceof Date
           ? row.occurred_at.toISOString()

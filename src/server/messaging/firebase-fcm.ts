@@ -274,6 +274,7 @@ export async function sendFcmToFid(
     title: string;
     body: string;
     iconUrl?: string | null;
+    badgeUrl?: string | null;
     data?:
       Record<string, string>;
   },
@@ -322,6 +323,14 @@ export async function sendFcmToFid(
                       }
                     : {}
                 ),
+                ...(
+                  input.badgeUrl
+                    ? {
+                        casaBadgeUrl:
+                          input.badgeUrl,
+                      }
+                    : {}
+                ),
               },
               webpush: {
                 headers: {
@@ -335,8 +344,12 @@ export async function sendFcmToFid(
                     ? {
                         icon:
                           input.iconUrl,
+                      }
+                    : {}),
+                  ...(input.badgeUrl
+                    ? {
                         badge:
-                          input.iconUrl,
+                          input.badgeUrl,
                       }
                     : {}),
                 },

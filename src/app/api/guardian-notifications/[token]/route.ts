@@ -467,6 +467,35 @@ export async function POST(
 
   const origin =
     request.nextUrl.origin;
+  const notificationLogo =
+    `${origin}/api/public/schools/${encodeURIComponent(
+      link.school_id,
+    )}/notification-logo${link.branch_id ? `?branchId=${encodeURIComponent(link.branch_id)}` : ""}`;
+  const notificationIcon =
+    new URL(
+      notificationLogo,
+    );
+  notificationIcon.searchParams.set(
+    "variant",
+    "icon",
+  );
+  notificationIcon.searchParams.set(
+    "v",
+    "m52",
+  );
+  const notificationBadge =
+    new URL(
+      notificationLogo,
+    );
+  notificationBadge.searchParams.set(
+    "variant",
+    "badge",
+  );
+  notificationBadge.searchParams.set(
+    "v",
+    "m52",
+  );
+
   const test =
     await sendFcmToFid({
       fid:
@@ -476,9 +505,9 @@ export async function POST(
       body:
         `CASA notifications are enabled for ${link.student_name}.`,
       iconUrl:
-        `${origin}/api/public/schools/${encodeURIComponent(
-          link.school_id,
-        )}/notification-logo${link.branch_id ? `?branchId=${encodeURIComponent(link.branch_id)}` : ""}`,
+        notificationIcon.toString(),
+      badgeUrl:
+        notificationBadge.toString(),
 
       data: {
         type:

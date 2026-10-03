@@ -36,6 +36,7 @@ export function GET() {
   const source = `
 // CASA_M50_GUARDIAN_DELIVERY_ATTENDANCE_CLOSURE
 // CASA_M51_GUARDIAN_REGISTRATION_CATCHUP_PRESENCE_ONLY
+// CASA_M52_ANDROID_NOTIFICATION_BRANDING_PRESENCE_ONLY_SIGNOUT
 self.addEventListener("notificationclick", (event) => {
   event.preventDefault();
   event.stopImmediatePropagation();
@@ -84,6 +85,9 @@ messaging.onBackgroundMessage((payload) => {
   const icon =
     data.casaIconUrl ||
     web.icon;
+  const badge =
+    data.casaBadgeUrl ||
+    web.badge;
   const presenceEventId =
     data.presenceEventId ||
     data.casaPresenceEventId;
@@ -97,7 +101,7 @@ messaging.onBackgroundMessage((payload) => {
           data.casaBody ||
           "School attendance update.",
         icon,
-        badge: icon,
+        badge,
         tag: presenceEventId
           ? "casa-presence-" + presenceEventId
           : undefined,
