@@ -75,7 +75,7 @@ function loadQrScannerModule() {
 }
 
 const SCANNER_UI_REVISION =
-  "2026-09-24-r5";
+  "2026-10-03-m54-camera-switch";
 
 type Phase =
   | "BOOTING"
@@ -272,6 +272,110 @@ type ScannerNavigatorWithWakeLock =
 type CameraFacing =
   | "environment"
   | "user";
+
+interface LivenessCameraOption {
+  deviceId: string;
+  label: string;
+  facing:
+    CameraFacing | null;
+}
+
+function inferCameraFacing(
+  label: string,
+): CameraFacing | null {
+  const normalized =
+    label
+      .trim()
+      .toLowerCase();
+
+  if (
+    /front|user|selfie|facetime|face time|facing front/.test(
+      normalized,
+    )
+  ) {
+    return "user";
+  }
+
+  if (
+    /rear|back|environment|facing back/.test(
+      normalized,
+    )
+  ) {
+    return "environment";
+  }
+
+  return null;
+}
+
+async function listLivenessCameras():
+  Promise<LivenessCameraOption[]> {
+  if (
+    !navigator.mediaDevices
+      ?.enumerateDevices
+  ) {
+    return [];
+  }
+
+  const devices =
+    await navigator.mediaDevices
+      .enumerateDevices();
+
+  return devices
+    .filter(
+      (
+        device,
+      ) =>
+        device.kind ===
+          "videoinput" &&
+        Boolean(
+          device.deviceId,
+        ),
+    )
+    .map(
+      (
+        device,
+      ) => ({
+        deviceId:
+          device.deviceId,
+        label:
+          device.label,
+        facing:
+          inferCameraFacing(
+            device.label,
+          ),
+      }),
+    );
+}
+
+function livenessCameraName(
+  camera:
+    LivenessCameraOption,
+  index:
+    number,
+) {
+  const label =
+    camera.label.trim();
+
+  if (label) {
+    return label;
+  }
+
+  if (
+    camera.facing ===
+      "user"
+  ) {
+    return "Front camera";
+  }
+
+  if (
+    camera.facing ===
+      "environment"
+  ) {
+    return "Rear camera";
+  }
+
+  return `Camera ${index + 1}`;
+}
 
 function QrCamera(
   {
@@ -1088,6 +1192,28 @@ export default function ScannerClient() {
     >(null);
 
   const [
+    livenessCameras,
+    setLivenessCameras,
+  ] =
+    useState<
+      LivenessCameraOption[]
+    >([]);
+
+  const [
+    livenessCameraDeviceId,
+    setLivenessCameraDeviceId,
+  ] =
+    useState<
+      string | null
+    >(null);
+
+  const [
+    switchingLivenessCamera,
+    setSwitchingLivenessCamera,
+  ] =
+    useState(false);
+
+  const [
     finalResult,
     setFinalResult,
   ] =
@@ -1736,6 +1862,8 @@ export default function ScannerClient() {
       async (
         attemptId:
           string,
+        preferredDeviceId?:
+          string | null,
       ) => {
         if (!token) {
           return;
@@ -1747,6 +1875,78 @@ export default function ScannerClient() {
         setMessage(
           "Preparing face verification...",
         );
+
+        let selectedDeviceId =
+          preferredDeviceId ??
+          livenessCameraDeviceId;
+
+        try {
+          const cameras =
+            await listLivenessCameras();
+
+          setLivenessCameras(
+            cameras,
+          );
+
+          if (
+            cameras.length >
+              0
+          ) {
+            const selectedExists =
+              selectedDeviceId
+                ? cameras.some(
+                    (
+                      camera,
+                    ) =>
+                      camera.deviceId ===
+                        selectedDeviceId,
+                  )
+                : false;
+
+            if (
+              !selectedExists
+            ) {
+              const frontCamera =
+                cameras.find(
+                  (
+                    camera,
+                  ) =>
+                    camera.facing ===
+                      "user",
+                );
+
+              selectedDeviceId =
+                (
+                  frontCamera ??
+                  cameras[0]
+                )?.deviceId ??
+                null;
+            }
+
+            setLivenessCameraDeviceId(
+              selectedDeviceId ??
+                null,
+            );
+          } else if (
+            !preferredDeviceId
+          ) {
+            selectedDeviceId =
+              null;
+            setLivenessCameraDeviceId(
+              null,
+            );
+          }
+        } catch {
+          if (
+            preferredDeviceId
+          ) {
+            selectedDeviceId =
+              preferredDeviceId;
+            setLivenessCameraDeviceId(
+              preferredDeviceId,
+            );
+          }
+        }
 
         try {
           const response =
@@ -1817,6 +2017,7 @@ export default function ScannerClient() {
       },
       [
         token,
+        livenessCameraDeviceId,
       ],
     );
 
@@ -2139,6 +2340,153 @@ export default function ScannerClient() {
       ],
     );
 
+  const switchLivenessCamera =
+    useCallback(
+      async () => {
+        if (
+          !token ||
+          !liveness ||
+          switchingLivenessCamera
+        ) {
+          return;
+        }
+
+        setSwitchingLivenessCamera(
+          true,
+        );
+
+        try {
+          const cameras =
+            await listLivenessCameras();
+
+          setLivenessCameras(
+            cameras,
+          );
+
+          if (
+            cameras.length <
+              2
+          ) {
+            setMessage(
+              "Only one camera is available on this device.",
+            );
+            return;
+          }
+
+          let currentIndex =
+            livenessCameraDeviceId
+              ? cameras.findIndex(
+                  (
+                    camera,
+                  ) =>
+                    camera.deviceId ===
+                      livenessCameraDeviceId,
+                )
+              : -1;
+
+          if (
+            currentIndex <
+              0
+          ) {
+            const frontIndex =
+              cameras.findIndex(
+                (
+                  camera,
+                ) =>
+                  camera.facing ===
+                    "user",
+              );
+
+            currentIndex =
+              frontIndex >=
+                0
+                ? frontIndex
+                : 0;
+          }
+
+          const nextCamera =
+            cameras[
+              (
+                currentIndex +
+                1
+              ) %
+                cameras.length
+            ];
+
+          if (!nextCamera) {
+            return;
+          }
+
+          const current =
+            liveness;
+
+          setMessage(
+            `Switching to ${livenessCameraName(
+              nextCamera,
+              (
+                currentIndex +
+                1
+              ) %
+                cameras.length,
+            )}...`,
+          );
+
+          setLiveness(
+            null,
+          );
+
+          try {
+            await terminalFetch(
+              token,
+              `/api/terminal/attempts/${current.attemptId}/biometric/liveness/cancel`,
+              {
+                method:
+                  "POST",
+                headers: {
+                  "Content-Type":
+                    "application/json",
+                },
+                body:
+                  JSON.stringify({
+                    livenessSessionId:
+                      current
+                        .livenessSessionId,
+                  }),
+              },
+            );
+          } catch {
+            // The existing liveness cancellation boundary is best effort.
+            // A fresh provider session is still required before the new
+            // selected camera can perform analysis.
+          }
+
+          setLivenessCameraDeviceId(
+            nextCamera.deviceId,
+          );
+
+          await startFace(
+            current.attemptId,
+            nextCamera.deviceId,
+          );
+        } catch {
+          setMessage(
+            "CASA could not switch the face camera. You can continue with the current camera or retry face verification.",
+          );
+        } finally {
+          setSwitchingLivenessCamera(
+            false,
+          );
+        }
+      },
+      [
+        token,
+        liveness,
+        switchingLivenessCamera,
+        livenessCameraDeviceId,
+        startFace,
+      ],
+    );
+
   const completeLiveness =
     useCallback(
       async () => {
@@ -2242,6 +2590,47 @@ export default function ScannerClient() {
         token,
         liveness,
         currentAttempt,
+      ],
+    );
+
+  const nextLivenessCamera =
+    useMemo(
+      () => {
+        if (
+          livenessCameras.length <
+            2
+        ) {
+          return null;
+        }
+
+        const currentIndex =
+          livenessCameraDeviceId
+            ? livenessCameras
+                .findIndex(
+                  (
+                    camera,
+                  ) =>
+                    camera.deviceId ===
+                      livenessCameraDeviceId,
+                )
+            : -1;
+
+        return livenessCameras[
+          (
+            (
+              currentIndex >=
+                0
+                ? currentIndex
+                : 0
+            ) +
+            1
+          ) %
+            livenessCameras.length
+        ] ?? null;
+      },
+      [
+        livenessCameras,
+        livenessCameraDeviceId,
       ],
     );
 
@@ -2880,8 +3269,56 @@ export default function ScannerClient() {
                 styles.livenessFrame
               }
             >
+              {nextLivenessCamera && (
+                <div
+                  className={
+                    styles.livenessCameraControls
+                  }
+                >
+                  <button
+                    type="button"
+                    className={
+                      styles.cameraControl
+                    }
+                    disabled={
+                      switchingLivenessCamera
+                    }
+                    onClick={
+                      () =>
+                        void switchLivenessCamera()
+                    }
+                    aria-label={
+                      nextLivenessCamera
+                        .facing ===
+                        "environment"
+                        ? "Switch face verification to rear camera"
+                        : nextLivenessCamera
+                              .facing ===
+                            "user"
+                          ? "Switch face verification to front camera"
+                          : "Switch face verification camera"
+                    }
+                  >
+                    {switchingLivenessCamera
+                      ? "Switching..."
+                      : nextLivenessCamera
+                            .facing ===
+                          "environment"
+                        ? "Use rear camera"
+                        : nextLivenessCamera
+                              .facing ===
+                            "user"
+                          ? "Use front camera"
+                          : "Switch camera"}
+                  </button>
+                </div>
+              )}
+
               <ThemeProvider>
                 <FaceLivenessDetectorCore
+                  key={
+                    `${liveness.providerSessionId}:${livenessCameraDeviceId ?? "default"}`
+                  }
                   sessionId={
                     liveness
                       .providerSessionId
@@ -2908,6 +3345,14 @@ export default function ScannerClient() {
                   }
                   config={{
                     credentialProvider,
+                    ...(
+                      livenessCameraDeviceId
+                        ? {
+                            deviceId:
+                              livenessCameraDeviceId,
+                          }
+                        : {}
+                    ),
                   }}
                 />
               </ThemeProvider>

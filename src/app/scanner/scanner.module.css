@@ -302,6 +302,7 @@
 }
 
 .livenessFrame {
+  position: relative;
   margin-top: clamp(26px, 4vw, 44px);
   width: 100%;
   min-height: min(680px, 72dvh);
@@ -309,6 +310,21 @@
   background: #000;
   overflow: hidden;
   box-shadow: 16px 16px 0 rgba(11, 11, 10, 0.11);
+}
+
+.livenessCameraControls {
+  position: absolute;
+  z-index: 50;
+  top: 14px;
+  right: 14px;
+  display: flex;
+  gap: 8px;
+  pointer-events: auto;
+}
+
+.livenessCameraControls .cameraControl:disabled {
+  cursor: wait;
+  opacity: 0.58;
 }
 
 .student {
