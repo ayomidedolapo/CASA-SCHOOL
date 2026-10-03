@@ -17,29 +17,6 @@ import {
   register,
 } from "firebase/messaging";
 
-type NotificationDiagnostics = {
-  serviceWorker:
-    | "NOT_CHECKED"
-    | "REGISTERING"
-    | "REGISTERED"
-    | "FAILED";
-  workerScope: string;
-  firebaseRegistration:
-    | "NOT_STARTED"
-    | "REGISTERING"
-    | "REGISTERED"
-    | "FAILED";
-  installationId:
-    | "NOT_RECEIVED"
-    | "RECEIVED";
-  casaDeviceSave:
-    | "NOT_STARTED"
-    | "SAVING"
-    | "SAVED"
-    | "FAILED";
-  lastError: string;
-};
-
 interface LinkData {
   school: {
     id: string;
@@ -219,25 +196,6 @@ export default function GuardianNotificationClient(
     >(
       null,
     );
-
-  const [
-    diagnostics,
-    setDiagnostics,
-  ] =
-    useState<NotificationDiagnostics>({
-      serviceWorker:
-        "NOT_CHECKED",
-      workerScope:
-        "—",
-      firebaseRegistration:
-        "NOT_STARTED",
-      installationId:
-        "NOT_RECEIVED",
-      casaDeviceSave:
-        "NOT_STARTED",
-      lastError:
-        "—",
-    });
 
   useEffect(
     () => {
@@ -450,20 +408,6 @@ export default function GuardianNotificationClient(
 
     setBusy(true);
     setError("");
-    setDiagnostics({
-      serviceWorker:
-        "NOT_CHECKED",
-      workerScope:
-        "—",
-      firebaseRegistration:
-        "NOT_STARTED",
-      installationId:
-        "NOT_RECEIVED",
-      casaDeviceSave:
-        "NOT_STARTED",
-      lastError:
-        "—",
-    });
 
     try {
       await removeBroadScannerServiceWorkers();
@@ -530,15 +474,6 @@ export default function GuardianNotificationClient(
         null,
       );
 
-      setDiagnostics(
-        (current) => ({
-          ...current,
-          serviceWorker:
-            "REGISTERING",
-          lastError:
-            "—",
-        }),
-      );
 
       let serviceWorker:
         ServiceWorkerRegistration;
@@ -551,32 +486,9 @@ export default function GuardianNotificationClient(
               "/firebase-messaging-sw.js",
             );
 
-        setDiagnostics(
-          (current) => ({
-            ...current,
-            serviceWorker:
-              "REGISTERED",
-            workerScope:
-              new URL(
-                serviceWorker.scope,
-              ).pathname ||
-              "/",
-          }),
-        );
       } catch (
         cause
       ) {
-        setDiagnostics(
-          (current) => ({
-            ...current,
-            serviceWorker:
-              "FAILED",
-            lastError:
-              cause instanceof Error
-                ? cause.message
-                : "Firebase service worker registration failed.",
-          }),
-        );
 
         throw cause;
       }
@@ -612,12 +524,6 @@ export default function GuardianNotificationClient(
             data.school
               .logoUrl ??
             undefined;
-          const clickUrl =
-            payload.data
-              ?.casaClickUrl ??
-            window.location
-              .origin;
-
           void serviceWorker
             .showNotification(
               title,
@@ -626,22 +532,11 @@ export default function GuardianNotificationClient(
                 icon,
                 badge:
                   icon,
-                data: {
-                  url:
-                    clickUrl,
-                },
               },
             );
         },
       );
 
-      setDiagnostics(
-        (current) => ({
-          ...current,
-          firebaseRegistration:
-            "REGISTERING",
-        }),
-      );
 
       let fid:
         string;
@@ -721,42 +616,13 @@ export default function GuardianNotificationClient(
             },
           );
 
-        setDiagnostics(
-          (current) => ({
-            ...current,
-            firebaseRegistration:
-              "REGISTERED",
-            installationId:
-              "RECEIVED",
-          }),
-        );
       } catch (
         cause
       ) {
-        setDiagnostics(
-          (current) => ({
-            ...current,
-            firebaseRegistration:
-              "FAILED",
-            installationId:
-              "NOT_RECEIVED",
-            lastError:
-              cause instanceof Error
-                ? cause.message
-                : "Firebase device registration failed.",
-          }),
-        );
 
         throw cause;
       }
 
-      setDiagnostics(
-        (current) => ({
-          ...current,
-          casaDeviceSave:
-            "SAVING",
-        }),
-      );
 
       const response =
         await fetch(
@@ -785,30 +651,12 @@ export default function GuardianNotificationClient(
           body.message ??
           "CASA could not save this device.";
 
-        setDiagnostics(
-          (current) => ({
-            ...current,
-            casaDeviceSave:
-              "FAILED",
-            lastError:
-              message,
-          }),
-        );
 
         throw new Error(
           message,
         );
       }
 
-      setDiagnostics(
-        (current) => ({
-          ...current,
-          casaDeviceSave:
-            "SAVED",
-          lastError:
-            "—",
-        }),
-      );
 
       setEnabled(
         true,
@@ -821,16 +669,6 @@ export default function GuardianNotificationClient(
           ? cause.message
           : "Notification setup failed.";
 
-      setDiagnostics(
-        (current) => ({
-          ...current,
-          lastError:
-            current.lastError ===
-              "—"
-              ? message
-              : current.lastError,
-        }),
-      );
 
       setError(
         message,
@@ -857,32 +695,6 @@ export default function GuardianNotificationClient(
           <p className="mt-5 text-sm leading-6 text-black/55">
             This one-time link is now closed. You can close CASA; notifications can arrive in the background.
           </p>
-
-          <details className="mt-6 border border-black/15 p-4">
-            <summary className="cursor-pointer text-xs font-semibold">
-              Notification diagnostics
-            </summary>
-            <dl className="mt-4 grid grid-cols-[1fr_auto] gap-x-4 gap-y-2 text-xs">
-              <dt className="text-black/50">Browser permission</dt>
-              <dd className="font-mono">{permissionState}</dd>
-              <dt className="text-black/50">Firebase worker</dt>
-              <dd className="font-mono">{diagnostics.serviceWorker}</dd>
-              <dt className="text-black/50">Worker scope</dt>
-              <dd className="font-mono">{diagnostics.workerScope}</dd>
-              <dt className="text-black/50">Firebase registration</dt>
-              <dd className="font-mono">{diagnostics.firebaseRegistration}</dd>
-              <dt className="text-black/50">Installation ID received</dt>
-              <dd className="font-mono">
-                {diagnostics.installationId === "RECEIVED" ? "YES" : "NO"}
-              </dd>
-              <dt className="text-black/50">CASA device save</dt>
-              <dd className="font-mono">{diagnostics.casaDeviceSave}</dd>
-              <dt className="text-black/50">Last error</dt>
-              <dd className="max-w-[16rem] break-words text-right font-mono">
-                {diagnostics.lastError}
-              </dd>
-            </dl>
-          </details>
         </section>
       </main>
     );
@@ -979,32 +791,6 @@ export default function GuardianNotificationClient(
           )}
         </div>
       ) : null}
-
-          <details className="mt-5 border border-black/15 p-4">
-            <summary className="cursor-pointer text-xs font-semibold">
-              Notification diagnostics
-            </summary>
-            <dl className="mt-4 grid grid-cols-[1fr_auto] gap-x-4 gap-y-2 text-xs">
-              <dt className="text-black/50">Browser permission</dt>
-              <dd className="font-mono">{permissionState}</dd>
-              <dt className="text-black/50">Firebase worker</dt>
-              <dd className="font-mono">{diagnostics.serviceWorker}</dd>
-              <dt className="text-black/50">Worker scope</dt>
-              <dd className="font-mono">{diagnostics.workerScope}</dd>
-              <dt className="text-black/50">Firebase registration</dt>
-              <dd className="font-mono">{diagnostics.firebaseRegistration}</dd>
-              <dt className="text-black/50">Installation ID received</dt>
-              <dd className="font-mono">
-                {diagnostics.installationId === "RECEIVED" ? "YES" : "NO"}
-              </dd>
-              <dt className="text-black/50">CASA device save</dt>
-              <dd className="font-mono">{diagnostics.casaDeviceSave}</dd>
-              <dt className="text-black/50">Last error</dt>
-              <dd className="max-w-[16rem] break-words text-right font-mono">
-                {diagnostics.lastError}
-              </dd>
-            </dl>
-          </details>
 
       <button
               type="button"

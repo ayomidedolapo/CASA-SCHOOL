@@ -256,11 +256,6 @@ export async function runGuardianPushOutbox(
                 )}`
               : ""
           }`,
-        clickUrl:
-          absolutePublicUrl(
-            row.click_url,
-          ) ??
-          publicAppOrigin(),
         data: stringData(row.payload),
       });
 

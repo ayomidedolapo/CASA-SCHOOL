@@ -308,7 +308,6 @@ for (
     "onMessage",
     "showNotification",
     "casaIconUrl",
-    "casaClickUrl",
     "Notification.permission",
   ]
 ) {
@@ -340,7 +339,6 @@ for (
     "casaTitle",
     "casaBody",
     "casaIconUrl",
-    "casaClickUrl",
   ]
 ) {
   requireText(
@@ -360,7 +358,6 @@ for (
     "data.casaTitle",
     "data.casaBody",
     "data.casaIconUrl",
-    "data.casaClickUrl",
   ]
 ) {
   requireText(
@@ -369,6 +366,37 @@ for (
     "background guardian push rendering",
   );
 }
+
+rejectText(
+  globalReceiver,
+  "casaClickUrl",
+  "global foreground guardian push must not navigate",
+);
+rejectText(
+  firebaseSender,
+  "casaClickUrl",
+  "FCM guardian push must not carry CASA click URL",
+);
+rejectText(
+  firebaseSender,
+  "fcm_options",
+  "FCM guardian push must not carry browser link metadata",
+);
+rejectText(
+  messagingWorker,
+  "casaClickUrl",
+  "background guardian push must not carry CASA click URL",
+);
+rejectText(
+  messagingWorker,
+  "clients.openWindow",
+  "background guardian push click must not open CASA",
+);
+requireText(
+  messagingWorker,
+  "event.stopImmediatePropagation();",
+  "background guardian push click blocker",
+);
 
 console.log(
   "CASA scanner result + guardian push self-test passed.",

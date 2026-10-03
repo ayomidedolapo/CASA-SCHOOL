@@ -418,8 +418,7 @@ export async function POST(
         `${origin}/api/public/schools/${encodeURIComponent(
           link.school_id,
         )}/notification-logo${link.branch_id ? `?branchId=${encodeURIComponent(link.branch_id)}` : ""}`,
-      clickUrl:
-        origin,
+
       data: {
         type:
           "CASA_NOTIFICATION_ENABLED",

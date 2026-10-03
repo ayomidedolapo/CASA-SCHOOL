@@ -34,6 +34,11 @@ export function GET() {
     );
 
   const source = `
+self.addEventListener("notificationclick", (event) => {
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  event.notification.close();
+});
 importScripts("https://www.gstatic.com/firebasejs/12.19.0/firebase-app-compat.js");
 importScripts("https://www.gstatic.com/firebasejs/12.19.0/firebase-messaging-compat.js");
 firebase.initializeApp(${config});
@@ -48,13 +53,6 @@ messaging.onBackgroundMessage((payload) => {
   const icon =
     data.casaIconUrl ||
     web.icon;
-  const clickUrl =
-    data.casaClickUrl ||
-    (
-      payload.fcmOptions && payload.fcmOptions.link
-        ? payload.fcmOptions.link
-        : "/"
-    );
 
   self.registration.showNotification(
     n.title || data.casaTitle || "CASA",
@@ -65,23 +63,9 @@ messaging.onBackgroundMessage((payload) => {
         "School attendance update.",
       icon,
       badge:
-        icon,
-      data: {
-        url:
-          clickUrl
-      }
+        icon
     }
   );
-});
-self.addEventListener("notificationclick", (event) => {
-  event.notification.close();
-  const target =
-    event.notification &&
-    event.notification.data &&
-    event.notification.data.url
-      ? event.notification.data.url
-      : "/guardian-notifications";
-  event.waitUntil(clients.openWindow(target));
 });
 `;
 

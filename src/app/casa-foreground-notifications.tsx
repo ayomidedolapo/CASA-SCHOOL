@@ -142,11 +142,6 @@ export default function CasaForegroundNotifications() {
               const icon =
                 payload.data
                   ?.casaIconUrl;
-              const clickUrl =
-                payload.data
-                  ?.casaClickUrl ??
-                window.location.origin;
-
               void registration
                 .showNotification(
                   title,
@@ -158,10 +153,6 @@ export default function CasaForegroundNotifications() {
                     badge:
                       icon ??
                       undefined,
-                    data: {
-                      url:
-                        clickUrl,
-                    },
                   },
                 );
             },

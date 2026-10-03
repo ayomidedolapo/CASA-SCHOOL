@@ -274,7 +274,6 @@ export async function sendFcmToFid(
     title: string;
     body: string;
     iconUrl?: string | null;
-    clickUrl?: string | null;
     data?:
       Record<string, string>;
   },
@@ -323,14 +322,6 @@ export async function sendFcmToFid(
                       }
                     : {}
                 ),
-                ...(
-                  input.clickUrl
-                    ? {
-                        casaClickUrl:
-                          input.clickUrl,
-                      }
-                    : {}
-                ),
               },
               webpush: {
                 headers: {
@@ -349,14 +340,6 @@ export async function sendFcmToFid(
                       }
                     : {}),
                 },
-                ...(input.clickUrl
-                  ? {
-                      fcm_options: {
-                        link:
-                          input.clickUrl,
-                      },
-                    }
-                  : {}),
               },
             },
           }),
