@@ -216,11 +216,6 @@ export default function CasaInAppNotificationStack() {
       moved:
         false,
     };
-
-    event.currentTarget
-      .setPointerCapture(
-        event.pointerId,
-      );
   }
 
   function drag(event: ReactPointerEvent<HTMLDivElement>) {
@@ -251,8 +246,24 @@ export default function CasaInAppNotificationStack() {
       return;
     }
 
-    state.moved =
-      true;
+    if (
+      !state.moved
+    ) {
+      state.moved =
+        true;
+
+      if (
+        !event.currentTarget
+          .hasPointerCapture(
+            event.pointerId,
+          )
+      ) {
+        event.currentTarget
+          .setPointerCapture(
+            event.pointerId,
+          );
+      }
+    }
 
     event.preventDefault();
 
