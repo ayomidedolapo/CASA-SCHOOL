@@ -4,9 +4,6 @@ import {
   useEffect,
 } from "react";
 import {
-  usePathname,
-} from "next/navigation";
-import {
   getApp,
   getApps,
   initializeApp,
@@ -156,15 +153,8 @@ async function postRegistration(
 }
 
 export default function GuardianDeviceRegistrationKeeper() {
-  const pathname =
-    usePathname();
-
   useEffect(
     () => {
-      if (pathname === "/scanner") {
-        return;
-      }
-
       let cancelled = false;
       let stopRegistered:
         (() => void) |
@@ -382,6 +372,12 @@ export default function GuardianDeviceRegistrationKeeper() {
             .serviceWorker
             .register(
               "/firebase-messaging-sw.js",
+              {
+                scope:
+                  "/",
+                updateViaCache:
+                  "none",
+              },
             );
 
         if (cancelled) {
@@ -483,7 +479,7 @@ export default function GuardianDeviceRegistrationKeeper() {
         );
       };
     },
-    [pathname],
+    [],
   );
 
   return null;

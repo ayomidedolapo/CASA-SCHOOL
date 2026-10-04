@@ -1,0 +1,32 @@
+import fs from "node:fs";
+import path from "node:path";
+const read = (p: string) => fs.readFileSync(path.join(process.cwd(), p), "utf8");
+function need(s: string, n: string, l: string) { if (!s.includes(n)) throw new Error(`M55 failed: ${l}`); console.log(`GREEN: ${l}`); }
+function forbid(s: string, n: string, l: string) { if (s.includes(n)) throw new Error(`M55 failed: ${l}`); console.log(`GREEN: ${l}`); }
+const foreground = read("src/app/casa-foreground-notifications.tsx");
+const keeper = read("src/app/guardian-device-registration-keeper.tsx");
+const worker = read("src/app/firebase-messaging-sw.js/route.ts");
+const scanner = read("src/app/scanner/scanner-client.tsx");
+const layout = read("src/app/layout.tsx");
+forbid(foreground, "usePathname", "foreground push is no longer route-gated");
+forbid(foreground, 'pathname ===', "foreground push does not skip /scanner");
+need(foreground, "onMessage(", "foreground FCM onMessage remains active");
+need(foreground, ".showNotification(", "foreground push still displays a browser notification");
+need(foreground, "acknowledgeDisplayedPush(", "foreground display acknowledgement remains intact");
+need(foreground, 'scope:\n                  "/"', "foreground Firebase worker uses root scope");
+forbid(keeper, "usePathname", "durable guardian registration is no longer route-gated");
+forbid(keeper, 'pathname ===', "guardian registration does not skip /scanner");
+need(keeper, "onRegistered(", "FID registration lifecycle remains active");
+need(keeper, "onUnregistered(", "FID unregister lifecycle remains active");
+need(keeper, "ACK_CATCH_UP", "catch-up remains available on scanner");
+need(keeper, 'scope:\n                  "/"', "keeper Firebase worker uses root scope");
+need(keeper, "serviceWorkerRegistration:", "FCM registration stays bound to guardian worker");
+need(scanner, '"/scanner-sw.js"', "scanner keeps dedicated worker");
+need(scanner, 'scope:\n                    "/scanner"', "scanner worker remains scoped to /scanner");
+need(layout, "<CasaForegroundNotifications />", "root layout mounts foreground handler");
+need(layout, "<GuardianDeviceRegistrationKeeper />", "root layout mounts durable keeper");
+need(worker, "CASA_M55_SCANNER_GUARDIAN_FOREGROUND_PUSH", "M55 live marker present");
+need(worker, ".then(() => casaAcknowledgeDisplayed(data))", "background display acknowledgement preserved");
+need(worker, "event.notification.close()", "notification click remains close-only");
+forbid(worker, "clients.openWindow", "notification navigation remains disabled");
+console.log("RESULT: M55 scanner guardian foreground push selftest GREEN");

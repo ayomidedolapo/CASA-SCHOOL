@@ -4,9 +4,6 @@ import {
   useEffect,
 } from "react";
 import {
-  usePathname,
-} from "next/navigation";
-import {
   getApp,
   getApps,
   initializeApp,
@@ -99,18 +96,8 @@ async function acknowledgeDisplayedPush(
 }
 
 export default function CasaForegroundNotifications() {
-  const pathname =
-    usePathname();
-
   useEffect(
     () => {
-      if (
-        pathname ===
-          "/scanner"
-      ) {
-        return;
-      }
-
       let cancelled =
         false;
       let stop:
@@ -139,6 +126,12 @@ export default function CasaForegroundNotifications() {
             .serviceWorker
             .register(
               "/firebase-messaging-sw.js",
+              {
+                scope:
+                  "/",
+                updateViaCache:
+                  "none",
+              },
             );
 
         if (cancelled) {
@@ -225,9 +218,7 @@ export default function CasaForegroundNotifications() {
         stop?.();
       };
     },
-    [
-      pathname,
-    ],
+    [],
   );
 
   return null;
