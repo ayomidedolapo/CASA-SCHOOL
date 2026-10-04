@@ -1244,6 +1244,120 @@ export async function listCentralProductionJobs(
           studentCardProductionJobs.productionAuthority,
         cardStatus:
           studentIdentityCards.status,
+        cardSerial:
+          studentIdentityCards.serialNumber,
+        previousCardId:
+          sql<string | null>`(
+            select
+              previous.id::text
+            from student_identity_cards previous
+            where
+              previous.school_id =
+                ${studentIdentityCards.schoolId}
+              and previous.student_id =
+                ${studentIdentityCards.studentId}
+              and previous.id <>
+                ${studentIdentityCards.id}
+              and (
+                previous.issued_at <
+                  ${studentIdentityCards.issuedAt}
+                or (
+                  previous.issued_at =
+                    ${studentIdentityCards.issuedAt}
+                  and previous.created_at <
+                    ${studentIdentityCards.createdAt}
+                )
+              )
+            order by
+              previous.issued_at desc,
+              previous.created_at desc,
+              previous.id desc
+            limit 1
+          )`,
+        previousCardSerial:
+          sql<string | null>`(
+            select
+              previous.serial_number
+            from student_identity_cards previous
+            where
+              previous.school_id =
+                ${studentIdentityCards.schoolId}
+              and previous.student_id =
+                ${studentIdentityCards.studentId}
+              and previous.id <>
+                ${studentIdentityCards.id}
+              and (
+                previous.issued_at <
+                  ${studentIdentityCards.issuedAt}
+                or (
+                  previous.issued_at =
+                    ${studentIdentityCards.issuedAt}
+                  and previous.created_at <
+                    ${studentIdentityCards.createdAt}
+                )
+              )
+            order by
+              previous.issued_at desc,
+              previous.created_at desc,
+              previous.id desc
+            limit 1
+          )`,
+        previousCardStatus:
+          sql<string | null>`(
+            select
+              previous.status::text
+            from student_identity_cards previous
+            where
+              previous.school_id =
+                ${studentIdentityCards.schoolId}
+              and previous.student_id =
+                ${studentIdentityCards.studentId}
+              and previous.id <>
+                ${studentIdentityCards.id}
+              and (
+                previous.issued_at <
+                  ${studentIdentityCards.issuedAt}
+                or (
+                  previous.issued_at =
+                    ${studentIdentityCards.issuedAt}
+                  and previous.created_at <
+                    ${studentIdentityCards.createdAt}
+                )
+              )
+            order by
+              previous.issued_at desc,
+              previous.created_at desc,
+              previous.id desc
+            limit 1
+          )`,
+        previousCardDeactivatedAt:
+          sql<Date | null>`(
+            select
+              previous.deactivated_at
+            from student_identity_cards previous
+            where
+              previous.school_id =
+                ${studentIdentityCards.schoolId}
+              and previous.student_id =
+                ${studentIdentityCards.studentId}
+              and previous.id <>
+                ${studentIdentityCards.id}
+              and (
+                previous.issued_at <
+                  ${studentIdentityCards.issuedAt}
+                or (
+                  previous.issued_at =
+                    ${studentIdentityCards.issuedAt}
+                  and previous.created_at <
+                    ${studentIdentityCards.createdAt}
+                )
+              )
+            order by
+              previous.issued_at desc,
+              previous.created_at desc,
+              previous.id desc
+            limit 1
+          )`,
         publicAccessKey:
           studentCardProductionJobs.publicAccessKey,
         publicLinkRevision:
@@ -1319,6 +1433,21 @@ export async function listCentralProductionJobs(
               "CASA_INTERNAL_REPLACEMENT"
             ? "REPLACEMENT" as const
             : "OTHER" as const,
+      previousCard:
+        row.previousCardId
+          ? {
+              id:
+                row.previousCardId,
+              serialNumber:
+                row.previousCardSerial ??
+                "Unknown",
+              status:
+                row.previousCardStatus ??
+                "UNKNOWN",
+              deactivatedAt:
+                row.previousCardDeactivatedAt,
+            }
+          : null,
       publicUrl:
         publicCardUrl(
           input.origin,

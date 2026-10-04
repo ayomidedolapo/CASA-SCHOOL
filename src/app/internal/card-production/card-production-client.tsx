@@ -64,7 +64,25 @@ type Job = {
     | "PRINTED";
   category:
     CardCategory;
+  productionAuthority:
+    | "SCHOOL_MEMBERSHIP"
+    | "SCHOOL_ENROLLMENT_AUTO_ISSUE"
+    | "CASA_INTERNAL_INITIAL_ROLLOUT"
+    | "CASA_INTERNAL_RENEWAL"
+    | "CASA_INTERNAL_REPLACEMENT";
   cardStatus: string;
+  cardSerial: string;
+  previousCard:
+    | {
+        id: string;
+        serialNumber:
+          string;
+        status:
+          string;
+        deactivatedAt:
+          string | null;
+      }
+    | null;
   publicLinkRevision:
     number;
   renderSnapshot:
@@ -152,24 +170,102 @@ function fmt(
 }
 
 function categoryLabel(
-  category:
-    CardCategory,
+  job:
+    Job,
 ) {
   if (
-    category ===
+    job.category ===
       "FIRST_CARD"
   ) {
     return "New student / first card";
   }
 
   if (
-    category ===
+    job.category ===
       "REPLACEMENT"
   ) {
     return "Replacement";
   }
 
-  return "Other / reissue";
+  if (
+    job.productionAuthority ===
+      "CASA_INTERNAL_RENEWAL"
+  ) {
+    return "Class-change reissue";
+  }
+
+  return "Reissue";
+}
+
+function readableCardStatus(
+  value:
+    string,
+) {
+  return value
+    .replaceAll(
+      "_",
+      " ",
+    )
+    .toLowerCase()
+    .replace(
+      /(^|\s)\S/g,
+      (
+        letter,
+      ) =>
+        letter.toUpperCase(),
+    );
+}
+
+function cardLifecycleMessage(
+  job:
+    Job,
+) {
+  const previous =
+    job.previousCard;
+
+  if (
+    !previous
+  ) {
+    return job.category ===
+      "FIRST_CARD"
+      ? "First card · no previous card."
+      : "No earlier physical card is linked before this production card.";
+  }
+
+  if (
+    job.cardStatus ===
+      "READY_FOR_ACTIVATION" &&
+    previous.status ===
+      "ACTIVE"
+  ) {
+    return "Previous card stays ACTIVE until this new card is physically handed over. Activation will mark the previous card REPLACED.";
+  }
+
+  if (
+    job.cardStatus ===
+      "ACTIVE" &&
+    previous.status ===
+      "REPLACED"
+  ) {
+    return "Reissue completed · this card is ACTIVE and the previous card is REPLACED.";
+  }
+
+  if (
+    [
+      "LOST",
+      "REVOKED",
+      "REPLACED",
+      "EXPIRED",
+    ].includes(
+      previous.status,
+    ) &&
+    job.cardStatus ===
+      "READY_FOR_ACTIVATION"
+  ) {
+    return "Previous card is already inactive. This new card is awaiting physical handover and activation.";
+  }
+
+  return "Card Production is showing the current stored lifecycle state for both cards.";
 }
 
 export default function CardProductionClient(
@@ -1332,7 +1428,7 @@ export default function CardProductionClient(
               Replacement
             </option>
             <option value="OTHER">
-              Other / reissue
+              Reissue / renewal
             </option>
           </select>
 
@@ -1492,13 +1588,63 @@ export default function CardProductionClient(
                   <div>
                     <p className="font-semibold">
                       {categoryLabel(
-                        job.category,
+                        job,
                       )}
                     </p>
                     <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.1em] text-black/45">
                       {job.status}
                     </p>
-                    <p className="mt-1 text-xs text-black/40">
+
+                    <div className="mt-2 space-y-1 text-xs leading-5 text-black/55">
+                      <p>
+                        <span className="font-semibold text-black/70">
+                          New card
+                        </span>
+                        {" · "}
+                        <span className="font-mono">
+                          {job.cardSerial}
+                        </span>
+                        {" · "}
+                        {readableCardStatus(
+                          job.cardStatus,
+                        )}
+                      </p>
+
+                      {job.previousCard ? (
+                        <p>
+                          <span className="font-semibold text-black/70">
+                            Previous card
+                          </span>
+                          {" · "}
+                          <span className="font-mono">
+                            {
+                              job.previousCard
+                                .serialNumber
+                            }
+                          </span>
+                          {" · "}
+                          {readableCardStatus(
+                            job.previousCard
+                              .status,
+                          )}
+                          {job.previousCard
+                            .deactivatedAt
+                            ? ` · deactivated ${fmt(
+                                job.previousCard
+                                  .deactivatedAt,
+                              )}`
+                            : ""}
+                        </p>
+                      ) : null}
+
+                      <p className="text-black/45">
+                        {cardLifecycleMessage(
+                          job,
+                        )}
+                      </p>
+                    </div>
+
+                    <p className="mt-2 text-xs text-black/40">
                       Template{" "}
                       {job.templateVersion}
                     </p>
