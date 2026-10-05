@@ -134,6 +134,10 @@ export interface ScannerPresenceResult {
       number;
     guardianPushQueued:
       number;
+    movement:
+      | "TEMPORARY_EXIT"
+      | "TEMPORARY_RETURN"
+      | null;
     replayed:
       boolean;
   };

@@ -9,7 +9,9 @@ import {
 export type GuardianPresencePushEvent =
   | "STUDENT_CHECKED_IN"
   | "STUDENT_SIGNED_OUT"
-  | "STUDENT_EARLY_DEPARTURE";
+  | "STUDENT_EARLY_DEPARTURE"
+  | "STUDENT_TEMPORARILY_OUT"
+  | "STUDENT_RETURNED_TO_CAMPUS";
 
 function rowsOf<T>(
   result: unknown,
@@ -183,6 +185,28 @@ export async function queueGuardianPresencePushBestEffort(
                   then
                     recipients.student_name ||
                     ' has gotten to school at ' ||
+                    to_char(
+                      recipients.occurred_at at time zone
+                        recipients.school_timezone,
+                      'HH24:MI'
+                    ) ||
+                    '.'
+                when ${input.eventType} =
+                  'STUDENT_TEMPORARILY_OUT'
+                  then
+                    recipients.student_name ||
+                    ' stepped out of school at ' ||
+                    to_char(
+                      recipients.occurred_at at time zone
+                        recipients.school_timezone,
+                      'HH24:MI'
+                    ) ||
+                    ' and is expected back on campus soon.'
+                when ${input.eventType} =
+                  'STUDENT_RETURNED_TO_CAMPUS'
+                  then
+                    recipients.student_name ||
+                    ' is now back on the school campus at ' ||
                     to_char(
                       recipients.occurred_at at time zone
                         recipients.school_timezone,
@@ -368,6 +392,14 @@ export async function reconcileRecentGuardianPresencePushes(
                   'CHECKED_IN'::attendance_presence_event_type
                   then
                     'STUDENT_CHECKED_IN'
+                when event.event_type::text =
+                  'TEMPORARY_EXITED'
+                  then
+                    'STUDENT_TEMPORARILY_OUT'
+                when event.event_type::text =
+                  'TEMPORARY_RETURNED'
+                  then
+                    'STUDENT_RETURNED_TO_CAMPUS'
                 when event.departure_result =
                   'EARLY'::attendance_departure_result
                   then
@@ -482,6 +514,28 @@ export async function reconcileRecentGuardianPresencePushes(
                   then
                     recipients.student_name ||
                     ' has gotten to school at ' ||
+                    to_char(
+                      recipients.occurred_at at time zone
+                        recipients.school_timezone,
+                      'HH24:MI'
+                    ) ||
+                    '.'
+                when recipients.guardian_event_type =
+                  'STUDENT_TEMPORARILY_OUT'
+                  then
+                    recipients.student_name ||
+                    ' stepped out of school at ' ||
+                    to_char(
+                      recipients.occurred_at at time zone
+                        recipients.school_timezone,
+                      'HH24:MI'
+                    ) ||
+                    ' and is expected back on campus soon.'
+                when recipients.guardian_event_type =
+                  'STUDENT_RETURNED_TO_CAMPUS'
+                  then
+                    recipients.student_name ||
+                    ' is now back on the school campus at ' ||
                     to_char(
                       recipients.occurred_at at time zone
                         recipients.school_timezone,

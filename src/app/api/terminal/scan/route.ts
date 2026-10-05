@@ -700,6 +700,34 @@ export async function POST(
           null,
       );
 
+    const temporaryExitCycle =
+      record
+        ? rowsOf<{
+            id: string;
+            status:
+              | "AUTHORIZED"
+              | "OUTSIDE";
+          }>(
+            await db.execute(sql`
+              select id, status
+              from student_temporary_exit_cycles
+              where school_id = ${access.school.id}::uuid
+                and session_id = ${active.session.id}::uuid
+                and student_id = ${card.studentId}::uuid
+                and attendance_record_id = ${record.id}::uuid
+                and status in ('AUTHORIZED','OUTSIDE')
+              order by created_at desc
+              limit 1
+            `),
+          )[0] ?? null
+        : null;
+
+    if (temporaryExitCycle?.status === "OUTSIDE") {
+      resolvedOperation = "CHECK_IN";
+    } else if (temporaryExitCycle?.status === "AUTHORIZED") {
+      resolvedOperation = "CHECK_OUT";
+    }
+
     if (
       outcome === "PENDING" &&
       active.session.status !==
@@ -772,6 +800,36 @@ export async function POST(
         "PRESENCE_ONLY";
 
     if (
+      outcome === "PENDING" &&
+      temporaryExitCycle?.status ===
+        "OUTSIDE"
+    ) {
+      classification =
+        "TEMPORARY_RETURN";
+      resolvedOperation =
+        "CHECK_IN";
+      timeResult =
+        "ON_TIME";
+      departureResult =
+        "NOT_RUN";
+      reasonCode =
+        "TEMPORARY_RETURN_AUTHORIZED";
+    } else if (
+      outcome === "PENDING" &&
+      temporaryExitCycle?.status ===
+        "AUTHORIZED"
+    ) {
+      classification =
+        "TEMPORARY_EXIT";
+      resolvedOperation =
+        "CHECK_OUT";
+      timeResult =
+        "NOT_RUN";
+      departureResult =
+        "NORMAL";
+      reasonCode =
+        "TEMPORARY_EXIT_AUTHORIZED";
+    } else if (
       outcome === "PENDING" &&
       lateStayAuthorization ===
         null &&

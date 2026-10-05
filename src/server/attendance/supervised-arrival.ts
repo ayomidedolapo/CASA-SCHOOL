@@ -158,7 +158,7 @@ async function requireActiveBiometricProfile(
 
   if (rowsOf(result).length === 0) {
     throw new SupervisedArrivalError(
-      "An ACTIVE existing biometric profile is required for supervised first-card attendance.",
+      "An ACTIVE existing biometric profile is required for supervised attendance.",
       409,
       "ACTIVE_BIOMETRIC_PROFILE_REQUIRED",
     );
@@ -659,6 +659,11 @@ export async function recordSupervisedLateArrival(
     );
   }
 
+  await requireActiveBiometricProfile({
+    access: input.access,
+    studentId: input.studentId,
+  });
+
   const db = getDb();
   const result = await db.execute(sql`
     with inserted_record as (
@@ -864,6 +869,16 @@ export async function recordSupervisedLateArrival(
       409,
       "SUPERVISED_LATE_STATE_CHANGED",
     );
+  }
+
+  try {
+    await runGuardianPushOutbox({
+      schoolId: input.access.school.id,
+      presenceEventId: row.presence_event_id,
+      limit: 50,
+    });
+  } catch {
+    // Attendance is authoritative. Push delivery remains best-effort.
   }
 
   return {

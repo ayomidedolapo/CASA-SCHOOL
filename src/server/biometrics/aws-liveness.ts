@@ -1976,6 +1976,9 @@ export async function completeAwsVerificationLiveness(
       guardianPushQueued:
         finalized
           .guardianPushQueued,
+      movement:
+        finalized.movement ??
+        null,
       replayed:
         finalized.replayed,
     },

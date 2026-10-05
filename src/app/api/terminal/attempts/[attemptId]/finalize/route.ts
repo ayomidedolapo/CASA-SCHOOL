@@ -188,6 +188,11 @@ export async function POST(
           result.presenceEventId,
         notificationQueued:
           result.notificationQueued,
+        guardianPushQueued:
+          result.guardianPushQueued,
+        movement:
+          result.movement ??
+          null,
       },
       replayed:
         result.replayed,

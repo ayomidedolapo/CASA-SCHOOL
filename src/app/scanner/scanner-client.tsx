@@ -2568,11 +2568,17 @@ export default function ScannerClient() {
           );
 
           setMessage(
-            data.presence
-              .operation ===
-              "CHECK_OUT"
-              ? "Signed out."
-              : "Checked in.",
+            data.presence.movement ===
+              "TEMPORARY_EXIT"
+              ? "Stepped out temporarily. This is not a final sign-out."
+              : data.presence.movement ===
+                  "TEMPORARY_RETURN"
+                ? "Returned to campus."
+                : data.presence
+                    .operation ===
+                    "CHECK_OUT"
+                  ? "Signed out."
+                  : "Checked in.",
           );
         } catch {
           setLiveness(
@@ -2792,10 +2798,22 @@ export default function ScannerClient() {
               ? finalResult
                   ?.result
                   .presence
-                  .operation ===
-                "CHECK_OUT"
-                ? "Signed out."
-                : "Checked in."
+                  .movement ===
+                "TEMPORARY_EXIT"
+                ? "Stepped out temporarily."
+                : finalResult
+                    ?.result
+                    .presence
+                    .movement ===
+                  "TEMPORARY_RETURN"
+                  ? "Returned to campus."
+                  : finalResult
+                      ?.result
+                      .presence
+                      .operation ===
+                    "CHECK_OUT"
+                    ? "Signed out."
+                    : "Checked in."
               : phase ===
                   "STAFF"
                 ? "Staff required."
@@ -2826,13 +2844,19 @@ export default function ScannerClient() {
     null;
 
   const resultAttendanceLabel =
-    finalResult
-      ?.result
-      .presence
-      .operation ===
-    "CHECK_OUT"
-      ? "Signed out"
-      : "Checked in";
+    finalResult?.result.presence.movement ===
+      "TEMPORARY_EXIT"
+      ? "Stepped out temporarily"
+      : finalResult?.result.presence.movement ===
+          "TEMPORARY_RETURN"
+        ? "Returned to campus"
+        : finalResult
+            ?.result
+            .presence
+            .operation ===
+          "CHECK_OUT"
+          ? "Signed out"
+          : "Checked in";
 
   const resultGuardianDelivery =
     finalResult

@@ -312,7 +312,17 @@ export async function getTodayAttendanceOperations(
           replacement.payment_status::text
             as card_replacement_payment_status,
           replacement.replacement_reason::text
-            as card_replacement_reason
+            as card_replacement_reason,
+          temporary_exit.id
+            as temporary_exit_id,
+          temporary_exit.status
+            as temporary_exit_status,
+          temporary_exit.reason
+            as temporary_exit_reason,
+          temporary_exit.created_at
+            as temporary_exit_authorized_at,
+          temporary_exit.stepped_out_at
+            as temporary_exit_stepped_out_at
         from student_enrollments
           enrollment
         join students student
@@ -449,6 +459,28 @@ export async function getTodayAttendanceOperations(
               desc
           limit 1
         ) replacement
+          on true
+        left join lateral (
+          select
+            cycle.id,
+            cycle.status,
+            cycle.reason,
+            cycle.created_at,
+            cycle.stepped_out_at
+          from student_temporary_exit_cycles cycle
+          where cycle.school_id =
+              enrollment.school_id
+            and cycle.student_id =
+              enrollment.student_id
+            and cycle.session_id =
+              ${session?.id ?? null}::uuid
+            and cycle.status in (
+              'AUTHORIZED',
+              'OUTSIDE'
+            )
+          order by cycle.created_at desc
+          limit 1
+        ) temporary_exit
           on true
         where
           enrollment.school_id =
@@ -784,6 +816,16 @@ export async function getTodayAttendanceOperations(
         "UNPAID" | "PAID" | null;
       card_replacement_reason:
         "LOST" | "DAMAGED" | null;
+      temporary_exit_id:
+        string | null;
+      temporary_exit_status:
+        "AUTHORIZED" | "OUTSIDE" | null;
+      temporary_exit_reason:
+        string | null;
+      temporary_exit_authorized_at:
+        Date | string | null;
+      temporary_exit_stepped_out_at:
+        Date | string | null;
     }>(
       stateResult,
     );
@@ -811,9 +853,12 @@ export async function getTodayAttendanceOperations(
 
         const presenceStatus =
           attendanceExclusion ??
-          (presenceOnly && !hasRecord
-            ? "NOT_ARRIVED" as const
-            : classifyTodayPresence({
+          (student.temporary_exit_status ===
+            "OUTSIDE"
+            ? "TEMPORARILY_OUT" as const
+            : presenceOnly && !hasRecord
+              ? "NOT_ARRIVED" as const
+              : classifyTodayPresence({
             hasAttendanceRecord:
               hasRecord,
             presenceState:
@@ -889,6 +934,21 @@ export async function getTodayAttendanceOperations(
                 0,
             ) === 1 &&
             !student.card_replacement_case_id,
+          temporaryExit:
+            student.temporary_exit_id
+              ? {
+                  id:
+                    student.temporary_exit_id,
+                  status:
+                    student.temporary_exit_status,
+                  reason:
+                    student.temporary_exit_reason,
+                  authorizedAt:
+                    student.temporary_exit_authorized_at,
+                  steppedOutAt:
+                    student.temporary_exit_stepped_out_at,
+                }
+              : null,
           cardReplacement:
             student.card_replacement_case_id
               ? {
@@ -958,6 +1018,12 @@ export async function getTodayAttendanceOperations(
         (student) =>
           student.presenceStatus ===
           "ON_CAMPUS",
+      ).length,
+    temporarilyOut:
+      studentsWithState.filter(
+        (student) =>
+          student.presenceStatus ===
+          "TEMPORARILY_OUT",
       ).length,
     signedOut:
       studentsWithState.filter(

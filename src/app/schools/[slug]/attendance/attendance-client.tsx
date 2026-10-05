@@ -40,6 +40,7 @@ interface TodayStudent {
     | "NOT_ARRIVED"
     | "ABSENT"
     | "ON_CAMPUS"
+    | "TEMPORARILY_OUT"
     | "SIGNED_OUT";
   arrivalStatus:
     | "ON_TIME"
@@ -54,6 +55,21 @@ interface TodayStudent {
     boolean;
   scannerCheckoutEligible:
     boolean;
+  temporaryExit:
+    | {
+        id: string;
+        status:
+          | "AUTHORIZED"
+          | "OUTSIDE"
+          | null;
+        reason:
+          string | null;
+        authorizedAt:
+          string | null;
+        steppedOutAt:
+          string | null;
+      }
+    | null;
   firstCardPendingHandover:
     boolean;
   cardReplacement:
@@ -94,6 +110,7 @@ interface TodayData {
   summary: {
     expected: number;
     onCampus: number;
+    temporarilyOut: number;
     signedOut: number;
     onTime: number;
     late: number;
@@ -210,6 +227,10 @@ type PendingAttendanceConfirm =
 type PendingAttendanceInput =
   | {
       kind: "SUPERVISED_LATE";
+      student: TodayStudent;
+    }
+  | {
+      kind: "TEMPORARY_EXIT";
       student: TodayStudent;
     }
   | {
@@ -1321,6 +1342,75 @@ export default function AttendanceClient(
         caught instanceof Error
           ? caught.message
           : "Supervised late arrival failed.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function authorizeTemporaryExit(
+    student: TodayStudent,
+    reason: string,
+  ) {
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const grant =
+        await obtainPasskeyStepUpGrant({
+          schoolSlug: slug,
+          action: "TEMPORARY_EXIT",
+        });
+
+      const response =
+        await fetch(
+          `/api/schools/${encodeURIComponent(
+            slug,
+          )}/attendance/temporary-exits/${encodeURIComponent(
+            student.studentId,
+          )}`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type":
+                "application/json",
+              "x-casa-passkey-step-up":
+                grant,
+            },
+            credentials:
+              "same-origin",
+            cache:
+              "no-store",
+            body:
+              JSON.stringify({ reason }),
+          },
+        );
+
+      const body =
+        await response.json() as {
+          message?: string;
+          code?: string;
+        };
+
+      if (!response.ok) {
+        throw new Error(
+          body.message ??
+            body.code ??
+            "Temporary step-out authorization failed.",
+        );
+      }
+
+      setNotice(
+        `${studentName(student)} is authorized for one temporary step-out and return. The student can use the Scanner to step out and later scan again to return; no second staff authorization is required.`,
+      );
+
+      await refreshToday();
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Temporary step-out authorization failed.",
       );
     } finally {
       setBusy(false);
@@ -3393,6 +3483,28 @@ export default function AttendanceClient(
                                     />
                                     Select for after-hours stay
                                   </label>
+                                  {student.presenceStatus === "ON_CAMPUS" &&
+                                    student.scannerCheckoutEligible && (
+                                    <button
+                                      type="button"
+                                      className={styles.secondaryButton}
+                                      disabled={
+                                        busy ||
+                                        student.temporaryExit?.status === "AUTHORIZED"
+                                      }
+                                      onClick={() =>
+                                        setPendingInput({
+                                          kind: "TEMPORARY_EXIT",
+                                          student,
+                                        })
+                                      }
+                                    >
+                                      {student.temporaryExit?.status === "AUTHORIZED"
+                                        ? "Step-out authorized"
+                                        : "Authorize step-out"}
+                                    </button>
+                                  )}
+
                                   <button
                                     type="button"
                                     className={styles.secondaryButton}
@@ -4240,13 +4352,13 @@ export default function AttendanceClient(
 
       <CasaInputDialog
         open={pendingInput !== null}
-        title={pendingInput?.kind === "SUPERVISED_LATE" ? "Record supervised late arrival" : pendingInput?.kind === "REOPEN" ? "Reopen attendance session" : "Use current attendance policy"}
-        message={pendingInput?.kind === "SUPERVISED_LATE" ? `Enter the reason ${studentName(pendingInput.student)} arrived after the normal check-in window.` : pendingInput?.kind === "REOPEN" ? "Explain why today's attendance session needs to be reopened. This reason stays in the audit history." : "Explain why today's open attendance session should use the current default policy. The reason and Passkey authorization stay in the audit history."}
+        title={pendingInput?.kind === "SUPERVISED_LATE" ? "Record supervised late arrival" : pendingInput?.kind === "TEMPORARY_EXIT" ? "Authorize temporary step-out" : pendingInput?.kind === "REOPEN" ? "Reopen attendance session" : "Use current attendance policy"}
+        message={pendingInput?.kind === "SUPERVISED_LATE" ? `Enter the reason ${studentName(pendingInput.student)} arrived after the normal check-in window.` : pendingInput?.kind === "TEMPORARY_EXIT" ? `Enter why ${studentName(pendingInput.student)} is allowed to leave briefly and return. One Passkey authorization covers this step-out and the student's verified return scan.` : pendingInput?.kind === "REOPEN" ? "Explain why today's attendance session needs to be reopened. This reason stays in the audit history." : "Explain why today's open attendance session should use the current default policy. The reason and Passkey authorization stay in the audit history."}
         label="Reason"
-        initialValue={pendingInput?.kind === "SUPERVISED_LATE" ? "Arrived after the normal check-in window" : pendingInput?.kind === "REOPEN" ? "Closed accidentally" : "Use corrected current attendance schedule"}
-        minLength={pendingInput?.kind === "SUPERVISED_LATE" ? 3 : 8}
+        initialValue={pendingInput?.kind === "SUPERVISED_LATE" ? "Arrived after the normal check-in window" : pendingInput?.kind === "TEMPORARY_EXIT" ? "Authorized brief step-out; student will return to campus" : pendingInput?.kind === "REOPEN" ? "Closed accidentally" : "Use corrected current attendance schedule"}
+        minLength={pendingInput?.kind === "SUPERVISED_LATE" || pendingInput?.kind === "TEMPORARY_EXIT" ? 3 : 8}
         maxLength={240}
-        confirmLabel={pendingInput?.kind === "SUPERVISED_LATE" ? "Record late arrival" : pendingInput?.kind === "REOPEN" ? "Continue to reopen" : "Continue"}
+        confirmLabel={pendingInput?.kind === "SUPERVISED_LATE" ? "Record late arrival" : pendingInput?.kind === "TEMPORARY_EXIT" ? "Authorize step-out" : pendingInput?.kind === "REOPEN" ? "Continue to reopen" : "Continue"}
         busy={busy}
         onCancel={() => setPendingInput(null)}
         onConfirm={(reason) => {
@@ -4254,6 +4366,8 @@ export default function AttendanceClient(
           setPendingInput(null);
           if (pending?.kind === "SUPERVISED_LATE") {
             void recordSupervisedLate(pending.student, reason);
+          } else if (pending?.kind === "TEMPORARY_EXIT") {
+            void authorizeTemporaryExit(pending.student, reason);
           } else if (pending?.kind === "REOPEN") {
             void mutateSession("REOPEN", reason);
           } else if (pending?.kind === "REBIND") {

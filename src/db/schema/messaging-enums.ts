@@ -18,6 +18,8 @@ export const schoolNotificationEventTypeEnum =
       "STUDENT_CHECKED_IN",
       "STUDENT_SIGNED_OUT",
       "STUDENT_EARLY_DEPARTURE",
+      "STUDENT_TEMPORARILY_OUT",
+      "STUDENT_RETURNED_TO_CAMPUS",
     ],
   );
 

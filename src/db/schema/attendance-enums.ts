@@ -122,6 +122,8 @@ export const attendancePresenceEventTypeEnum =
     [
       "CHECKED_IN",
       "CHECKED_OUT",
+      "TEMPORARY_EXITED",
+      "TEMPORARY_RETURNED",
     ],
   );
 export const attendanceTerminalEventTypeEnum =

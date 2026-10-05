@@ -24,6 +24,9 @@ import type {
 import {
   consumeLateStayAuthorizationForAttempt,
 } from "./branch-session";
+import {
+  finalizeTemporaryMovement,
+} from "./temporary-exit";
 
 export async function finalizeVerifiedPresence(
   access:
@@ -72,6 +75,19 @@ export async function finalizeVerifiedPresence(
 
   const attempt =
     rows[0];
+
+  if (
+    attempt?.reasonCode ===
+      "TEMPORARY_EXIT_AUTHORIZED" ||
+    attempt?.reasonCode ===
+      "TEMPORARY_RETURN_AUTHORIZED"
+  ) {
+    return finalizeTemporaryMovement(
+      access,
+      attemptId,
+      assertion,
+    );
+  }
 
   if (
     attempt?.outcome ===

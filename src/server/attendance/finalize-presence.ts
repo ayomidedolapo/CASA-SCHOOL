@@ -53,6 +53,9 @@ export type FinalizePresenceResult =
       notificationQueued: number;
       guardianPushQueued:
         number;
+      movement?:
+        | "TEMPORARY_EXIT"
+        | "TEMPORARY_RETURN";
     }
   | {
       ok: false;

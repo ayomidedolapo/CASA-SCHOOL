@@ -11,6 +11,9 @@ import {
   queueGuardianPresencePushBestEffort,
 } from "@/server/messaging/guardian-presence-push";
 import {
+  runGuardianPushOutbox,
+} from "@/server/messaging/guardian-push-worker";
+import {
   calendarClosureMessage,
   getActiveCalendarClosure,
 } from "@/server/school-operations/calendar-closure";
@@ -973,6 +976,16 @@ export async function recordAssistedCheckout(
           ? "STUDENT_EARLY_DEPARTURE"
           : "STUDENT_SIGNED_OUT",
     });
+
+  try {
+    await runGuardianPushOutbox({
+      schoolId: input.access.school.id,
+      presenceEventId: row.presence_event_id,
+      limit: 50,
+    });
+  } catch {
+    // Final attendance is authoritative. M53/M55 push retry remains best-effort.
+  }
 
   return {
     ok: true as const,

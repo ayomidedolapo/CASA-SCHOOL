@@ -1115,13 +1115,26 @@ export const studentPresenceEvents =
         table.schoolId,
         table.id,
       ),
-      unique(
-        "student_presence_events_record_type_unique",
-      ).on(
-        table.schoolId,
-        table.attendanceRecordId,
-        table.eventType,
-      ),
+      uniqueIndex(
+        "student_presence_events_one_checkin_per_record_idx",
+      )
+        .on(
+          table.schoolId,
+          table.attendanceRecordId,
+        )
+        .where(
+          sql`${table.eventType} = 'CHECKED_IN'`,
+        ),
+      uniqueIndex(
+        "student_presence_events_one_checkout_per_record_idx",
+      )
+        .on(
+          table.schoolId,
+          table.attendanceRecordId,
+        )
+        .where(
+          sql`${table.eventType} = 'CHECKED_OUT'`,
+        ),
       index(
         "student_presence_events_student_occurred_idx",
       ).on(
@@ -1212,6 +1225,8 @@ export const studentPresenceEvents =
           (${table.eventType} = 'CHECKED_IN' and ${table.departureResult} = 'NOT_RUN')
           or
           (${table.eventType} = 'CHECKED_OUT' and ${table.departureResult} <> 'NOT_RUN')
+          or
+          (${table.eventType} in ('TEMPORARY_EXITED', 'TEMPORARY_RETURNED') and ${table.departureResult} = 'NOT_RUN')
         )`,
       ),
       check(
