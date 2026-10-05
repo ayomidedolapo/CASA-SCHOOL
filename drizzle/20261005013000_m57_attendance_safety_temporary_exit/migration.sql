@@ -20,11 +20,11 @@ alter table student_presence_events
 
 create unique index if not exists student_presence_events_one_checkin_per_record_idx
   on student_presence_events (school_id, attendance_record_id)
-  where event_type::text = 'CHECKED_IN';
+  where event_type = 'CHECKED_IN'::attendance_presence_event_type;
 -- CASA_STATEMENT_BREAK
 create unique index if not exists student_presence_events_one_checkout_per_record_idx
   on student_presence_events (school_id, attendance_record_id)
-  where event_type::text = 'CHECKED_OUT';
+  where event_type = 'CHECKED_OUT'::attendance_presence_event_type;
 -- CASA_STATEMENT_BREAK
 
 alter table student_presence_events
