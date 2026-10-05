@@ -291,6 +291,8 @@ export async function queueGuardianPresencePushBestEffort(
             where
               presence_event_id is not null
             do update set
+              event_type =
+                excluded.event_type,
               title =
                 excluded.title,
               body =
@@ -634,6 +636,8 @@ export async function reconcileRecentGuardianPresencePushes(
             where
               presence_event_id is not null
             do update set
+              event_type =
+                excluded.event_type,
               title =
                 excluded.title,
               body =
