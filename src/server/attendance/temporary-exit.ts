@@ -734,11 +734,20 @@ export async function finalizeTemporaryMovement(
         select
           sender.id as sender_id,
           guardian.id as guardian_id,
-          guardian.phone as recipient_phone
+          guardian.phone as recipient_phone,
+          concat_ws(
+            ' ',
+            student.first_name,
+            nullif(student.middle_name, ''),
+            student.last_name
+          ) as student_name
         from active_sender sender
+        join students student
+          on student.school_id = sender.school_id
+         and student.id = ${attempt.student_id}::uuid
         join student_guardians relationship
           on relationship.school_id = sender.school_id
-         and relationship.student_id = ${attempt.student_id}::uuid
+         and relationship.student_id = student.id
          and relationship.receives_notifications = true
         join guardians guardian
           on guardian.school_id = relationship.school_id
@@ -778,6 +787,7 @@ export async function finalizeTemporaryMovement(
           end,
           jsonb_build_object(
             'studentId', ${attempt.student_id},
+            'studentName', recipients.student_name,
             'temporaryExitCycleId', ${row.cycle_id},
             'movement', ${movement},
             'reason', ${row.reason},

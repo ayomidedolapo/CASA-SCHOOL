@@ -1,7 +1,9 @@
 export type SmsNotificationEventType =
   | "STUDENT_CHECKED_IN"
   | "STUDENT_SIGNED_OUT"
-  | "STUDENT_EARLY_DEPARTURE";
+  | "STUDENT_EARLY_DEPARTURE"
+  | "STUDENT_TEMPORARILY_OUT"
+  | "STUDENT_RETURNED_TO_CAMPUS";
 
 export class SimhostngProviderError extends Error {
   constructor(
@@ -231,7 +233,12 @@ function timestampForEvent(
     eventType ===
     "STUDENT_CHECKED_IN"
       ? "checkedInAt"
-      : "signedOutAt";
+      : eventType ===
+            "STUDENT_TEMPORARILY_OUT" ||
+          eventType ===
+            "STUDENT_RETURNED_TO_CAMPUS"
+        ? "occurredAt"
+        : "signedOutAt";
 
   const value =
     requiredPayloadText(
@@ -336,6 +343,14 @@ export function renderAttendanceSms(
       occurredAt,
       input.timeZone,
     );
+  const reason =
+    input.eventType ===
+    "STUDENT_TEMPORARILY_OUT"
+      ? requiredPayloadText(
+          payload,
+          "reason",
+        )
+      : "";
 
   const eventText =
     input.eventType ===
@@ -344,7 +359,13 @@ export function renderAttendanceSms(
       : input.eventType ===
           "STUDENT_EARLY_DEPARTURE"
         ? `has checked out of school early. Time: ${at}.`
-        : `has checked out of school for the day. Time: ${at}.`;
+        : input.eventType ===
+            "STUDENT_TEMPORARILY_OUT"
+          ? `stepped out briefly from school at ${at}. Reason: ${reason}. Expected back on campus soon.`
+          : input.eventType ===
+              "STUDENT_RETURNED_TO_CAMPUS"
+            ? `is back on school premises at ${at}.`
+            : `has checked out of school for the day. Time: ${at}.`;
 
   return [
     `${schoolName}: ${studentName} ${eventText}`,

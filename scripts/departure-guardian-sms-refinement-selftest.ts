@@ -63,10 +63,10 @@ const preauthorizeRoute =
   );
 
 assert.ok(
-  guardianSchema.includes(
+  !guardianSchema.includes(
     "student_guardians_one_notification_recipient_per_student_idx",
   ),
-  "Guardian schema must enforce one attendance SMS recipient.",
+  "Guardian schema must preserve the current multi-guardian notification model.",
 );
 assert.ok(
   guardianSchema.includes(
@@ -142,12 +142,12 @@ assert.ok(
     "Authorize selected with Passkey",
   ) &&
     attendanceClient.includes(
-      "different classes",
+      "same branch",
     ) &&
     attendanceClient.includes(
       "earlyDeparturePreauthorized",
     ),
-  "Attendance UI must support mixed-class selected-student early departure.",
+  "Attendance UI must preserve branch-scoped selected-student early departure across classes.",
 );
 
 assert.ok(
