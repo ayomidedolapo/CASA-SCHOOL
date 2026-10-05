@@ -3492,28 +3492,6 @@ export default function AttendanceClient(
                                     />
                                     Select for after-hours stay
                                   </label>
-                                  {student.presenceStatus === "ON_CAMPUS" &&
-                                    student.scannerCheckoutEligible && (
-                                    <button
-                                      type="button"
-                                      className={styles.secondaryButton}
-                                      disabled={
-                                        busy ||
-                                        student.temporaryExit?.status === "AUTHORIZED"
-                                      }
-                                      onClick={() =>
-                                        setPendingInput({
-                                          kind: "TEMPORARY_EXIT",
-                                          student,
-                                        })
-                                      }
-                                    >
-                                      {student.temporaryExit?.status === "AUTHORIZED"
-                                        ? "Step-out authorized"
-                                        : "Authorize step-out"}
-                                    </button>
-                                  )}
-
                                   <button
                                     type="button"
                                     className={styles.secondaryButton}
@@ -3528,6 +3506,45 @@ export default function AttendanceClient(
                                   </button>
                                 </div>
                               ))}
+
+                            {canSuperviseAttendance &&
+                              !data?.readOnly &&
+                              data?.session?.status === "OPEN" &&
+                              (data?.session?.mode === "INSTRUCTIONAL" ||
+                                data?.session?.mode === "PRESENCE_ONLY") &&
+                              student.presenceStatus === "ON_CAMPUS" &&
+                              student.scannerCheckoutEligible &&
+                              (student.temporaryExit?.status === "AUTHORIZED" ? (
+                                <span className="casa-status">
+                                  Step-out authorized - student may scan to leave
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className={styles.secondaryButton}
+                                  disabled={busy}
+                                  onClick={() =>
+                                    setPendingInput({
+                                      kind: "TEMPORARY_EXIT",
+                                      student,
+                                    })
+                                  }
+                                >
+                                  Authorize step-out
+                                </button>
+                              ))}
+
+                            {canSuperviseAttendance &&
+                              !data?.readOnly &&
+                              data?.session?.status === "OPEN" &&
+                              (data?.session?.mode === "INSTRUCTIONAL" ||
+                                data?.session?.mode === "PRESENCE_ONLY") &&
+                              student.presenceStatus === "TEMPORARILY_OUT" &&
+                              student.temporaryExit?.status === "OUTSIDE" && (
+                                <span className="casa-status">
+                                  Temporarily out - awaiting return scan
+                                </span>
+                              )}
 
                             {canSuperviseAttendance &&
                               !data?.readOnly &&
