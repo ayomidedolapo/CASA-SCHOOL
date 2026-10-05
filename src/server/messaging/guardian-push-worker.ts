@@ -327,6 +327,68 @@ async function recoverStaleGuardianPushClaims(
   `);
 }
 
+export async function summarizeGuardianPushDeliveryForPresenceEvent(
+  input: {
+    schoolId: string;
+    presenceEventId: string;
+  },
+) {
+  const result =
+    await getDb().execute(sql`
+      select
+        count(*)::int as total,
+        count(*) filter (
+          where sent_at is not null
+             or device_displayed_at is not null
+        )::int as sent,
+        count(*) filter (
+          where status = 'RETRY'
+        )::int as retried,
+        count(*) filter (
+          where status in (
+            'FAILED',
+            'CANCELLED'
+          )
+        )::int as failed
+      from guardian_push_outbox
+      where school_id =
+        ${input.schoolId}::uuid
+        and presence_event_id =
+          ${input.presenceEventId}::uuid
+    `);
+
+  const row =
+    rowsOf<{
+      total: unknown;
+      sent: unknown;
+      retried: unknown;
+      failed: unknown;
+    }>(result)[0];
+
+  return {
+    total:
+      Number(
+        row?.total ??
+          0,
+      ),
+    sent:
+      Number(
+        row?.sent ??
+          0,
+      ),
+    retried:
+      Number(
+        row?.retried ??
+          0,
+      ),
+    failed:
+      Number(
+        row?.failed ??
+          0,
+      ),
+  };
+}
+
 export async function runGuardianPushOutbox(
   input: {
     limit?: number;
@@ -731,5 +793,56 @@ export async function runGuardianPushOutbox(
     sent,
     retried,
     failed,
+  };
+}
+
+export async function runGuardianPushOutboxForPresenceEvent(
+  input: {
+    schoolId: string;
+    presenceEventId: string;
+    limit?: number;
+  },
+) {
+  const immediate =
+    await runGuardianPushOutbox({
+      schoolId:
+        input.schoolId,
+      presenceEventId:
+        input.presenceEventId,
+      limit:
+        input.limit ??
+        50,
+    });
+
+  const persisted =
+    await summarizeGuardianPushDeliveryForPresenceEvent({
+      schoolId:
+        input.schoolId,
+      presenceEventId:
+        input.presenceEventId,
+    });
+
+  return {
+    ...immediate,
+    claimed:
+      Math.max(
+        immediate.claimed,
+        persisted.total,
+      ),
+    sent:
+      Math.max(
+        immediate.sent,
+        persisted.sent,
+      ),
+    retried:
+      Math.max(
+        immediate.retried,
+        persisted.retried,
+      ),
+    failed:
+      Math.max(
+        immediate.failed,
+        persisted.failed,
+      ),
   };
 }

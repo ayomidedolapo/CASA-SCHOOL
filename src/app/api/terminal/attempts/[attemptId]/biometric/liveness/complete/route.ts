@@ -12,7 +12,7 @@ import {
   authenticateTerminalRequest,
 } from "@/server/attendance/terminal-auth";
 import {
-  runGuardianPushOutbox,
+  runGuardianPushOutboxForPresenceEvent,
 } from "@/server/messaging/guardian-push-worker";
 import {
   AwsBiometricUnavailableError,
@@ -138,7 +138,7 @@ export async function POST(
     let guardianPushDelivery:
       | Awaited<
           ReturnType<
-            typeof runGuardianPushOutbox
+            typeof runGuardianPushOutboxForPresenceEvent
           >
         >
       | null =
@@ -146,7 +146,7 @@ export async function POST(
 
     try {
       guardianPushDelivery =
-        await runGuardianPushOutbox({
+        await runGuardianPushOutboxForPresenceEvent({
           schoolId:
             access.school.id,
           presenceEventId:

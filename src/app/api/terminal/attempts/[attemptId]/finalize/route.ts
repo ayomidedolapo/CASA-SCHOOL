@@ -17,6 +17,9 @@ import {
 import {
   authenticateTerminalRequest,
 } from "@/server/attendance/terminal-auth";
+import {
+  runGuardianPushOutboxForPresenceEvent,
+} from "@/server/messaging/guardian-push-worker";
 
 export const dynamic =
   "force-dynamic";
@@ -177,6 +180,28 @@ export async function POST(
     );
   }
 
+  let guardianPushDelivery:
+    | Awaited<
+        ReturnType<
+          typeof runGuardianPushOutboxForPresenceEvent
+        >
+      >
+    | null =
+      null;
+
+  try {
+    guardianPushDelivery =
+      await runGuardianPushOutboxForPresenceEvent({
+        schoolId:
+          access.school.id,
+        presenceEventId:
+          result.presenceEventId,
+        limit: 50,
+      });
+  } catch {
+    // Attendance is authoritative. Notification retry remains durable.
+  }
+
   return NextResponse.json(
     {
       presence: {
@@ -194,6 +219,7 @@ export async function POST(
           result.movement ??
           null,
       },
+      guardianPushDelivery,
       replayed:
         result.replayed,
     },

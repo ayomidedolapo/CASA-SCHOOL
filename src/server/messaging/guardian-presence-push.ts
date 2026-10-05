@@ -85,7 +85,9 @@ export async function queueGuardianPresencePushBestEffort(
                 student.last_name
               ) as student_name,
               event.occurred_at
-                as occurred_at
+                as occurred_at,
+              event.reason
+                as reason
             from schools school
             join students student
               on student.school_id =
@@ -112,6 +114,7 @@ export async function queueGuardianPresencePushBestEffort(
               context.student_id,
               context.student_name,
               context.occurred_at,
+              context.reason,
               guardian.id
                 as guardian_id,
               device.id
@@ -195,18 +198,28 @@ export async function queueGuardianPresencePushBestEffort(
                   'STUDENT_TEMPORARILY_OUT'
                   then
                     recipients.student_name ||
-                    ' stepped out of school at ' ||
+                    ' stepped out briefly from school at ' ||
                     to_char(
                       recipients.occurred_at at time zone
                         recipients.school_timezone,
                       'HH24:MI'
                     ) ||
-                    ' and is expected back on campus soon.'
+                    ' and is expected back on campus soon. Reason: ' ||
+                    coalesce(
+                      nullif(
+                        trim(
+                          recipients.reason
+                        ),
+                        ''
+                      ),
+                      'Not stated'
+                    ) ||
+                    '.'
                 when ${input.eventType} =
                   'STUDENT_RETURNED_TO_CAMPUS'
                   then
                     recipients.student_name ||
-                    ' is now back on the school campus at ' ||
+                    ' is now back on the school campus premises at ' ||
                     to_char(
                       recipients.occurred_at at time zone
                         recipients.school_timezone,
@@ -260,7 +273,9 @@ export async function queueGuardianPresencePushBestEffort(
                 'presenceEventId',
                   ${input.presenceEventId},
                 'occurredAt',
-                  recipients.occurred_at
+                  recipients.occurred_at,
+                'reason',
+                  recipients.reason
               ),
               'PENDING',
               0,
@@ -387,6 +402,7 @@ export async function reconcileRecentGuardianPresencePushes(
               event.id
                 as presence_event_id,
               event.occurred_at,
+              event.reason,
               case
                 when event.event_type =
                   'CHECKED_IN'::attendance_presence_event_type
@@ -440,6 +456,7 @@ export async function reconcileRecentGuardianPresencePushes(
               context.attendance_record_id,
               context.presence_event_id,
               context.occurred_at,
+              context.reason,
               context.guardian_event_type,
               guardian.id
                 as guardian_id,
@@ -524,18 +541,28 @@ export async function reconcileRecentGuardianPresencePushes(
                   'STUDENT_TEMPORARILY_OUT'
                   then
                     recipients.student_name ||
-                    ' stepped out of school at ' ||
+                    ' stepped out briefly from school at ' ||
                     to_char(
                       recipients.occurred_at at time zone
                         recipients.school_timezone,
                       'HH24:MI'
                     ) ||
-                    ' and is expected back on campus soon.'
+                    ' and is expected back on campus soon. Reason: ' ||
+                    coalesce(
+                      nullif(
+                        trim(
+                          recipients.reason
+                        ),
+                        ''
+                      ),
+                      'Not stated'
+                    ) ||
+                    '.'
                 when recipients.guardian_event_type =
                   'STUDENT_RETURNED_TO_CAMPUS'
                   then
                     recipients.student_name ||
-                    ' is now back on the school campus at ' ||
+                    ' is now back on the school campus premises at ' ||
                     to_char(
                       recipients.occurred_at at time zone
                         recipients.school_timezone,
@@ -589,7 +616,9 @@ export async function reconcileRecentGuardianPresencePushes(
                 'presenceEventId',
                   recipients.presence_event_id,
                 'occurredAt',
-                  recipients.occurred_at
+                  recipients.occurred_at,
+                'reason',
+                  recipients.reason
               ),
               'PENDING',
               0,

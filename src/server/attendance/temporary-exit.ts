@@ -780,6 +780,7 @@ export async function finalizeTemporaryMovement(
             'studentId', ${attempt.student_id},
             'temporaryExitCycleId', ${row.cycle_id},
             'movement', ${movement},
+            'reason', ${row.reason},
             'occurredAt', ${row.occurred_at}
           ),
           'PENDING'::school_notification_delivery_status,
