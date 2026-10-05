@@ -66,7 +66,7 @@ for (
       "existing Damaged action label",
     ],
     [
-      ">\\n              Revoke\\n",
+      ">\n              Revoke\n",
       "existing Revoke action label",
     ],
     [
@@ -74,16 +74,16 @@ for (
       "controlled reissue label",
     ],
     [
-      "Create missing first card",
-      "first-card recovery label",
+      "{reissueRequired ? (",
+      "reissue-only top-action visibility",
     ],
     [
-      "!activeCard &&\\n        !replacementCase",
-      "active/replacement top-action suppression",
+      "First-card creation is automatic.",
+      "automatic first-card UI guard",
     ],
     [
-      "reissueRequired\\n          ? await obtainPasskeyStepUpGrant",
-      "reissue-only Passkey branch",
+      'action:\n            "CARD_REISSUE"',
+      "reissue-only Passkey action",
     ],
     [
       "Mark the active card lost, damaged, or revoke it before creating a replacement.",
@@ -97,10 +97,7 @@ for (
 ) {
   requireMarker(
     ui,
-    marker.replaceAll(
-      "\\n",
-      "\n",
-    ),
+    marker,
     label,
   );
 }
@@ -111,40 +108,75 @@ for (
     label,
   ] of [
     [
+      "Create missing first card",
+      "manual first-card action",
+    ],
+    [
+      "Missing first digital card created from the active enrollment",
+      "manual first-card success copy",
+    ],
+    [
+      "!activeCard &&\n        !replacementCase",
+      "old mixed first-card/reissue top-action visibility",
+    ],
+    [
+      "reissueRequired\n          ? await obtainPasskeyStepUpGrant",
+      "old nullable Passkey branch",
+    ],
+    [
       "Mark expired",
       "normal-school expiry action",
     ],
     [
-      'void deactivate(\\n                  activeCard.id,\\n                  "EXPIRED",',
+      'void deactivate(\n                  activeCard.id,\n                  "EXPIRED",',
       "expired UI mutation path",
     ],
     [
-      "activeCard ||\\n        reissueRequired\\n          ? await obtainPasskeyStepUpGrant",
+      "activeCard ||\n        reissueRequired\n          ? await obtainPasskeyStepUpGrant",
       "active-card generic reissue branch",
     ],
   ] as const
 ) {
   forbidMarker(
     ui,
-    marker.replaceAll(
-      "\\n",
-      "\n",
-    ),
+    marker,
     label,
   );
 }
 
-requireMarker(
-  production,
-  '"ACTIVE_CARD_LIFECYCLE_ACTION_REQUIRED"',
-  "server active-card reissue guard",
-);
-
-requireMarker(
-  production,
-  "if (activeCard) {",
-  "server active-card state gate",
-);
+for (
+  const [
+    marker,
+    label,
+  ] of [
+    [
+      '"ACTIVE_CARD_LIFECYCLE_ACTION_REQUIRED"',
+      "server active-card reissue guard",
+    ],
+    [
+      "if (activeCard) {",
+      "server active-card state gate",
+    ],
+    [
+      "if (!previousCard) {",
+      "server zero-card-history gate",
+    ],
+    [
+      '"FIRST_CARD_AUTOMATIC_ONLY"',
+      "server automatic-only first-card rule",
+    ],
+    [
+      'const action:\n    CardProductionAction =\n      "CARD_REISSUE";',
+      "server manual production is reissue-only",
+    ],
+  ] as const
+) {
+  requireMarker(
+    production,
+    marker,
+    label,
+  );
+}
 
 console.log(
   "CASA M49A card lifecycle consistency self-test passed.",

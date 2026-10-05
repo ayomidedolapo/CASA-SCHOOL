@@ -651,11 +651,18 @@ export async function produceStudentCard(
     previousCards[0] ??
     null;
 
+  if (!previousCard) {
+    return {
+      ok: false as const,
+      status: 409 as const,
+      code:
+        "FIRST_CARD_AUTOMATIC_ONLY",
+    };
+  }
+
   const action:
     CardProductionAction =
-      previousCard
-        ? "CARD_REISSUE"
-        : "CARD_ISSUE";
+      "CARD_REISSUE";
 
   const reason =
     input.reason

@@ -216,10 +216,19 @@ assert.match(
   /previousCards/,
   "Passkey production must detect prior card history.",
 );
+assert.ok(
+  production.includes(
+    "if (!previousCard) {",
+  ) &&
+    production.includes(
+      '"FIRST_CARD_AUTOMATIC_ONLY"',
+    ),
+  "Zero-card-history students must stay on the automatic first-card lifecycle.",
+);
 assert.match(
   production,
-  /previousCard[\s\S]*\?[\s\S]*"CARD_REISSUE"[\s\S]*:[\s\S]*"CARD_ISSUE"/,
-  "Historical cards must use reissue Passkey authority.",
+  /const action:\s*CardProductionAction =\s*"CARD_REISSUE";/,
+  "Manual card production must be reissue-only after prior card history is established.",
 );
 
 assert.ok(
@@ -236,21 +245,33 @@ assert.ok(
 );
 
 assert.ok(
-  productionRoute.includes(
+  !productionRoute.includes(
     "ensureFirstStudentCardForActiveEnrollment",
   ),
-  "Missing-first-card recovery path is absent.",
+  "School production route must not expose manual first-card recovery.",
 );
-assert.match(
+assert.doesNotMatch(
   productionRoute,
   /if \(!stepUpToken\)/,
-  "Missing first card must not require a per-student Passkey.",
+  "School production route must not own a no-Passkey first-card fallback.",
+);
+assert.ok(
+  productionRoute.includes(
+    "produceStudentCard",
+  ) &&
+    productionRoute.includes(
+      "stepUpToken",
+    ),
+  "School production route must delegate lifecycle authority to the central production service.",
 );
 
 for (
   const marker of [
-    "operationalBranches.length !==",
+    "operationalBranches.length ===",
     "registrationCampus",
+    "registrationCampuses",
+    "requestedBranchId",
+    "operationalBranches.find",
     "operationalBranch.id",
   ]
 ) {
@@ -261,21 +282,28 @@ for (
     `Campus-scope route missing ${marker}`,
   );
 }
-assert.doesNotMatch(
+assert.match(
   studentsRoute,
-  /parsed\.data\.branchId/,
-  "Student registration must not trust a client-selected campus.",
-);
-assert.doesNotMatch(
-  registryClient,
-  /name=["']branchId["']/,
-  "School Registry must not expose a campus selector for student registration.",
+  /requestedBranchId[\s\S]*operationalBranches\.find[\s\S]*branch\.id ===[\s\S]*requestedBranchId/,
+  "Student registration must validate a selected campus against the operator's visible campuses.",
 );
 assert.ok(
   registryClient.includes(
-    "signed-in administrator&apos;s operating scope",
-  ),
-  "Registration campus explanation is missing.",
+    'name="branchId"',
+  ) &&
+    registryClient.includes(
+      "Select campus",
+    ),
+  "School Registry must expose a campus selector when multiple visible campuses are available.",
+);
+assert.ok(
+  registryClient.includes(
+    "Only campuses available to your account are shown.",
+  ) &&
+    registryClient.includes(
+      "CASA assigns the only campus available to this account automatically.",
+    ),
+  "Registration campus explanation must describe scoped multi-campus selection and single-campus auto-assignment.",
 );
 assert.ok(
   registryClient.includes(
@@ -286,10 +314,10 @@ assert.ok(
 
 for (
   const marker of [
-    "Create missing first card",
     "Reissue card with Passkey",
     "CARD_REISSUE",
     "reissueRequired",
+    "First-card creation is automatic.",
     "casa:student-card-changed",
   ]
 ) {
@@ -302,8 +330,8 @@ for (
 }
 assert.doesNotMatch(
   studentCards,
-  /Issue with Passkey/,
-  "First-card UI must not require individual Passkey issuance.",
+  /Create missing first card|Issue with Passkey/,
+  "First-card UI must not expose manual issuance.",
 );
 
 for (

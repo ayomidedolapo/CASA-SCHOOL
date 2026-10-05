@@ -333,8 +333,7 @@ export async function reconcileInitialCardRollout(
     });
 
   if (
-    !before ||
-    before.completedAt
+    !before
   ) {
     return {
       skipped: true,
@@ -355,10 +354,17 @@ export async function reconcileInitialCardRollout(
     };
   }
 
+  const rolloutCompleted =
+    Boolean(
+      before.completedAt,
+    );
+
   const db = getDb();
 
   const released =
-    rowsOf<{
+    rolloutCompleted
+      ? 0
+      : rowsOf<{
       id: string;
     }>(
       await db.execute(sql`
@@ -563,6 +569,64 @@ export async function reconcileInitialCardRollout(
   };
 }
 
+export async function reconcileMissingFirstCardsForSchool(
+  input: {
+    schoolId: string;
+    origin: string;
+    limit?: number;
+  },
+) {
+  const school =
+    rowsOf<{
+      timezone:
+        string;
+    }>(
+      await getDb()
+        .execute(sql`
+          select
+            timezone
+          from schools
+          where
+            id =
+              ${input.schoolId}::uuid
+            and status =
+              'ACTIVE'::school_status
+          limit 1
+        `),
+    )[0];
+
+  if (!school) {
+    return {
+      skipped: true,
+      releasedScheduled:
+        0,
+      attempted:
+        0,
+      created:
+        0,
+      alreadyPresent:
+        0,
+      deferred:
+        0,
+      failed:
+        0,
+      state:
+        null,
+    };
+  }
+
+  return reconcileInitialCardRollout({
+    schoolId:
+      input.schoolId,
+    timezone:
+      school.timezone,
+    origin:
+      input.origin,
+    limit:
+      input.limit ??
+      25,
+  });
+}
 export async function reconcilePendingInitialCardRollouts(
   input: {
     origin: string;
@@ -594,32 +658,72 @@ export async function reconcilePendingInitialCardRollouts(
         where
           school.status =
             'ACTIVE'::school_status
-          and school.initial_card_rollout_completed_at
-            is null
           and (
-            exists (
-              select 1
-              from student_card_templates template
-              where
-                template.school_id =
-                  school.id
-                and template.status =
-                  'ACTIVE'::student_card_template_status
-            )
-            or exists (
-              select 1
-              from student_card_production_jobs job
-              where
-                job.school_id =
-                  school.id
-                and job.production_authority in (
-                  'SCHOOL_ENROLLMENT_AUTO_ISSUE',
-                  'CASA_INTERNAL_INITIAL_ROLLOUT'
+            (
+              school.initial_card_rollout_completed_at
+                is null
+              and (
+                exists (
+                  select 1
+                  from student_card_templates template
+                  where
+                    template.school_id =
+                      school.id
+                    and template.status =
+                      'ACTIVE'::student_card_template_status
                 )
-                and job.status =
-                  'READY'::student_card_production_status
-                and job.queued_at >
-                  now()
+                or exists (
+                  select 1
+                  from student_card_production_jobs job
+                  where
+                    job.school_id =
+                      school.id
+                    and job.production_authority in (
+                      'SCHOOL_ENROLLMENT_AUTO_ISSUE',
+                      'CASA_INTERNAL_INITIAL_ROLLOUT'
+                    )
+                    and job.status =
+                      'READY'::student_card_production_status
+                    and job.queued_at >
+                      now()
+                )
+              )
+            )
+            or (
+              exists (
+                select 1
+                from student_card_templates template
+                where
+                  template.school_id =
+                    school.id
+                  and template.status =
+                    'ACTIVE'::student_card_template_status
+              )
+              and exists (
+                select 1
+                from student_enrollments enrollment
+                join students student
+                  on student.school_id =
+                     enrollment.school_id
+                 and student.id =
+                     enrollment.student_id
+                 and student.status =
+                    'ACTIVE'::student_status
+                where
+                  enrollment.school_id =
+                    school.id
+                  and enrollment.status =
+                    'ACTIVE'::student_enrollment_status
+                  and not exists (
+                    select 1
+                    from student_identity_cards card
+                    where
+                      card.school_id =
+                        enrollment.school_id
+                      and card.student_id =
+                        enrollment.student_id
+                  )
+              )
             )
           )
         order by

@@ -528,11 +528,17 @@ export function StudentCards({
       return;
     }
 
+    if (!reissueRequired) {
+      setError(
+        "First-card creation is automatic. Complete the active enrollment and card-template prerequisites; CASA will recover the first card without a manual card-production action.",
+      );
+      return;
+    }
+
     const actionReason =
       reason.trim();
 
     if (
-      reissueRequired &&
       actionReason.length <
         3
     ) {
@@ -572,13 +578,11 @@ export function StudentCards({
       }
 
       const grant =
-        reissueRequired
-          ? await obtainPasskeyStepUpGrant({
-              schoolSlug,
-              action:
-                "CARD_REISSUE",
-            })
-          : null;
+        await obtainPasskeyStepUpGrant({
+          schoolSlug,
+          action:
+            "CARD_REISSUE",
+        });
 
       const response =
         await fetch(
@@ -589,12 +593,8 @@ export function StudentCards({
             headers: {
               "Content-Type":
                 "application/json",
-              ...(grant
-                ? {
-                    "x-casa-passkey-step-up":
-                      grant,
-                  }
-                : {}),
+              "x-casa-passkey-step-up":
+                grant,
             },
             credentials:
               "same-origin",
@@ -603,9 +603,7 @@ export function StudentCards({
             body:
               JSON.stringify({
                 reason:
-                  reissueRequired
-                    ? actionReason
-                    : null,
+                  actionReason,
               }),
           },
         );
@@ -624,9 +622,7 @@ export function StudentCards({
       }
 
       setNotice(
-        reissueRequired
-          ? "Exceptional replacement card rendered and queued for CASA production."
-          : "Missing first digital card created from the active enrollment. No per-student Passkey was required.",
+        "Exceptional replacement card rendered and queued for CASA production.",
       );
       setReason("");
 
@@ -1048,11 +1044,10 @@ async function markReplacementPaid() {
           </p>
         </div>
 
-        {!activeCard &&
-        !replacementCase ? (
+        {reissueRequired ? (
           <button
             type="button"
-            disabled={busy || Boolean(pendingCard)}
+            disabled={busy}
             onClick={() =>
               void produce()
             }
@@ -1060,11 +1055,7 @@ async function markReplacementPaid() {
           >
             {busy
               ? "Working..."
-              : pendingCard
-                ? "Awaiting handover"
-                : reissueRequired
-                  ? "Reissue card with Passkey"
-                  : "Create missing first card"}
+              : "Reissue card with Passkey"}
           </button>
         ) : null}
       </div>

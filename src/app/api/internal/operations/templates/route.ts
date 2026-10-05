@@ -26,6 +26,9 @@ import {
   studentCardTemplates,
 } from "@/db/schema";
 import {
+  reconcileMissingFirstCardsForSchool,
+} from "@/server/card-production/initial-rollout";
+import {
   refreshUnprintedCardsForTemplate,
 } from "@/server/card-production/m38-lifecycle";
 import {
@@ -489,6 +492,44 @@ export async function POST(
           })
         : null;
 
+    let firstCardRecovery:
+      Awaited<
+        ReturnType<
+          typeof reconcileMissingFirstCardsForSchool
+        >
+      > |
+      null =
+        null;
+
+    if (data.activate) {
+      try {
+        firstCardRecovery =
+          await reconcileMissingFirstCardsForSchool({
+            schoolId:
+              data.schoolId,
+            origin:
+              request.nextUrl.origin,
+            limit:
+              25,
+          });
+      } catch (error) {
+        console.error(
+          "Automatic first-card recovery after template activation will retry in background",
+          {
+            schoolId:
+              data.schoolId,
+            error:
+              error instanceof
+                Error
+                ? error.message
+                : String(
+                    error,
+                  ),
+          },
+        );
+      }
+    }
+
     return NextResponse.json(
       {
         template: {
@@ -504,6 +545,7 @@ export async function POST(
               : "DRAFT",
         },
         propagation,
+        firstCardRecovery,
       },
       {
         status: 201,
