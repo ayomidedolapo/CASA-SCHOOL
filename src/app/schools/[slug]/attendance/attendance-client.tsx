@@ -107,6 +107,15 @@ interface TodayData {
           | "PRESENCE_ONLY";
       }
     | null;
+  policyDay:
+    | {
+        checkInOpensAt: string;
+        onTimeUntil: string;
+        checkInClosesAt: string;
+        normalDismissalAt: string;
+        checkOutClosesAt: string;
+      }
+    | null;
   summary: {
     expected: number;
     onCampus: number;
@@ -3614,16 +3623,26 @@ export default function AttendanceClient(
                                           : "Lost-card face - 3-day grace"}
                                     </button>
                                   )}
-                                  {data.session.mode === "INSTRUCTIONAL" && (
-                                    <button
-                                      type="button"
-                                      className={styles.secondaryButton}
-                                      disabled={busy}
-                                      onClick={() => setPendingInput({ kind: "SUPERVISED_LATE", student })}
-                                    >
-                                      Record late
-                                    </button>
-                                  )}
+                                  {data.session.mode === "INSTRUCTIONAL" &&
+                                    data.policyDay &&
+                                    data.clock.clock >
+                                      data.policyDay.checkInClosesAt.slice(0, 5) &&
+                                    data.clock.clock <=
+                                      data.policyDay.checkOutClosesAt.slice(0, 5) && (
+                                      <button
+                                        type="button"
+                                        className={styles.secondaryButton}
+                                        disabled={busy}
+                                        onClick={() =>
+                                          setPendingInput({
+                                            kind: "SUPERVISED_LATE",
+                                            student,
+                                          })
+                                        }
+                                      >
+                                        Record late
+                                      </button>
+                                    )}
                                 </>
                               )}
                           </div>
