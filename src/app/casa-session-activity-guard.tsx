@@ -31,7 +31,9 @@ function protectedPath(
     pathname ===
       "/login" ||
     pathname ===
-      "/internal/login"
+      "/internal/login" ||
+    pathname ===
+      "/internal/setup"
   ) {
     return false;
   }
