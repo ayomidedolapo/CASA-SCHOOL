@@ -198,6 +198,7 @@ export async function GET(request: NextRequest) {
           select
             school.id as school_id,
             school.name as school_name,
+            (policy.school_id is not null) as is_saved,
             coalesce(policy.is_enabled,true) as is_enabled,
             coalesce(policy.before_due_days,3)::int as before_due_days,
             coalesce(policy.overdue_every_days,3)::int as overdue_every_days,
@@ -449,45 +450,62 @@ export async function POST(request: NextRequest) {
     }
 
     if (input.action === "SET_REMINDER_POLICY") {
-      await db.execute(sql`
-        insert into casa_finance_reminder_policies (
-          school_id,is_enabled,before_due_days,overdue_every_days,
-          max_overdue_reminders,updated_by_internal_membership_id
-        )
-        values (
-          ${input.schoolId}::uuid,
-          ${input.isEnabled},
-          ${input.beforeDueDays},
-          ${input.overdueEveryDays},
-          ${input.maxOverdueReminders},
-          ${access.membership.id}::uuid
-        )
-        on conflict (school_id)
-        do update set
-          is_enabled=excluded.is_enabled,
-          before_due_days=excluded.before_due_days,
-          overdue_every_days=excluded.overdue_every_days,
-          max_overdue_reminders=excluded.max_overdue_reminders,
-          updated_by_internal_membership_id=excluded.updated_by_internal_membership_id,
-          updated_at=now()
-      `);
+      try {
+        await db.execute(sql`
+          insert into casa_finance_reminder_policies (
+            school_id,is_enabled,before_due_days,overdue_every_days,
+            max_overdue_reminders,updated_by_internal_membership_id
+          )
+          values (
+            ${input.schoolId}::uuid,
+            ${input.isEnabled},
+            ${input.beforeDueDays},
+            ${input.overdueEveryDays},
+            ${input.maxOverdueReminders},
+            ${access.membership.id}::uuid
+          )
+          on conflict (school_id)
+          do update set
+            is_enabled=excluded.is_enabled,
+            before_due_days=excluded.before_due_days,
+            overdue_every_days=excluded.overdue_every_days,
+            max_overdue_reminders=excluded.max_overdue_reminders,
+            updated_by_internal_membership_id=excluded.updated_by_internal_membership_id,
+            updated_at=now()
+        `);
+      } catch (saveError) {
+        console.error("Finance reminder policy save failed", saveError);
+        return NextResponse.json(
+          { message: "Payment reminder policy could not be saved." },
+          { status: 500, headers: casaInternalNoStoreHeaders },
+        );
+      }
 
-      await writeCasaInternalAudit({
-        access,
-        schoolId: input.schoolId,
-        action: "FINANCE_REMINDER_POLICY_UPDATED",
-        subjectType: "FINANCE_REMINDER_POLICY",
-        subjectId: input.schoolId,
-        metadata: {
-          isEnabled: input.isEnabled,
-          beforeDueDays: input.beforeDueDays,
-          overdueEveryDays: input.overdueEveryDays,
-          maxOverdueReminders: input.maxOverdueReminders,
-        },
-      });
+      let auditLogged = true;
+      try {
+        await writeCasaInternalAudit({
+          access,
+          schoolId: input.schoolId,
+          action: "FINANCE_REMINDER_POLICY_UPDATED",
+          subjectType: "FINANCE_REMINDER_POLICY",
+          subjectId: input.schoolId,
+          metadata: {
+            isEnabled: input.isEnabled,
+            beforeDueDays: input.beforeDueDays,
+            overdueEveryDays: input.overdueEveryDays,
+            maxOverdueReminders: input.maxOverdueReminders,
+          },
+        });
+      } catch (auditError) {
+        auditLogged = false;
+        console.error(
+          "Finance reminder policy saved but the CASA internal audit write failed.",
+          auditError,
+        );
+      }
 
       return NextResponse.json(
-        { saved: true },
+        { saved: true, auditLogged },
         { headers: casaInternalNoStoreHeaders },
       );
     }
@@ -569,12 +587,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const result = await runFinancePaymentReminderWorker({ limit: 10 });
+    try {
+      const result = await runFinancePaymentReminderWorker({ limit: 10 });
 
-    return NextResponse.json(
-      { ran: true, ...result },
-      { headers: casaInternalNoStoreHeaders },
-    );
+      return NextResponse.json(
+        { ran: true, ...result },
+        { headers: casaInternalNoStoreHeaders },
+      );
+    } catch (scanError) {
+      console.error("Finance payment reminder scan failed", scanError);
+      return NextResponse.json(
+        {
+          message:
+            "Payment reminder scan could not be completed. Saved reminder policies were not changed.",
+        },
+        { status: 500, headers: casaInternalNoStoreHeaders },
+      );
+    }
   } catch (error) {
     const response = casaInternalAuthErrorResponse(error);
     if (response) return response;

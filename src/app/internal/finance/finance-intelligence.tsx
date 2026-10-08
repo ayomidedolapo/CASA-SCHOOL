@@ -34,6 +34,7 @@ type UnbudgetedCategory = {
 type ReminderPolicy = {
   school_id: string;
   school_name: string;
+  is_saved: boolean;
   is_enabled: boolean;
   before_due_days: number;
   overdue_every_days: number;
@@ -314,7 +315,7 @@ export default function FinanceIntelligence() {
   async function savePolicy(event: FormEvent) {
     event.preventDefault();
     try {
-      await post({
+      const result = await post({
         action: "SET_REMINDER_POLICY",
         schoolId: policySchoolId,
         isEnabled: policyEnabled,
@@ -322,7 +323,11 @@ export default function FinanceIntelligence() {
         overdueEveryDays: Number(overdueEveryDays),
         maxOverdueReminders: Number(maxOverdue),
       });
-      setNotice("Automatic payment reminder policy saved.");
+      setNotice(
+        result.auditLogged === false
+          ? "Automatic payment reminder policy saved and active. Internal audit logging reported a warning."
+          : "Automatic payment reminder policy saved and active.",
+      );
     } catch (caught) {
       setError(
         caught instanceof Error ? caught.message : "Reminder policy failed.",
@@ -334,9 +339,13 @@ export default function FinanceIntelligence() {
     try {
       const result = await post({ action: "RUN_REMINDER_SCAN" });
       setNotice(
-        `Reminder scan complete. Sent ${String(result.sent ?? 0)}, retrying ${String(
-          result.retried ?? 0,
-        )}, failed ${String(result.failed ?? 0)}.`,
+        `Reminder scan complete. New due reminders ${String(
+          result.reconciled ?? 0,
+        )}, processed ${String(result.claimed ?? 0)}, sent ${String(
+          result.sent ?? 0,
+        )}, retrying ${String(result.retried ?? 0)}, failed ${String(
+          result.failed ?? 0,
+        )}.`,
       );
     } catch (caught) {
       setError(
@@ -409,6 +418,7 @@ export default function FinanceIntelligence() {
       money(budget.total_actual_kobo),
     );
   });
+  const filteredPolicies=(snapshot?.reminderPolicies??[]).filter(policy=>intelligenceHas(policy.school_name,policy.is_saved?"saved":"default",policy.is_enabled?"enabled":"paused",policy.before_due_days,policy.overdue_every_days,policy.max_overdue_reminders));
   const filteredReminders=(snapshot?.reminders??[]).filter(reminder=>intelligenceHas(reminder.school_name,reminder.invoice_number,reminder.reminder_kind,reminder.scheduled_for,reminder.recipient_email,reminder.status,reminder.last_error,reminder.attempt_count));
 
   const cells = monthCells(month);
@@ -864,47 +874,111 @@ export default function FinanceIntelligence() {
                 Run scan now
               </button>
             </div>
+
+            <p className="mt-4 text-[10px] leading-4 text-black/45">
+              Saving a policy stores the rules for the selected school. It does
+              not create a delivery-history row by itself. A delivery appears
+              only when an eligible unpaid invoice reaches a reminder date.
+            </p>
           </form>
 
-          <section className="border border-black">
-            <div className="border-b border-black p-5">
-              <p className="casa-kicker text-black/40">Delivery history</p>
-              <h3 className="mt-2 text-2xl font-semibold">
-                Payment reminders
-              </h3>
-            </div>
-            <div className="divide-y divide-black/10">
-              {filteredReminders.map((reminder) => (
-                <div
-                  className="grid gap-3 p-4 sm:grid-cols-[1fr_auto]"
-                  key={reminder.id}
-                >
-                  <div>
-                    <p className="font-semibold">
-                      {reminder.school_name} - {reminder.invoice_number}
+          <div className="grid content-start gap-5">
+            <section className="border border-black">
+              <div className="border-b border-black p-5">
+                <p className="casa-kicker text-black/40">Policy status</p>
+                <h3 className="mt-2 text-2xl font-semibold">
+                  Saved reminder policies
+                </h3>
+                <p className="mt-2 text-xs leading-5 text-black/45">
+                  This list shows the rules currently in force for each school.
+                  A school marked Default is using CASA&apos;s fallback reminder
+                  settings until you save a custom policy.
+                </p>
+              </div>
+              <div className="divide-y divide-black/10">
+                {filteredPolicies.map((policy) => (
+                  <div className="p-4" key={policy.school_id}>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="font-semibold">{policy.school_name}</p>
+                      <div className="flex flex-wrap gap-2">
+                        <span className="border border-black/15 px-2 py-1 font-mono text-[9px] uppercase">
+                          {policy.is_saved ? "Saved policy" : "Default policy"}
+                        </span>
+                        <span className="border border-black/15 px-2 py-1 font-mono text-[9px] uppercase">
+                          {policy.is_enabled ? "Enabled" : "Paused"}
+                        </span>
+                      </div>
+                    </div>
+                    <p className="mt-2 text-xs leading-5 text-black/55">
+                      Reminder {policy.before_due_days} day
+                      {policy.before_due_days === 1 ? "" : "s"} before due;
+                      then every {policy.overdue_every_days} day
+                      {policy.overdue_every_days === 1 ? "" : "s"} overdue;
+                      maximum {policy.max_overdue_reminders} overdue reminder
+                      {policy.max_overdue_reminders === 1 ? "" : "s"}.
                     </p>
-                    <p className="mt-1 font-mono text-[9px] uppercase text-black/40">
-                      {reminder.reminder_kind.replaceAll("_", " ")} -{" "}
-                      {reminder.scheduled_for} - {reminder.status}
-                    </p>
-                    {reminder.last_error ? (
-                      <p className="mt-2 text-xs text-[#7e1d18]">
-                        {reminder.last_error}
+                    {!policy.is_saved ? (
+                      <p className="mt-1 text-[10px] leading-4 text-black/40">
+                        Save a policy for this school to replace the default
+                        settings.
                       </p>
                     ) : null}
                   </div>
-                  <p className="font-mono text-[10px] uppercase text-black/45">
-                    attempt {reminder.attempt_count}
+                ))}
+                {filteredPolicies.length === 0 ? (
+                  <p className="p-5 text-sm text-black/45">
+                    No matching reminder policies.
                   </p>
-                </div>
-              ))}
-              {filteredReminders.length === 0 ? (
-                <p className="p-5 text-sm text-black/45">
-                  {intelligenceQuery ? "No matching reminder deliveries." : "No reminder deliveries yet."}
+                ) : null}
+              </div>
+            </section>
+
+            <section className="border border-black">
+              <div className="border-b border-black p-5">
+                <p className="casa-kicker text-black/40">Delivery history</p>
+                <h3 className="mt-2 text-2xl font-semibold">
+                  Reminder delivery history
+                </h3>
+                <p className="mt-2 text-xs leading-5 text-black/45">
+                  These are actual reminder records created when invoices
+                  became eligible under the saved or default policy.
                 </p>
-              ) : null}
-            </div>
-          </section>
+              </div>
+              <div className="divide-y divide-black/10">
+                {filteredReminders.map((reminder) => (
+                  <div
+                    className="grid gap-3 p-4 sm:grid-cols-[1fr_auto]"
+                    key={reminder.id}
+                  >
+                    <div>
+                      <p className="font-semibold">
+                        {reminder.school_name} - {reminder.invoice_number}
+                      </p>
+                      <p className="mt-1 font-mono text-[9px] uppercase text-black/40">
+                        {reminder.reminder_kind.replaceAll("_", " ")} -{" "}
+                        {reminder.scheduled_for} - {reminder.status}
+                      </p>
+                      {reminder.last_error ? (
+                        <p className="mt-2 text-xs text-[#7e1d18]">
+                          {reminder.last_error}
+                        </p>
+                      ) : null}
+                    </div>
+                    <p className="font-mono text-[10px] uppercase text-black/45">
+                      attempt {reminder.attempt_count}
+                    </p>
+                  </div>
+                ))}
+                {filteredReminders.length === 0 ? (
+                  <p className="p-5 text-sm leading-6 text-black/45">
+                    {intelligenceQuery
+                      ? "No matching reminder deliveries."
+                      : "No reminder deliveries yet. This does not mean the policy is missing. A delivery appears only when an unpaid issued invoice has a due date, a billing email, and reaches an eligible reminder day."}
+                  </p>
+                ) : null}
+              </div>
+            </section>
+          </div>
         </div>
       ) : null}
 
