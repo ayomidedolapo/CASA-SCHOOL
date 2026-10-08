@@ -148,7 +148,7 @@ export async function GET() {
   try {
     await requireCasaSuperAdmin();
     const db = getDb();
-    const [schools,invoices,payments,expenses,recurring,ledger,summary,schoolReport] = await Promise.all([
+    const [schools,invoices,payments,expenses,recurring,ledger,summary,schoolReport,budgetCategoryOptions] = await Promise.all([
       db.execute(sql`
         select s.id,s.name,s.slug,
           (select count(*)::int from students st where st.school_id=s.id and st.status='ACTIVE'::student_status) as student_count,
@@ -244,6 +244,17 @@ export async function GET() {
         left join lateral (select coalesce(sum(p.amount_kobo),0)::bigint as collected_kobo from casa_finance_payments p where p.school_id=s.id) pay on true
         where s.status='ACTIVE'::school_status order by s.name
       `),
+      db.execute(sql`
+        select
+          line.category,
+          budget.school_id,
+          budget.starts_on::text as starts_on,
+          budget.ends_on::text as ends_on
+        from casa_finance_budget_lines line
+        join casa_finance_budgets budget on budget.id=line.budget_id
+        where budget.status='ACTIVE'
+        order by budget.starts_on desc,line.category
+      `),
     ]);
 
     const summaryRow = rowsOf<Record<string,string|number>>(summary)[0] ?? {};
@@ -253,6 +264,7 @@ export async function GET() {
     return NextResponse.json({
       schools: rowsOf(schools), invoices: rowsOf(invoices), payments: rowsOf(payments), expenses: rowsOf(expenses),
       recurringExpenses: rowsOf(recurring), ledger: rowsOf(ledger), schoolReport: rowsOf(schoolReport),
+      budgetCategoryOptions: rowsOf(budgetCategoryOptions),
       summary: {
         invoicedKobo: Number(summaryRow.invoiced_kobo ?? 0), collectedKobo, expensesKobo,
         outstandingKobo: Number(summaryRow.outstanding_kobo ?? 0),
