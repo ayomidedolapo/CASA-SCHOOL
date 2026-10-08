@@ -30,6 +30,7 @@ type BillingProfile = {
   schoolSlug: string;
   ownerName: string | null;
   ownerEmail: string | null;
+  hasSavedBillingProfile: boolean;
   billingContactName: string;
   billingEmail: string;
   billingPhone: string;
@@ -38,6 +39,12 @@ type BillingProfile = {
   defaultTaxRatePercent: number;
   invoiceDueDays: number;
   notes: string;
+  effectiveInvoiceContactName: string | null;
+  effectiveInvoiceEmail: string | null;
+  invoiceDestinationSource:
+    | "DEDICATED_BILLING_CONTACT"
+    | "SCHOOL_OWNER_FALLBACK"
+    | "NOT_CONFIGURED";
   usesOwnerEmailFallback: boolean;
 };
 
@@ -244,7 +251,23 @@ export default function NegotiatedPricingPanel({
         throw new Error(body.message ?? "Billing profile update failed.");
       }
 
-      setNotice("School billing profile saved.");
+      const refreshResponse = await fetch(
+        `/api/internal/finance/billing-profile?schoolId=${encodeURIComponent(schoolId)}`,
+        { cache: "no-store" },
+      );
+      const refreshBody = (await refreshResponse.json().catch(() => ({}))) as {
+        message?: string;
+        profile?: BillingProfile;
+      };
+
+      if (refreshResponse.ok && refreshBody.profile) {
+        setBilling(refreshBody.profile);
+        setNotice("School billing profile saved. Invoice destination refreshed.");
+      } else {
+        setNotice(
+          "School billing profile saved. Refresh the page to reload the invoice destination status.",
+        );
+      }
     } catch (caught) {
       setError(
         caught instanceof Error
@@ -405,12 +428,62 @@ export default function NegotiatedPricingPanel({
           ) : (
             <>
               <div className="mt-4 border border-black/15 bg-black/[0.02] p-4 text-xs leading-5 text-black/55">
-                School Owner: {billing.ownerName || "Not available"} {" "}
-                {billing.ownerEmail || "No owner email"}
+                <p className="font-mono text-[9px] uppercase tracking-[0.1em] text-black/40">
+                  School Owner
+                </p>
+                <p className="mt-1 font-semibold text-black">
+                  {billing.ownerName || "Not available"}
+                </p>
+                <p className="mt-1">
+                  {billing.ownerEmail || "No owner email"}
+                </p>
               </div>
 
+              <div className="mt-4 border border-black p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="font-mono text-[9px] uppercase tracking-[0.1em] text-black/40">
+                      Current invoice destination
+                    </p>
+                    <p className="mt-2 text-lg font-semibold">
+                      {billing.effectiveInvoiceContactName || "No billing contact"}
+                    </p>
+                    <p className="mt-1 text-sm">
+                      {billing.effectiveInvoiceEmail || "No billing email configured"}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <span className="border border-black/15 px-2 py-1 font-mono text-[9px] uppercase">
+                      {billing.invoiceDestinationSource === "DEDICATED_BILLING_CONTACT"
+                        ? "Dedicated billing contact"
+                        : billing.invoiceDestinationSource === "SCHOOL_OWNER_FALLBACK"
+                          ? "School Owner fallback"
+                          : "Not configured"}
+                    </span>
+                    <span className="border border-black/15 px-2 py-1 font-mono text-[9px] uppercase">
+                      {billing.hasSavedBillingProfile
+                        ? "Billing profile saved"
+                        : "Billing profile not yet saved"}
+                    </span>
+                  </div>
+                </div>
+                <p className="mt-3 text-[10px] leading-4 text-black/45">
+                  {billing.invoiceDestinationSource === "DEDICATED_BILLING_CONTACT"
+                    ? "New invoices will use the dedicated billing email saved below."
+                    : billing.invoiceDestinationSource === "SCHOOL_OWNER_FALLBACK"
+                      ? "No dedicated billing email is saved, so new invoices use the School Owner email."
+                      : "CASA has no email destination for new invoices. Save a dedicated billing email below."}
+                </p>
+              </div>
+
+              <p className="mt-3 text-[10px] leading-4 text-black/45">
+                Changes here apply to invoices created after the billing profile is saved.
+                Existing draft and issued invoices keep the destination already stored on
+                those invoices.
+              </p>
+
               <label className="casa-label mt-4">
-                <span>Billing contact name</span>
+                <span>Dedicated billing contact name</span>
                 <input
                   className="casa-field"
                   value={billing.billingContactName}
@@ -424,7 +497,7 @@ export default function NegotiatedPricingPanel({
               </label>
 
               <label className="casa-label mt-4">
-                <span>Billing email</span>
+                <span>Dedicated billing email</span>
                 <input
                   className="casa-field"
                   type="email"
@@ -435,7 +508,11 @@ export default function NegotiatedPricingPanel({
                       billingEmail: event.target.value,
                     })
                   }
+                  placeholder={billing.ownerEmail || "accounts@school.com"}
                 />
+                <span className="mt-1 text-[10px] normal-case tracking-normal text-black/40">
+                  Leave this blank to use the School Owner email as the invoice destination.
+                </span>
               </label>
 
               <label className="casa-label mt-4">

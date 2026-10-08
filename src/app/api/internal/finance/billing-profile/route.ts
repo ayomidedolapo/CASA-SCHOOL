@@ -64,6 +64,7 @@ export async function GET(request: NextRequest) {
       slug: string;
       owner_name: string | null;
       owner_email: string | null;
+      has_billing_profile: boolean;
       billing_contact_name: string | null;
       billing_email: string | null;
       billing_phone: string | null;
@@ -80,6 +81,7 @@ export async function GET(request: NextRequest) {
           s.slug,
           owner.full_name as owner_name,
           owner.email as owner_email,
+          (profile.school_id is not null) as has_billing_profile,
           profile.billing_contact_name,
           profile.billing_email,
           profile.billing_phone,
@@ -125,10 +127,9 @@ export async function GET(request: NextRequest) {
           schoolSlug: school.slug,
           ownerName: school.owner_name,
           ownerEmail: school.owner_email,
-          billingContactName:
-            school.billing_contact_name ?? school.owner_name ?? "",
-          billingEmail:
-            school.billing_email ?? school.owner_email ?? "",
+          hasSavedBillingProfile: Boolean(school.has_billing_profile),
+          billingContactName: school.billing_contact_name ?? "",
+          billingEmail: school.billing_email ?? "",
           billingPhone: school.billing_phone ?? "",
           taxIdentifier: school.tax_identifier ?? "",
           defaultTaxLabel: school.default_tax_label ?? "VAT",
@@ -136,6 +137,15 @@ export async function GET(request: NextRequest) {
             Number(school.default_tax_rate_bps ?? 0) / 100,
           invoiceDueDays: Number(school.invoice_due_days ?? 14),
           notes: school.notes ?? "",
+          effectiveInvoiceContactName:
+            school.billing_contact_name ?? school.owner_name,
+          effectiveInvoiceEmail:
+            school.billing_email ?? school.owner_email,
+          invoiceDestinationSource: school.billing_email
+            ? "DEDICATED_BILLING_CONTACT"
+            : school.owner_email
+              ? "SCHOOL_OWNER_FALLBACK"
+              : "NOT_CONFIGURED",
           usesOwnerEmailFallback: !school.billing_email && Boolean(school.owner_email),
         },
       },
