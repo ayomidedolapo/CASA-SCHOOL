@@ -302,7 +302,7 @@ export default async function Page() {
           Term and academic-session estimates from active students and replacement cards. Pricing is versioned; estimates are operational forecasts, not recorded cash receipts.
         </p>
       </header>
-      <FinanceWorkbench />
+      <FinanceWorkbench branches={branches} />
       <FinanceIntelligence />
       <FinanceClient
         schools={schools}

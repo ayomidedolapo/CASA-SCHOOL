@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 
 type School = { id: string; name: string; slug: string };
 type Budget = {
@@ -153,6 +153,29 @@ export default function FinanceIntelligence() {
   const [eventSpeech, setEventSpeech] = useState("");
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
 
+  const applyPolicySchool = useCallback(
+    (schoolId: string, sourceSnapshot: Snapshot | null) => {
+      setPolicySchoolId(schoolId);
+
+      const policy = sourceSnapshot?.reminderPolicies.find(
+        (item) => item.school_id === schoolId,
+      );
+
+      if (!policy) {
+        setPolicyEnabled(true);
+        setBeforeDueDays("3");
+        setOverdueEveryDays("3");
+        setMaxOverdue("5");
+        return;
+      }
+
+      setPolicyEnabled(policy.is_enabled);
+      setBeforeDueDays(String(policy.before_due_days));
+      setOverdueEveryDays(String(policy.overdue_every_days));
+      setMaxOverdue(String(policy.max_overdue_reminders));
+    },
+    [],
+  );
   const load = useCallback(async () => {
     const response = await fetch(
       `/api/internal/finance/intelligence?month=${encodeURIComponent(month)}`,
@@ -175,7 +198,7 @@ export default function FinanceIntelligence() {
     if (!policySchoolId && body.schools[0]) {
       applyPolicySchool(body.schools[0].id, body);
     }
-  }, [month, policySchoolId]);
+  }, [month, policySchoolId, applyPolicySchool]);
 
   useEffect(() => {
     let cancelled = false;
@@ -218,31 +241,9 @@ export default function FinanceIntelligence() {
     return () => {
       cancelled = true;
     };
-  }, [month]);
+  }, [month, applyPolicySchool]);
 
-  function applyPolicySchool(
-    schoolId: string,
-    sourceSnapshot: Snapshot | null = snapshot,
-  ) {
-    setPolicySchoolId(schoolId);
 
-    const policy = sourceSnapshot?.reminderPolicies.find(
-      (item) => item.school_id === schoolId,
-    );
-
-    if (!policy) {
-      setPolicyEnabled(true);
-      setBeforeDueDays("3");
-      setOverdueEveryDays("3");
-      setMaxOverdue("5");
-      return;
-    }
-
-    setPolicyEnabled(policy.is_enabled);
-    setBeforeDueDays(String(policy.before_due_days));
-    setOverdueEveryDays(String(policy.overdue_every_days));
-    setMaxOverdue(String(policy.max_overdue_reminders));
-  }
 
   async function post(body: Record<string, unknown>) {
     setBusy(true);
@@ -458,7 +459,7 @@ export default function FinanceIntelligence() {
             </label>
 
             <label className="casa-label mt-4">
-              <span>Scope</span>
+              <span>Applies to</span>
               <select
                 className="casa-field"
                 value={budgetSchoolId}
@@ -471,6 +472,7 @@ export default function FinanceIntelligence() {
                   </option>
                 ))}
               </select>
+              <span className="mt-1 text-[10px] normal-case tracking-normal text-black/40">CASA-wide is for the general CASA operating budget. Choose a school only when the budget belongs specifically to that school.</span>
             </label>
 
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
@@ -685,7 +687,7 @@ export default function FinanceIntelligence() {
               <select
                 className="casa-field"
                 value={policySchoolId}
-                onChange={(event) => applyPolicySchool(event.target.value)}
+                onChange={(event) => applyPolicySchool(event.target.value, snapshot)}
               >
                 {snapshot.schools.map((school) => (
                   <option key={school.id} value={school.id}>
@@ -939,7 +941,7 @@ export default function FinanceIntelligence() {
               </div>
 
               <label className="casa-label mt-4">
-                <span>School (optional)</span>
+                <span>Applies to</span>
                 <select
                   className="casa-field"
                   value={eventSchoolId}
@@ -952,6 +954,7 @@ export default function FinanceIntelligence() {
                     </option>
                   ))}
                 </select>
+                <span className="mt-1 text-[10px] normal-case tracking-normal text-black/40">CASA-wide is a general CASA finance event. Choose a school when this event is specifically about the selected school account.</span>
               </label>
 
               <label className="casa-label mt-4">
@@ -1016,22 +1019,31 @@ export default function FinanceIntelligence() {
                       <dd className="text-right">
                         {money(selectedEvent.amount_kobo)}
                       </dd>
-                      <dt className="text-black/40">Scope</dt>
+                      <dt className="text-black/40">Applies to</dt>
                       <dd className="text-right">
                         {selectedEvent.school_name ?? "CASA-wide"}
                       </dd>
                     </dl>
-                    {selectedEvent.source_kind === "MANUAL" &&
-                    selectedEvent.status === "PLANNED" ? (
+                    <div className="mt-4 flex flex-wrap gap-2">
                       <button
-                        className="casa-button mt-4 text-xs"
-                        disabled={busy}
-                        onClick={() => void completeSelectedEvent()}
+                        className="casa-button text-xs"
+                        onClick={() => setSelectedEvent(null)}
                         type="button"
                       >
-                        Mark completed
+                        Close
                       </button>
-                    ) : null}
+                      {selectedEvent.source_kind === "MANUAL" &&
+                      selectedEvent.status === "PLANNED" ? (
+                        <button
+                          className="casa-button-primary text-xs"
+                          disabled={busy}
+                          onClick={() => void completeSelectedEvent()}
+                          type="button"
+                        >
+                          Mark completed
+                        </button>
+                      ) : null}
+                    </div>
                   </div>
                 </div>
               </section>

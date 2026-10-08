@@ -294,9 +294,133 @@ export async function POST(request: NextRequest) {
       const dueOn = input.dueOn ?? new Date(new Date(`${issuedOn}T00:00:00Z`).getTime()+school.invoice_due_days*86400000).toISOString().slice(0,10);
       if (dueOn < issuedOn) return NextResponse.json({ message: "Invoice due date cannot be before the issue date." }, { status: 400, headers: casaInternalNoStoreHeaders });
 
+      const invoiceBranches = rowsOf<{
+        id:string; name:string; code:string; is_headquarters:boolean; student_count:number;
+      }>(await db.execute(sql`
+        select
+          branch.id,
+          branch.name,
+          branch.code,
+          branch.is_headquarters,
+          count(student.id)::int as student_count
+        from school_branches branch
+        left join students student
+          on student.school_id=branch.school_id
+         and student.home_branch_id=branch.id
+         and student.status='ACTIVE'::student_status
+        where branch.school_id=${input.schoolId}::uuid
+          and branch.status='ACTIVE'
+        group by branch.id,branch.name,branch.code,branch.is_headquarters
+        order by branch.is_headquarters desc,branch.name
+      `));
+
+      const activeStudentCount = Number(
+        rowsOf<{student_count:number}>(await db.execute(sql`
+          select count(*)::int as student_count
+          from students
+          where school_id=${input.schoolId}::uuid
+            and status='ACTIVE'::student_status
+        `))[0]?.student_count ?? 0,
+      );
+
       const resolvedLines: Array<{id:string;lineKind:"SERVICE_FEE"|"REPLACEMENT_CARD"|"OTHER";description:string;quantity:number;unitAmountKobo:number;amountKobo:number;pricingVersionId:string|null;sortOrder:number}> = [];
-      for (const [index,line] of input.lines.entries()) {
-        let unitAmountKobo:number; let pricingVersionId:string|null=null;
+      let sortOrder=0;
+
+      for (const line of input.lines) {
+        if (line.lineKind === "SERVICE_FEE" && invoiceBranches.length > 0) {
+          let assignedStudents=0;
+
+          for (const branch of invoiceBranches) {
+            const branchStudents=Number(branch.student_count);
+            assignedStudents+=branchStudents;
+            if (branchStudents <= 0) continue;
+
+            const price = rowsOf<{id:string;amount_kobo:string|number}>(await db.execute(sql`
+              select p.id,p.amount_kobo
+              from casa_pricing_versions p
+              where p.fee_type='STANDARD_STUDENT'
+                and p.effective_from<=${issuedOn}::date
+                and (p.effective_to is null or p.effective_to>${issuedOn}::date)
+                and (
+                  (p.scope_kind='BRANCH' and p.branch_id=${branch.id}::uuid)
+                  or (p.scope_kind='SCHOOL' and p.school_id=${input.schoolId}::uuid)
+                  or p.scope_kind='GLOBAL'
+                )
+              order by
+                case
+                  when p.scope_kind='BRANCH' then 0
+                  when p.scope_kind='SCHOOL' then 1
+                  else 2
+                end,
+                p.effective_from desc
+              limit 1
+            `))[0];
+
+            if (!price) {
+              return NextResponse.json(
+                { message: `Set a CASA service price for ${branch.name} before drafting the organization invoice.` },
+                { status:409,headers:casaInternalNoStoreHeaders },
+              );
+            }
+
+            const unitAmountKobo=Number(price.amount_kobo);
+            resolvedLines.push({
+              id:randomUUID(),
+              lineKind:"SERVICE_FEE",
+              description:`CASA service fee - ${branch.name} (${branch.code})`,
+              quantity:branchStudents,
+              unitAmountKobo,
+              amountKobo:Math.round(branchStudents*unitAmountKobo),
+              pricingVersionId:price.id,
+              sortOrder:sortOrder++,
+            });
+          }
+
+          const unassignedStudents=Math.max(activeStudentCount-assignedStudents,0);
+
+          if (unassignedStudents > 0) {
+            const price = rowsOf<{id:string;amount_kobo:string|number}>(await db.execute(sql`
+              select p.id,p.amount_kobo
+              from casa_pricing_versions p
+              where p.fee_type='STANDARD_STUDENT'
+                and p.effective_from<=${issuedOn}::date
+                and (p.effective_to is null or p.effective_to>${issuedOn}::date)
+                and (
+                  (p.scope_kind='SCHOOL' and p.school_id=${input.schoolId}::uuid)
+                  or p.scope_kind='GLOBAL'
+                )
+              order by
+                case when p.scope_kind='SCHOOL' then 0 else 1 end,
+                p.effective_from desc
+              limit 1
+            `))[0];
+
+            if (!price) {
+              return NextResponse.json(
+                { message:"Set a CASA service price for this school before drafting the organization invoice." },
+                { status:409,headers:casaInternalNoStoreHeaders },
+              );
+            }
+
+            const unitAmountKobo=Number(price.amount_kobo);
+            resolvedLines.push({
+              id:randomUUID(),
+              lineKind:"SERVICE_FEE",
+              description:"CASA service fee - Students not assigned to an active branch",
+              quantity:unassignedStudents,
+              unitAmountKobo,
+              amountKobo:Math.round(unassignedStudents*unitAmountKobo),
+              pricingVersionId:price.id,
+              sortOrder:sortOrder++,
+            });
+          }
+
+          continue;
+        }
+
+        let unitAmountKobo:number;
+        let pricingVersionId:string|null=null;
+
         if (line.lineKind === "SERVICE_FEE" || line.lineKind === "REPLACEMENT_CARD") {
           const feeType = line.lineKind === "SERVICE_FEE" ? "STANDARD_STUDENT" : "REPLACEMENT_CARD";
           const price = rowsOf<{id:string;amount_kobo:string|number}>(await db.execute(sql`
@@ -306,14 +430,43 @@ export async function POST(request: NextRequest) {
               and ((p.scope_kind='SCHOOL' and p.school_id=${input.schoolId}::uuid) or p.scope_kind='GLOBAL')
             order by case when p.scope_kind='SCHOOL' then 0 else 1 end,p.effective_from desc limit 1
           `))[0];
-          if (!price) return NextResponse.json({ message: line.lineKind === "SERVICE_FEE" ? "Set a CASA service price for this school before drafting the invoice." : "Set a replacement-card price before adding that invoice line." }, { status: 409, headers: casaInternalNoStoreHeaders });
-          unitAmountKobo = Number(price.amount_kobo); pricingVersionId = price.id;
+
+          if (!price) {
+            return NextResponse.json(
+              { message: line.lineKind === "SERVICE_FEE" ? "Set a CASA service price for this school before drafting the invoice." : "Set a replacement-card price before adding that invoice line." },
+              { status:409,headers:casaInternalNoStoreHeaders },
+            );
+          }
+
+          unitAmountKobo=Number(price.amount_kobo);
+          pricingVersionId=price.id;
         } else {
-          if (line.unitAmountNaira === undefined) return NextResponse.json({ message: "Other invoice lines require a unit amount." }, { status: 400, headers: casaInternalNoStoreHeaders });
-          unitAmountKobo = kobo(line.unitAmountNaira);
+          if (line.unitAmountNaira === undefined) {
+            return NextResponse.json(
+              { message:"Other invoice lines require a unit amount." },
+              { status:400,headers:casaInternalNoStoreHeaders },
+            );
+          }
+          unitAmountKobo=kobo(line.unitAmountNaira);
         }
-        resolvedLines.push({ id:randomUUID(), lineKind:line.lineKind, description:line.description, quantity:line.quantity,
-          unitAmountKobo, amountKobo:Math.round(line.quantity*unitAmountKobo), pricingVersionId, sortOrder:index });
+
+        resolvedLines.push({
+          id:randomUUID(),
+          lineKind:line.lineKind,
+          description:line.description,
+          quantity:line.quantity,
+          unitAmountKobo,
+          amountKobo:Math.round(line.quantity*unitAmountKobo),
+          pricingVersionId,
+          sortOrder:sortOrder++,
+        });
+      }
+
+      if (resolvedLines.length === 0) {
+        return NextResponse.json(
+          { message:"The organization has no billable active students or invoice items." },
+          { status:409,headers:casaInternalNoStoreHeaders },
+        );
       }
 
       const subtotalKobo = resolvedLines.reduce((sum,line)=>sum+line.amountKobo,0);
@@ -354,15 +507,19 @@ export async function POST(request: NextRequest) {
       }
 
       let delivery:"SENT"|"NO_EMAIL"|"NOT_CONFIGURED"|"FAILED"="NO_EMAIL";
+      let emailErrorCode:string|null=null;
       if (invoice.bill_to_email) {
         const result=await sendFinanceInvoiceEmail({to:invoice.bill_to_email,schoolName:invoice.school_name,invoiceNumber:invoice.invoice_number,issuedOn:invoice.issued_on??today(),dueOn:invoice.due_on,
           lines:invoice.lines.map(line=>({description:line.description,quantity:Number(line.quantity),amountKobo:Number(line.amount_kobo)})),subtotalKobo:Number(invoice.subtotal_kobo),taxLabel:invoice.tax_label,taxRatePercent:Number(invoice.tax_rate_bps)/100,taxKobo:Number(invoice.tax_kobo),totalKobo:Number(invoice.total_kobo),notes:invoice.notes});
         if (result.ok) { delivery="SENT"; await db.execute(sql`update casa_finance_invoices set sent_at=now(),updated_at=now() where id=${invoice.id}::uuid`); }
-        else delivery=result.configured?"FAILED":"NOT_CONFIGURED";
+        else {
+          delivery=result.configured?"FAILED":"NOT_CONFIGURED";
+          emailErrorCode=result.code;
+        }
         await db.execute(sql`insert into casa_finance_email_deliveries (school_id,invoice_id,delivery_kind,recipient_email,provider_message_id,status,error_code,sent_at) values (${invoice.school_id}::uuid,${invoice.id}::uuid,'INVOICE',${invoice.bill_to_email},${result.ok?result.messageId:null},${result.ok?"SENT":result.configured?"FAILED":"NOT_CONFIGURED"},${result.ok?null:result.code},${result.ok?new Date().toISOString():null}::timestamptz)`);
       }
       await writeCasaInternalAudit({access,schoolId:invoice.school_id,action:"FINANCE_INVOICE_ISSUED",subjectType:"FINANCE_INVOICE",subjectId:invoice.id,metadata:{invoiceNumber:invoice.invoice_number,emailDelivery:delivery}});
-      return NextResponse.json({issued:true,emailDelivery:delivery},{headers:casaInternalNoStoreHeaders});
+      return NextResponse.json({issued:true,emailDelivery:delivery,emailErrorCode},{headers:casaInternalNoStoreHeaders});
     }
 
     if (input.action === "RECORD_PAYMENT") {
@@ -381,13 +538,15 @@ export async function POST(request: NextRequest) {
       ]);
 
       let emailDelivery:"SENT"|"NO_EMAIL"|"NOT_CONFIGURED"|"FAILED"="NO_EMAIL";
+      let emailErrorCode:string|null=null;
       if (invoice.bill_to_email) {
         const result=await sendFinanceReceiptEmail({to:invoice.bill_to_email,schoolName:invoice.school_name,invoiceNumber:invoice.invoice_number,receiptNumber,amountKobo,receivedOn:input.receivedOn,paymentMethod:input.paymentMethod,paymentReference:input.paymentReference?.trim()||null,remainingBalanceKobo:balanceAfter});
         emailDelivery=result.ok?"SENT":result.configured?"FAILED":"NOT_CONFIGURED";
+        if (!result.ok) emailErrorCode=result.code;
         await db.execute(sql`insert into casa_finance_email_deliveries (school_id,invoice_id,delivery_kind,recipient_email,provider_message_id,status,error_code,sent_at) values (${invoice.school_id}::uuid,${invoice.id}::uuid,'RECEIPT',${invoice.bill_to_email},${result.ok?result.messageId:null},${result.ok?"SENT":result.configured?"FAILED":"NOT_CONFIGURED"},${result.ok?null:result.code},${result.ok?new Date().toISOString():null}::timestamptz)`);
       }
       await writeCasaInternalAudit({access,schoolId:invoice.school_id,action:"FINANCE_PAYMENT_RECORDED",subjectType:"FINANCE_PAYMENT",subjectId:paymentId,metadata:{invoiceId:invoice.id,invoiceNumber:invoice.invoice_number,receiptNumber,amountKobo,balanceAfter,emailDelivery}});
-      return NextResponse.json({recorded:true,paymentId,receiptNumber,balanceAfterKobo:balanceAfter,emailDelivery},{status:201,headers:casaInternalNoStoreHeaders});
+      return NextResponse.json({recorded:true,paymentId,receiptNumber,balanceAfterKobo:balanceAfter,emailDelivery,emailErrorCode},{status:201,headers:casaInternalNoStoreHeaders});
     }
 
     if (input.action === "CREATE_EXPENSE") {
