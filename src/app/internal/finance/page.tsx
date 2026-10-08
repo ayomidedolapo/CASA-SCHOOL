@@ -10,6 +10,7 @@ import {
 import InternalShell from "../internal-shell";
 import FinanceClient from "./finance-client";
 import FinanceWorkbench from "./finance-workbench";
+import FinanceIntelligence from "./finance-intelligence";
 
 function rowsOf<T>(result: unknown): T[] {
   if (Array.isArray(result)) return result as T[];
@@ -302,6 +303,7 @@ export default async function Page() {
         </p>
       </header>
       <FinanceWorkbench />
+      <FinanceIntelligence />
       <FinanceClient
         schools={schools}
         branches={branches}

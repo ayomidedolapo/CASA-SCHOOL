@@ -117,3 +117,47 @@ export async function sendFinanceReceiptEmail(input: {
     fromName: "CASA School",
   });
 }
+
+export async function sendFinancePaymentReminderEmail(input: {
+  to: string;
+  schoolName: string;
+  invoiceNumber: string;
+  reminderKind: "UPCOMING_DUE" | "OVERDUE";
+  dueOn: string | Date;
+  totalKobo: number;
+  balanceKobo: number;
+  daysOverdue: number;
+}) {
+  const overdue = input.reminderKind === "OVERDUE";
+  const title = overdue
+    ? `Payment reminder - ${input.invoiceNumber} is overdue`
+    : `Payment reminder - ${input.invoiceNumber} is due soon`;
+  const lead = overdue
+    ? `Invoice ${escapeHtml(input.invoiceNumber)} is overdue by ${input.daysOverdue} day(s).`
+    : `Invoice ${escapeHtml(input.invoiceNumber)} is due on ${escapeHtml(date(input.dueOn))}.`;
+
+  const html = shell(
+    title,
+    `<p style="margin:0 0 20px;font-size:15px;line-height:1.6;">Hello ${escapeHtml(input.schoolName)},<br>${lead}</p><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="font-size:13px;"><tr><td style="padding:8px 0;border-bottom:1px solid #eee;"><strong>Invoice</strong></td><td align="right" style="border-bottom:1px solid #eee;">${escapeHtml(input.invoiceNumber)}</td></tr><tr><td style="padding:8px 0;border-bottom:1px solid #eee;"><strong>Due date</strong></td><td align="right" style="border-bottom:1px solid #eee;">${escapeHtml(date(input.dueOn))}</td></tr><tr><td style="padding:8px 0;border-bottom:1px solid #eee;"><strong>Invoice total</strong></td><td align="right" style="border-bottom:1px solid #eee;">${money(input.totalKobo)}</td></tr><tr><td style="padding-top:16px;font-size:18px;font-weight:700;">Outstanding balance</td><td align="right" style="padding-top:16px;font-size:18px;font-weight:700;">${money(input.balanceKobo)}</td></tr></table><p style="margin:24px 0 0;font-size:12px;line-height:1.6;color:#555;">If payment has already been made, please disregard this reminder or share the payment reference with CASA.</p>`,
+  );
+
+  const text = [
+    `CASA Payment Reminder - ${input.invoiceNumber}`,
+    `School: ${input.schoolName}`,
+    overdue
+      ? `Status: overdue by ${input.daysOverdue} day(s)`
+      : `Due: ${date(input.dueOn)}`,
+    `Invoice total: ${money(input.totalKobo)}`,
+    `Outstanding balance: ${money(input.balanceKobo)}`,
+    "",
+    "If payment has already been made, please disregard this reminder or share the payment reference with CASA.",
+  ].join("\n");
+
+  return sendGmailEmail({
+    to: input.to,
+    subject: title,
+    text,
+    html,
+    fromName: "CASA School",
+  });
+}

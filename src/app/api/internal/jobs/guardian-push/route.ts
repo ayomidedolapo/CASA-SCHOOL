@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 
 import { runGuardianPushOutbox } from "@/server/messaging/guardian-push-worker";
+import { runFinancePaymentReminderWorker } from "@/server/messaging/finance-reminder-worker";
 import {
   reconcilePendingInitialCardRollouts,
 } from "@/server/card-production/initial-rollout";
@@ -77,6 +78,18 @@ export async function GET(request: NextRequest) {
           },
         );
 
+    const financeReminders =
+      await runFinancePaymentReminderWorker({
+        limit: 5,
+      }).catch(
+        (error) => {
+          console.error(
+            "Background Finance payment reminder worker failed",
+            error,
+          );
+          return null;
+        },
+      );
     const result =
       await runGuardianPushOutbox({
         limit: 50,
@@ -87,6 +100,7 @@ export async function GET(request: NextRequest) {
         ok: true,
         rolloutReconciliation,
         operationalReconciliation,
+        financeReminders,
         ...result,
       },
       {
