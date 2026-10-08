@@ -110,7 +110,7 @@ export async function GET(request: NextRequest) {
       new Date().toISOString().slice(0, 7);
     const bounds = monthBounds(month);
 
-    const [schools, budgets, budgetLines, policies, reminders, manualCalendar, invoiceCalendar, recurringCalendar, budgetCalendar] =
+    const [schools, budgets, budgetLines, unbudgetedCategories, policies, reminders, manualCalendar, invoiceCalendar, recurringCalendar, budgetCalendar] =
       await Promise.all([
         db.execute(sql`
           select id,name,slug
@@ -123,7 +123,9 @@ export async function GET(request: NextRequest) {
             b.id,b.school_id,s.name as school_name,b.name,b.period_kind,
             b.starts_on::text as starts_on,b.ends_on::text as ends_on,b.status,b.notes,
             coalesce(lines.planned_kobo,0)::bigint as planned_kobo,
-            coalesce(actual.actual_kobo,0)::bigint as actual_kobo
+            coalesce(budgeted.actual_kobo,0)::bigint as budgeted_actual_kobo,
+            coalesce(unbudgeted.actual_kobo,0)::bigint as unbudgeted_actual_kobo,
+            (coalesce(budgeted.actual_kobo,0)+coalesce(unbudgeted.actual_kobo,0))::bigint as total_actual_kobo
           from casa_finance_budgets b
           left join schools s on s.id=b.school_id
           left join lateral (
@@ -136,14 +138,61 @@ export async function GET(request: NextRequest) {
             from casa_finance_expenses expense
             where expense.incurred_on between b.starts_on and b.ends_on
               and (b.school_id is null or expense.school_id=b.school_id)
-          ) actual on true
+              and exists (
+                select 1
+                from casa_finance_budget_lines line
+                where line.budget_id=b.id
+                  and lower(trim(expense.category))=lower(trim(line.category))
+              )
+          ) budgeted on true
+          left join lateral (
+            select coalesce(sum(expense.amount_kobo),0)::bigint as actual_kobo
+            from casa_finance_expenses expense
+            where expense.incurred_on between b.starts_on and b.ends_on
+              and (b.school_id is null or expense.school_id=b.school_id)
+              and not exists (
+                select 1
+                from casa_finance_budget_lines line
+                where line.budget_id=b.id
+                  and lower(trim(expense.category))=lower(trim(line.category))
+              )
+          ) unbudgeted on true
           order by b.starts_on desc,b.created_at desc
           limit 100
         `),
         db.execute(sql`
-          select id,budget_id,category,planned_kobo,notes
-          from casa_finance_budget_lines
-          order by created_at
+          select
+            line.id,line.budget_id,line.category,line.planned_kobo,line.notes,
+            coalesce(actual.actual_kobo,0)::bigint as actual_kobo
+          from casa_finance_budget_lines line
+          join casa_finance_budgets budget on budget.id=line.budget_id
+          left join lateral (
+            select coalesce(sum(expense.amount_kobo),0)::bigint as actual_kobo
+            from casa_finance_expenses expense
+            where expense.incurred_on between budget.starts_on and budget.ends_on
+              and (budget.school_id is null or expense.school_id=budget.school_id)
+              and lower(trim(expense.category))=lower(trim(line.category))
+          ) actual on true
+          order by line.created_at
+        `),
+        db.execute(sql`
+          select
+            budget.id as budget_id,
+            initcap(lower(trim(expense.category))) as category,
+            coalesce(sum(expense.amount_kobo),0)::bigint as actual_kobo
+          from casa_finance_budgets budget
+          join casa_finance_expenses expense
+            on expense.incurred_on between budget.starts_on and budget.ends_on
+           and (budget.school_id is null or expense.school_id=budget.school_id)
+          where not exists (
+            select 1
+            from casa_finance_budget_lines line
+            where line.budget_id=budget.id
+              and lower(trim(expense.category))=lower(trim(line.category))
+          )
+          group by budget.id,lower(trim(expense.category))
+          order by budget.id,actual_kobo desc
+          limit 1000
         `),
         db.execute(sql`
           select
@@ -275,6 +324,7 @@ export async function GET(request: NextRequest) {
         schools: rowsOf(schools),
         budgets: rowsOf(budgets),
         budgetLines: rowsOf(budgetLines),
+        unbudgetedCategories: rowsOf(unbudgetedCategories),
         reminderPolicies: rowsOf(policies),
         reminders: rowsOf(reminders),
         calendarEvents: [

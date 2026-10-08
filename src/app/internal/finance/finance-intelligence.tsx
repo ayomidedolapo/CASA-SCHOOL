@@ -14,14 +14,22 @@ type Budget = {
   status: string;
   notes: string | null;
   planned_kobo: string | number;
-  actual_kobo: string | number;
+  budgeted_actual_kobo: string | number;
+  unbudgeted_actual_kobo: string | number;
+  total_actual_kobo: string | number;
 };
 type BudgetLine = {
   id: string;
   budget_id: string;
   category: string;
   planned_kobo: string | number;
+  actual_kobo: string | number;
   notes: string | null;
+};
+type UnbudgetedCategory = {
+  budget_id: string;
+  category: string;
+  actual_kobo: string | number;
 };
 type ReminderPolicy = {
   school_id: string;
@@ -65,6 +73,7 @@ type Snapshot = {
   schools: School[];
   budgets: Budget[];
   budgetLines: BudgetLine[];
+  unbudgetedCategories: UnbudgetedCategory[];
   reminderPolicies: ReminderPolicy[];
   reminders: Reminder[];
   calendarEvents: CalendarEvent[];
@@ -381,7 +390,25 @@ export default function FinanceIntelligence() {
 
   const intelligenceQuery=search.trim().toLowerCase();
   const intelligenceHas=(...values:Array<string|number|null|undefined>)=>!intelligenceQuery||values.some(value=>String(value??"").toLowerCase().includes(intelligenceQuery));
-  const filteredBudgets=(snapshot?.budgets??[]).filter(budget=>intelligenceHas(budget.name,budget.school_name,budget.period_kind,budget.starts_on,budget.ends_on,budget.status,budget.notes,money(budget.planned_kobo),money(budget.actual_kobo)));
+  const filteredBudgets=(snapshot?.budgets??[]).filter((budget)=>{
+    const budgetCategories=(snapshot?.budgetLines??[]).filter((line)=>line.budget_id===budget.id).map((line)=>line.category).join(" ");
+    const unbudgeted=(snapshot?.unbudgetedCategories??[]).filter((item)=>item.budget_id===budget.id).map((item)=>item.category).join(" ");
+    return intelligenceHas(
+      budget.name,
+      budget.school_name,
+      budget.period_kind,
+      budget.starts_on,
+      budget.ends_on,
+      budget.status,
+      budget.notes,
+      budgetCategories,
+      unbudgeted,
+      money(budget.planned_kobo),
+      money(budget.budgeted_actual_kobo),
+      money(budget.unbudgeted_actual_kobo),
+      money(budget.total_actual_kobo),
+    );
+  });
   const filteredReminders=(snapshot?.reminders??[]).filter(reminder=>intelligenceHas(reminder.school_name,reminder.invoice_number,reminder.reminder_kind,reminder.scheduled_for,reminder.recipient_email,reminder.status,reminder.last_error,reminder.attempt_count));
 
   const cells = monthCells(month);
@@ -548,6 +575,9 @@ export default function FinanceIntelligence() {
                 </button>
               </div>
 
+              <p className="mt-2 text-[10px] leading-4 text-black/45">
+                Expense records are matched to these categories automatically. Use the same category name when recording an expense.
+              </p>
               <div className="mt-3 grid gap-3">
                 {budgetLines.map((line, index) => (
                   <div
@@ -627,16 +657,14 @@ export default function FinanceIntelligence() {
             </div>
             <div className="divide-y divide-black/10">
               {filteredBudgets.map((budget) => {
-                const variance =
-                  Number(budget.planned_kobo) - Number(budget.actual_kobo);
-                const used =
-                  Number(budget.planned_kobo) > 0
-                    ? Math.round(
-                        (Number(budget.actual_kobo) /
-                          Number(budget.planned_kobo)) *
-                          100,
-                      )
-                    : 0;
+                const planned=Number(budget.planned_kobo);
+                const budgetedActual=Number(budget.budgeted_actual_kobo);
+                const unbudgetedActual=Number(budget.unbudgeted_actual_kobo);
+                const totalActual=Number(budget.total_actual_kobo);
+                const remaining=planned-budgetedActual;
+                const used=planned>0?Math.round((budgetedActual/planned)*100):0;
+                const lines=snapshot.budgetLines.filter((line)=>line.budget_id===budget.id);
+                const unbudgeted=snapshot.unbudgetedCategories.filter((item)=>item.budget_id===budget.id);
 
                 return (
                   <article className="p-5" key={budget.id}>
@@ -649,33 +677,92 @@ export default function FinanceIntelligence() {
                         </p>
                       </div>
                       <p className="font-mono text-xs font-semibold">
-                        {used}% used
+                        {used}% of planned budget used
                       </p>
                     </div>
-                    <div className="mt-4 grid gap-3 sm:grid-cols-3">
+
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                       <div>
-                        <p className="text-[10px] uppercase text-black/40">
-                          Planned
-                        </p>
-                        <p className="mt-1 font-semibold">
-                          {money(budget.planned_kobo)}
-                        </p>
+                        <p className="text-[10px] uppercase text-black/40">Planned</p>
+                        <p className="mt-1 font-semibold">{money(planned)}</p>
                       </div>
                       <div>
-                        <p className="text-[10px] uppercase text-black/40">
-                          Actual
-                        </p>
-                        <p className="mt-1 font-semibold">
-                          {money(budget.actual_kobo)}
-                        </p>
+                        <p className="text-[10px] uppercase text-black/40">Budgeted spend</p>
+                        <p className="mt-1 font-semibold">{money(budgetedActual)}</p>
                       </div>
                       <div>
-                        <p className="text-[10px] uppercase text-black/40">
-                          Remaining variance
-                        </p>
-                        <p className="mt-1 font-semibold">{money(variance)}</p>
+                        <p className="text-[10px] uppercase text-black/40">Unbudgeted spend</p>
+                        <p className="mt-1 font-semibold">{money(unbudgetedActual)}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase text-black/40">Total spending</p>
+                        <p className="mt-1 font-semibold">{money(totalActual)}</p>
                       </div>
                     </div>
+
+                    <div className="mt-4 border border-black/10 bg-black/[0.02] p-3">
+                      <p className="text-[10px] uppercase text-black/40">
+                        {remaining>=0?"Remaining planned":"Over budget"}
+                      </p>
+                      <p className="mt-1 font-semibold">{money(Math.abs(remaining))}</p>
+                      <p className="mt-1 text-[10px] leading-4 text-black/45">
+                        Only expenses that match a budget category reduce that category balance. Other expenses are shown separately as unbudgeted spend.
+                      </p>
+                    </div>
+
+                    <div className="mt-5 border-t border-black/15 pt-4">
+                      <p className="text-sm font-semibold">Category breakdown</p>
+                      <p className="mt-1 text-[10px] leading-4 text-black/45">
+                        Expense categories match budget categories case-insensitively and ignore leading or trailing spaces.
+                      </p>
+                      <div className="mt-3 overflow-x-auto">
+                        <table className="w-full min-w-[640px] text-left text-xs">
+                          <thead className="border-y border-black/15 font-mono text-[9px] uppercase text-black/45">
+                            <tr>
+                              <th className="py-2 pr-3">Category</th>
+                              <th className="py-2 px-3 text-right">Planned</th>
+                              <th className="py-2 px-3 text-right">Actual</th>
+                              <th className="py-2 px-3 text-right">Remaining</th>
+                              <th className="py-2 pl-3 text-right">Used</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-black/10">
+                            {lines.map((line)=>{
+                              const linePlanned=Number(line.planned_kobo);
+                              const lineActual=Number(line.actual_kobo);
+                              const lineRemaining=linePlanned-lineActual;
+                              const lineUsed=linePlanned>0?Math.round((lineActual/linePlanned)*100):0;
+                              return (
+                                <tr key={line.id}>
+                                  <td className="py-3 pr-3 font-medium">{line.category}</td>
+                                  <td className="py-3 px-3 text-right font-mono">{money(linePlanned)}</td>
+                                  <td className="py-3 px-3 text-right font-mono">{money(lineActual)}</td>
+                                  <td className="py-3 px-3 text-right font-mono">{lineRemaining>=0?money(lineRemaining):`Over ${money(Math.abs(lineRemaining))}`}</td>
+                                  <td className="py-3 pl-3 text-right font-mono">{lineUsed}%</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {unbudgeted.length>0?(
+                      <div className="mt-5 border border-black/15 p-4">
+                        <p className="text-sm font-semibold">Unbudgeted expenses</p>
+                        <p className="mt-1 text-[10px] leading-4 text-black/45">
+                          These expenses occurred during this budget period but do not match any planned category.
+                        </p>
+                        <div className="mt-3 grid gap-2">
+                          {unbudgeted.map((item)=>(
+                            <div className="flex items-center justify-between gap-4 text-xs" key={`${budget.id}-${item.category}`}>
+                              <span>{item.category}</span>
+                              <span className="font-mono font-semibold">{money(item.actual_kobo)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ):null}
                   </article>
                 );
               })}
