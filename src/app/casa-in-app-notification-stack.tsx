@@ -390,7 +390,19 @@ export default function CasaInAppNotificationStack() {
               hideAllFloating();
             }}
           >
-            x
+            <svg
+              aria-hidden="true"
+              className="h-3.5 w-3.5"
+              viewBox="0 0 16 16"
+              fill="none"
+            >
+              <path
+                d="M3 3l10 10M13 3L3 13"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+              />
+            </svg>
           </button>
         ) : null}
 
@@ -441,7 +453,7 @@ export default function CasaInAppNotificationStack() {
                 }}
               >
                 <p className="font-mono text-[9px] uppercase tracking-[0.11em] text-black/40">
-                  {item.severity ? `${item.severity} Â· ` : ""}
+                  {item.severity ? `${item.severity} - ` : ""}
                   {item.eventType.replaceAll("_", " ")}
                 </p>
                 <h2 className="mt-1 truncate text-sm font-semibold">
@@ -453,7 +465,7 @@ export default function CasaInAppNotificationStack() {
                 {!expanded && index === 0 && floatingItems.length > 1 ? (
                   <p className="mt-2 text-[10px] font-semibold text-black/45">
                     {floatingItems.length - 1} more notification
-                    {floatingItems.length - 1 === 1 ? "" : "s"} Â· tap to expand
+                    {floatingItems.length - 1 === 1 ? "" : "s"} - tap to expand
                   </p>
                 ) : null}
               </button>
@@ -465,7 +477,7 @@ export default function CasaInAppNotificationStack() {
                   type="button"
                   data-floating-close="true"
                   aria-label="Close floating notifications"
-                  title="Close floating notifications Â· stays unread"
+                  title="Close floating notifications - stays unread"
                   className="absolute -right-2 -top-2 z-50 grid h-8 w-8 shrink-0 place-items-center rounded-full border border-black/15 bg-white text-lg leading-none shadow-sm"
                   onPointerDown={(
                     event,
@@ -479,7 +491,19 @@ export default function CasaInAppNotificationStack() {
                     hideAllFloating();
                   }}
                 >
-                  Ã—
+                  <svg
+                              aria-hidden="true"
+                              className="h-3.5 w-3.5"
+                              viewBox="0 0 16 16"
+                              fill="none"
+                            >
+                              <path
+                                d="M3 3l10 10M13 3L3 13"
+                                stroke="currentColor"
+                                strokeWidth="1.8"
+                                strokeLinecap="round"
+                              />
+                            </svg>
                 </button>
               ) : null}
             </div>
@@ -516,7 +540,7 @@ export default function CasaInAppNotificationStack() {
               onClick={() => router.push(endpoint.center)}
             >
               {hiddenCount > 0
-                ? `View all Â· +${hiddenCount}`
+                ? `View all - +${hiddenCount}`
                 : "View notification centre"}
             </button>
           </div>
