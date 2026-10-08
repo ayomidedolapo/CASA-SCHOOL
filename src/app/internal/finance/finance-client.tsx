@@ -7,6 +7,7 @@ import {
 import {
   useRouter,
 } from "next/navigation";
+import NegotiatedPricingPanel from "./negotiated-pricing-panel";
 
 type School = {
   id: string;
@@ -823,7 +824,7 @@ export default function FinanceClient({
     termTrends
   ) {
     const label =
-      `${row.session_name} · ${row.term_name}`;
+      `${row.session_name} Â· ${row.term_name}`;
     const prior =
       termMap.get(
         label,
@@ -1059,6 +1060,8 @@ export default function FinanceClient({
         )}
       </section>
 
+      <NegotiatedPricingPanel schools={schools} pricing={pricing} />
+
       <section className="mt-7 grid gap-5 xl:grid-cols-2">
         <AreaChart
           rows={
@@ -1089,7 +1092,7 @@ export default function FinanceClient({
             revenueBySchool
           }
           subtitle="Term performance"
-          title="Estimated revenue by school · current term"
+          title="Estimated revenue by school Â· current term"
         />
       </section>
 
@@ -1101,18 +1104,18 @@ export default function FinanceClient({
           }
         >
           <p className="casa-kicker text-black/40">
-            Global pricing
+            Reference pricing
           </p>
           <h2 className="mt-2 text-2xl font-semibold">
-            Set current prices
+            Set fallback prices
           </h2>
           <p className="mt-2 text-xs leading-5 text-black/45">
-            Standard student pricing is per academic term. CASA projects a full session as exactly three terms. New prices are versioned; older records remain available for analysis.
+            These are CASA fallback/reference rates only. A negotiated school or branch rate takes precedence. Standard student pricing remains per academic term, and pricing history stays versioned.
           </p>
 
           <label className="casa-label mt-5">
             <span>
-              Standard student fee / term (₦)
+              Standard student fee / term (â‚¦)
             </span>
             <input
               className="casa-field"
@@ -1140,7 +1143,7 @@ export default function FinanceClient({
 
           <label className="casa-label mt-4">
             <span>
-              Lost / faulty / replacement card fee (₦)
+              Lost / faulty / replacement card fee (â‚¦)
             </span>
             <input
               className="casa-field"
@@ -1190,7 +1193,7 @@ export default function FinanceClient({
             }
           >
             {busy
-              ? "Saving…"
+              ? "Savingâ€¦"
               : "Save new pricing"}
           </button>
         </form>
@@ -1244,7 +1247,7 @@ export default function FinanceClient({
                     <p className="mt-1 font-mono text-[9px] uppercase text-black/40">
                       {school.current_session_name ??
                         "No active session"}{" "}
-                      ·{" "}
+                      Â·{" "}
                       {school.current_term_name ??
                         "No active term"}
                     </p>
