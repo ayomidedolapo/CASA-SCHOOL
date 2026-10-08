@@ -51,7 +51,7 @@ for (const marker of [
 expect(
   worker.includes("UPCOMING_DUE") &&
     worker.includes("OVERDUE") &&
-    worker.includes("for update skip locked"),
+    worker.includes("for update of reminder skip locked"),
   "M65 automatic reminder worker is incomplete",
 );
 

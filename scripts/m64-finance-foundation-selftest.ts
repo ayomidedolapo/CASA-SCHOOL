@@ -66,7 +66,10 @@ expect(
 expect(
   panel.includes("Negotiated school pricing") &&
     panel.includes('scopeKind: "SCHOOL"') &&
-    panel.includes("Billing email") &&
+    panel.includes("Dedicated billing email") &&
+    panel.includes("Current invoice destination") &&
+    panel.includes("School Owner fallback") &&
+    panel.includes("Dedicated billing contact") &&
     panel.includes("Default tax rate (%)"),
   "Negotiated pricing/billing UI is incomplete.",
 );
