@@ -64,6 +64,14 @@ const actionSchema = z.discriminatedUnion("action", [
     invoiceId: z.string().uuid(),
   }),
   z.object({
+    action: z.literal("RESEND_INVOICE_EMAIL"),
+    invoiceId: z.string().uuid(),
+  }),
+  z.object({
+    action: z.literal("RESEND_RECEIPT_EMAIL"),
+    paymentId: z.string().uuid(),
+  }),
+  z.object({
     action: z.literal("RECORD_PAYMENT"),
     invoiceId: z.string().uuid(),
     amountNaira: z.number().positive().max(1000000000),
@@ -522,6 +530,77 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({issued:true,emailDelivery:delivery,emailErrorCode},{headers:casaInternalNoStoreHeaders});
     }
 
+    if (input.action === "RESEND_INVOICE_EMAIL") {
+      const invoice=await getInvoice(input.invoiceId);
+      if (!invoice) return NextResponse.json({message:"Invoice not found."},{status:404,headers:casaInternalNoStoreHeaders});
+      if (invoice.status === "DRAFT") return NextResponse.json({message:"Issue the draft invoice before resending it."},{status:409,headers:casaInternalNoStoreHeaders});
+      if (invoice.status === "VOID") return NextResponse.json({message:"A void invoice cannot be emailed."},{status:409,headers:casaInternalNoStoreHeaders});
+
+      let emailDelivery:"SENT"|"NO_EMAIL"|"NOT_CONFIGURED"|"FAILED"="NO_EMAIL";
+      let emailErrorCode:string|null=null;
+
+      if (invoice.bill_to_email) {
+        const result=await sendFinanceInvoiceEmail({
+          to:invoice.bill_to_email,
+          schoolName:invoice.school_name,
+          invoiceNumber:invoice.invoice_number,
+          issuedOn:invoice.issued_on??today(),
+          dueOn:invoice.due_on,
+          lines:invoice.lines.map(line=>({
+            description:line.description,
+            quantity:Number(line.quantity),
+            amountKobo:Number(line.amount_kobo),
+          })),
+          subtotalKobo:Number(invoice.subtotal_kobo),
+          taxLabel:invoice.tax_label,
+          taxRatePercent:Number(invoice.tax_rate_bps)/100,
+          taxKobo:Number(invoice.tax_kobo),
+          totalKobo:Number(invoice.total_kobo),
+          notes:invoice.notes,
+        });
+
+        emailDelivery=result.ok?"SENT":result.configured?"FAILED":"NOT_CONFIGURED";
+        if (!result.ok) emailErrorCode=result.code;
+
+        if (result.ok) {
+          await db.execute(sql`update casa_finance_invoices set sent_at=now(),updated_at=now() where id=${invoice.id}::uuid`);
+        }
+
+        await db.execute(sql`
+          insert into casa_finance_email_deliveries (
+            school_id,invoice_id,delivery_kind,recipient_email,
+            provider_message_id,status,error_code,sent_at
+          )
+          values (
+            ${invoice.school_id}::uuid,${invoice.id}::uuid,'INVOICE',
+            ${invoice.bill_to_email},${result.ok?result.messageId:null},
+            ${result.ok?"SENT":result.configured?"FAILED":"NOT_CONFIGURED"},
+            ${result.ok?null:result.code},
+            ${result.ok?new Date().toISOString():null}::timestamptz
+          )
+        `);
+      }
+
+      await writeCasaInternalAudit({
+        access,
+        schoolId:invoice.school_id,
+        action:"FINANCE_INVOICE_REEMAILED",
+        subjectType:"FINANCE_INVOICE",
+        subjectId:invoice.id,
+        metadata:{
+          invoiceNumber:invoice.invoice_number,
+          emailDelivery,
+          emailErrorCode,
+        },
+      });
+
+      return NextResponse.json({
+        resent:true,
+        emailDelivery,
+        emailErrorCode,
+      },{headers:casaInternalNoStoreHeaders});
+    }
+
     if (input.action === "RECORD_PAYMENT") {
       const invoice=await getInvoice(input.invoiceId);
       if (!invoice) return NextResponse.json({message:"Invoice not found."},{status:404,headers:casaInternalNoStoreHeaders});
@@ -547,6 +626,104 @@ export async function POST(request: NextRequest) {
       }
       await writeCasaInternalAudit({access,schoolId:invoice.school_id,action:"FINANCE_PAYMENT_RECORDED",subjectType:"FINANCE_PAYMENT",subjectId:paymentId,metadata:{invoiceId:invoice.id,invoiceNumber:invoice.invoice_number,receiptNumber,amountKobo,balanceAfter,emailDelivery}});
       return NextResponse.json({recorded:true,paymentId,receiptNumber,balanceAfterKobo:balanceAfter,emailDelivery,emailErrorCode},{status:201,headers:casaInternalNoStoreHeaders});
+    }
+
+    if (input.action === "RESEND_RECEIPT_EMAIL") {
+      const payment=rowsOf<{
+        id:string;
+        invoice_id:string;
+        school_id:string;
+        school_name:string;
+        invoice_number:string;
+        bill_to_email:string|null;
+        receipt_number:string;
+        amount_kobo:string|number;
+        payment_method:string;
+        payment_reference:string|null;
+        received_on:string;
+        total_kobo:string|number;
+        paid_through_kobo:string|number;
+      }>(await db.execute(sql`
+        select
+          p.id,p.invoice_id,p.school_id,s.name as school_name,
+          i.invoice_number,i.bill_to_email,p.receipt_number,p.amount_kobo,
+          p.payment_method,p.payment_reference,p.received_on::text as received_on,
+          i.total_kobo,
+          (
+            select coalesce(sum(previous.amount_kobo),0)::bigint
+            from casa_finance_payments previous
+            where previous.invoice_id=p.invoice_id
+              and previous.created_at<=p.created_at
+          ) as paid_through_kobo
+        from casa_finance_payments p
+        join casa_finance_invoices i on i.id=p.invoice_id
+        join schools s on s.id=p.school_id
+        where p.id=${input.paymentId}::uuid
+        limit 1
+      `))[0];
+
+      if (!payment) return NextResponse.json({message:"Receipt not found."},{status:404,headers:casaInternalNoStoreHeaders});
+
+      const remainingBalanceKobo=Math.max(
+        Number(payment.total_kobo)-Number(payment.paid_through_kobo),
+        0,
+      );
+
+      let emailDelivery:"SENT"|"NO_EMAIL"|"NOT_CONFIGURED"|"FAILED"="NO_EMAIL";
+      let emailErrorCode:string|null=null;
+
+      if (payment.bill_to_email) {
+        const result=await sendFinanceReceiptEmail({
+          to:payment.bill_to_email,
+          schoolName:payment.school_name,
+          invoiceNumber:payment.invoice_number,
+          receiptNumber:payment.receipt_number,
+          amountKobo:Number(payment.amount_kobo),
+          receivedOn:payment.received_on,
+          paymentMethod:payment.payment_method,
+          paymentReference:payment.payment_reference,
+          remainingBalanceKobo,
+        });
+
+        emailDelivery=result.ok?"SENT":result.configured?"FAILED":"NOT_CONFIGURED";
+        if (!result.ok) emailErrorCode=result.code;
+
+        await db.execute(sql`
+          insert into casa_finance_email_deliveries (
+            school_id,invoice_id,delivery_kind,recipient_email,
+            provider_message_id,status,error_code,sent_at
+          )
+          values (
+            ${payment.school_id}::uuid,${payment.invoice_id}::uuid,'RECEIPT',
+            ${payment.bill_to_email},${result.ok?result.messageId:null},
+            ${result.ok?"SENT":result.configured?"FAILED":"NOT_CONFIGURED"},
+            ${result.ok?null:result.code},
+            ${result.ok?new Date().toISOString():null}::timestamptz
+          )
+        `);
+      }
+
+      await writeCasaInternalAudit({
+        access,
+        schoolId:payment.school_id,
+        action:"FINANCE_RECEIPT_REEMAILED",
+        subjectType:"FINANCE_PAYMENT",
+        subjectId:payment.id,
+        metadata:{
+          invoiceId:payment.invoice_id,
+          invoiceNumber:payment.invoice_number,
+          receiptNumber:payment.receipt_number,
+          emailDelivery,
+          emailErrorCode,
+        },
+      });
+
+      return NextResponse.json({
+        resent:true,
+        receiptNumber:payment.receipt_number,
+        emailDelivery,
+        emailErrorCode,
+      },{headers:casaInternalNoStoreHeaders});
     }
 
     if (input.action === "CREATE_EXPENSE") {

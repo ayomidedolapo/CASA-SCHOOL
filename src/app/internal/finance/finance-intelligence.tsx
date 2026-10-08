@@ -127,6 +127,7 @@ export default function FinanceIntelligence() {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const [search, setSearch] = useState("");
 
   const [budgetName, setBudgetName] = useState("");
   const [budgetSchoolId, setBudgetSchoolId] = useState("");
@@ -378,6 +379,11 @@ export default function FinanceIntelligence() {
     }
   }
 
+  const intelligenceQuery=search.trim().toLowerCase();
+  const intelligenceHas=(...values:Array<string|number|null|undefined>)=>!intelligenceQuery||values.some(value=>String(value??"").toLowerCase().includes(intelligenceQuery));
+  const filteredBudgets=(snapshot?.budgets??[]).filter(budget=>intelligenceHas(budget.name,budget.school_name,budget.period_kind,budget.starts_on,budget.ends_on,budget.status,budget.notes,money(budget.planned_kobo),money(budget.actual_kobo)));
+  const filteredReminders=(snapshot?.reminders??[]).filter(reminder=>intelligenceHas(reminder.school_name,reminder.invoice_number,reminder.reminder_kind,reminder.scheduled_for,reminder.recipient_email,reminder.status,reminder.last_error,reminder.attempt_count));
+
   const cells = monthCells(month);
   const grouped = new Map<string, CalendarEvent[]>();
 
@@ -415,6 +421,7 @@ export default function FinanceIntelligence() {
               key={key}
               onClick={() => {
                 setTab(key);
+                setSearch("");
                 setNotice("");
                 setError("");
               }}
@@ -439,6 +446,18 @@ export default function FinanceIntelligence() {
 
       {!snapshot ? (
         <p className="mt-6 text-sm text-black/45">Loading Finance planning...</p>
+      ) : null}
+
+      {snapshot && tab !== "CALENDAR" ? (
+        <label className="casa-label mt-5 block border border-black/15 bg-black/[0.02] p-4">
+          <span>Search this list</span>
+          <input
+            className="casa-field"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder={tab === "BUDGETS" ? "Budget name, school, period, status..." : "School, invoice, reminder status, email..."}
+          />
+        </label>
       ) : null}
 
       {snapshot && tab === "BUDGETS" ? (
@@ -607,7 +626,7 @@ export default function FinanceIntelligence() {
               </h3>
             </div>
             <div className="divide-y divide-black/10">
-              {snapshot.budgets.map((budget) => {
+              {filteredBudgets.map((budget) => {
                 const variance =
                   Number(budget.planned_kobo) - Number(budget.actual_kobo);
                 const used =
@@ -660,9 +679,9 @@ export default function FinanceIntelligence() {
                   </article>
                 );
               })}
-              {snapshot.budgets.length === 0 ? (
+              {filteredBudgets.length === 0 ? (
                 <p className="p-5 text-sm text-black/45">
-                  No budgets created yet.
+                  {intelligenceQuery ? "No matching budgets." : "No budgets created yet."}
                 </p>
               ) : null}
             </div>
@@ -768,7 +787,7 @@ export default function FinanceIntelligence() {
               </h3>
             </div>
             <div className="divide-y divide-black/10">
-              {snapshot.reminders.map((reminder) => (
+              {filteredReminders.map((reminder) => (
                 <div
                   className="grid gap-3 p-4 sm:grid-cols-[1fr_auto]"
                   key={reminder.id}
@@ -792,9 +811,9 @@ export default function FinanceIntelligence() {
                   </p>
                 </div>
               ))}
-              {snapshot.reminders.length === 0 ? (
+              {filteredReminders.length === 0 ? (
                 <p className="p-5 text-sm text-black/45">
-                  No reminder deliveries yet.
+                  {intelligenceQuery ? "No matching reminder deliveries." : "No reminder deliveries yet."}
                 </p>
               ) : null}
             </div>
