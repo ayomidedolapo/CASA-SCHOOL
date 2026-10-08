@@ -378,6 +378,22 @@ export default function CasaInAppNotificationStack() {
             : endDrag
         }
       >
+        {expanded ? (
+          <button
+            type="button"
+            data-floating-close="true"
+            aria-label="Close floating notifications"
+            title="Close floating notifications - stays unread"
+            className="sticky top-1 z-[100] ml-auto mr-1 grid h-9 w-9 place-items-center rounded-full border border-black/15 bg-white text-xl leading-none shadow-md"
+            onClick={(event) => {
+              event.stopPropagation();
+              hideAllFloating();
+            }}
+          >
+            x
+          </button>
+        ) : null}
+
         {visible.map((item, index) => (
           <article
             key={item.id}
@@ -425,7 +441,7 @@ export default function CasaInAppNotificationStack() {
                 }}
               >
                 <p className="font-mono text-[9px] uppercase tracking-[0.11em] text-black/40">
-                  {item.severity ? `${item.severity} · ` : ""}
+                  {item.severity ? `${item.severity} Â· ` : ""}
                   {item.eventType.replaceAll("_", " ")}
                 </p>
                 <h2 className="mt-1 truncate text-sm font-semibold">
@@ -437,7 +453,7 @@ export default function CasaInAppNotificationStack() {
                 {!expanded && index === 0 && floatingItems.length > 1 ? (
                   <p className="mt-2 text-[10px] font-semibold text-black/45">
                     {floatingItems.length - 1} more notification
-                    {floatingItems.length - 1 === 1 ? "" : "s"} · tap to expand
+                    {floatingItems.length - 1 === 1 ? "" : "s"} Â· tap to expand
                   </p>
                 ) : null}
               </button>
@@ -449,7 +465,7 @@ export default function CasaInAppNotificationStack() {
                   type="button"
                   data-floating-close="true"
                   aria-label="Close floating notifications"
-                  title="Close floating notifications · stays unread"
+                  title="Close floating notifications Â· stays unread"
                   className="absolute -right-2 -top-2 z-50 grid h-8 w-8 shrink-0 place-items-center rounded-full border border-black/15 bg-white text-lg leading-none shadow-sm"
                   onPointerDown={(
                     event,
@@ -463,7 +479,7 @@ export default function CasaInAppNotificationStack() {
                     hideAllFloating();
                   }}
                 >
-                  ×
+                  Ã—
                 </button>
               ) : null}
             </div>
@@ -500,7 +516,7 @@ export default function CasaInAppNotificationStack() {
               onClick={() => router.push(endpoint.center)}
             >
               {hiddenCount > 0
-                ? `View all · +${hiddenCount}`
+                ? `View all Â· +${hiddenCount}`
                 : "View notification centre"}
             </button>
           </div>
