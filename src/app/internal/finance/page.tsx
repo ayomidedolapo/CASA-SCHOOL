@@ -9,6 +9,7 @@ import {
 } from "@/server/internal/authorization";
 import InternalShell from "../internal-shell";
 import FinanceClient from "./finance-client";
+import FinanceWorkbench from "./finance-workbench";
 
 function rowsOf<T>(result: unknown): T[] {
   if (Array.isArray(result)) return result as T[];
@@ -300,6 +301,7 @@ export default async function Page() {
           Term and academic-session estimates from active students and replacement cards. Pricing is versioned; estimates are operational forecasts, not recorded cash receipts.
         </p>
       </header>
+      <FinanceWorkbench />
       <FinanceClient
         schools={schools}
         branches={branches}

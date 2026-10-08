@@ -349,7 +349,7 @@ export default function NegotiatedPricingPanel({
           ) : null}
 
           <label className="casa-label mt-5">
-            <span>New negotiated service fee / student / term (Ã¢â€šÂ¦)</span>
+            <span>New negotiated service fee / student / term (NGN)</span>
             <input
               className="casa-field"
               min="0"
@@ -362,7 +362,7 @@ export default function NegotiatedPricingPanel({
           </label>
 
           <label className="casa-label mt-4">
-            <span>New negotiated replacement-card fee (Ã¢â€šÂ¦)</span>
+            <span>New negotiated replacement-card fee (NGN)</span>
             <input
               className="casa-field"
               min="0"
@@ -388,7 +388,7 @@ export default function NegotiatedPricingPanel({
             className="casa-button-primary mt-5"
             disabled={pricingBusy || (!serviceFee && !replacementFee)}
           >
-            {pricingBusy ? "SavingÃ¢â‚¬Â¦" : "Save negotiated pricing"}
+            {pricingBusy ? "Saving..." : "Save negotiated pricing"}
           </button>
         </form>
 
@@ -401,11 +401,11 @@ export default function NegotiatedPricingPanel({
           </p>
 
           {!billing ? (
-            <p className="mt-5 text-sm text-black/45">Loading billing profileÃ¢â‚¬Â¦</p>
+            <p className="mt-5 text-sm text-black/45">Loading billing profile...</p>
           ) : (
             <>
               <div className="mt-4 border border-black/15 bg-black/[0.02] p-4 text-xs leading-5 text-black/55">
-                School Owner: {billing.ownerName || "Not available"} Ã‚Â·{" "}
+                School Owner: {billing.ownerName || "Not available"} {" "}
                 {billing.ownerEmail || "No owner email"}
               </div>
 
@@ -519,7 +519,7 @@ export default function NegotiatedPricingPanel({
               </label>
 
               <button className="casa-button mt-5" disabled={billingBusy}>
-                {billingBusy ? "SavingÃ¢â‚¬Â¦" : "Save billing profile"}
+                {billingBusy ? "Saving..." : "Save billing profile"}
               </button>
             </>
           )}

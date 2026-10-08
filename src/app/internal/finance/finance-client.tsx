@@ -824,7 +824,7 @@ export default function FinanceClient({
     termTrends
   ) {
     const label =
-      `${row.session_name} Â· ${row.term_name}`;
+      `${row.session_name}  ${row.term_name}`;
     const prior =
       termMap.get(
         label,
@@ -1092,7 +1092,7 @@ export default function FinanceClient({
             revenueBySchool
           }
           subtitle="Term performance"
-          title="Estimated revenue by school Â· current term"
+          title="Estimated revenue by school  current term"
         />
       </section>
 
@@ -1115,7 +1115,7 @@ export default function FinanceClient({
 
           <label className="casa-label mt-5">
             <span>
-              Standard student fee / term (â‚¦)
+              Standard student fee / term ()
             </span>
             <input
               className="casa-field"
@@ -1143,7 +1143,7 @@ export default function FinanceClient({
 
           <label className="casa-label mt-4">
             <span>
-              Lost / faulty / replacement card fee (â‚¦)
+              Lost / faulty / replacement card fee ()
             </span>
             <input
               className="casa-field"
@@ -1193,7 +1193,7 @@ export default function FinanceClient({
             }
           >
             {busy
-              ? "Savingâ€¦"
+              ? "Saving"
               : "Save new pricing"}
           </button>
         </form>
@@ -1247,7 +1247,7 @@ export default function FinanceClient({
                     <p className="mt-1 font-mono text-[9px] uppercase text-black/40">
                       {school.current_session_name ??
                         "No active session"}{" "}
-                      Â·{" "}
+                      {" "}
                       {school.current_term_name ??
                         "No active term"}
                     </p>
