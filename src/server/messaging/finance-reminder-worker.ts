@@ -171,7 +171,7 @@ export async function runFinancePaymentReminderWorker(
           ) > 0
         order by reminder.scheduled_for, reminder.created_at
         limit ${limit}
-        for update skip locked
+        for update of reminder skip locked
       )
       update casa_finance_payment_reminders reminder
       set
