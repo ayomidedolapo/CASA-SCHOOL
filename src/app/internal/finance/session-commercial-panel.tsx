@@ -43,6 +43,7 @@ type Agreement = {
   second_installment_kobo: string | number | null;
   second_due_on: string | null;
   agreement_note: string | null;
+  invoice_count: number;
 };
 
 type Snapshot = {
@@ -132,6 +133,7 @@ export default function SessionCommercialPanel() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [invoiceVatRates, setInvoiceVatRates] = useState<Record<string, string>>({});
 
   const fetchSnapshot = useCallback(async (): Promise<Snapshot> => {
     const response = await fetch("/api/internal/finance/commercial-model", {
@@ -219,6 +221,8 @@ export default function SessionCommercialPanel() {
     const result = (await response.json().catch(() => ({}))) as {
       message?: string;
       agreementId?: string;
+      invoiceNumbers?: string[];
+      vatRatePercent?: number;
     };
 
     if (!response.ok) {
@@ -400,6 +404,44 @@ export default function SessionCommercialPanel() {
         caught instanceof Error
           ? caught.message
           : "Could not update the agreement.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+
+  async function createAgreementInvoices(agreement: Agreement) {
+    setBusy(true);
+    setError("");
+    setNotice("");
+
+    try {
+      const vatText = invoiceVatRates[agreement.id] ?? "";
+      const vatRatePercent = vatText.trim() === "" ? 0 : Number(vatText);
+
+      if (!Number.isFinite(vatRatePercent) || vatRatePercent < 0 || vatRatePercent > 100) {
+        throw new Error("VAT must be between 0% and 100%.");
+      }
+
+      const result = await post({
+        action: "CREATE_AGREEMENT_INVOICES",
+        agreementId: agreement.id,
+        vatRatePercent,
+      });
+
+      const invoiceNumbers = result.invoiceNumbers ?? [];
+      setNotice(
+        invoiceNumbers.length > 0
+          ? `Draft invoice schedule created: ${invoiceNumbers.join(", ")}. VAT: ${vatRatePercent}%. Issue and email the invoice(s) from the Invoices tab.`
+          : "Draft invoice schedule created.",
+      );
+      await reload();
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Could not create the session invoice schedule.",
       );
     } finally {
       setBusy(false);
@@ -902,8 +944,55 @@ export default function SessionCommercialPanel() {
                           </>
                         ) : null}
 
+                        {agreement.status === "AGREED" &&
+                        Number(agreement.invoice_count ?? 0) === 0 ? (
+                          <div className="flex flex-wrap items-end gap-2">
+                            <label className="casa-label w-28">
+                              <span>VAT (%)</span>
+                              <input
+                                className="casa-field"
+                                min="0"
+                                max="100"
+                                step="0.01"
+                                type="number"
+                                value={invoiceVatRates[agreement.id] ?? ""}
+                                placeholder="0"
+                                onChange={(event) =>
+                                  setInvoiceVatRates((current) => ({
+                                    ...current,
+                                    [agreement.id]: event.target.value,
+                                  }))
+                                }
+                              />
+                              <span className="mt-1 text-[9px] normal-case tracking-normal text-black/40">
+                                Blank = 0%
+                              </span>
+                            </label>
+
+                            <button
+                              className="casa-button-primary text-xs"
+                              type="button"
+                              disabled={busy}
+                              onClick={() =>
+                                void createAgreementInvoices(agreement)
+                              }
+                            >
+                              {agreement.payment_plan === "FULL"
+                                ? "Draft invoice"
+                                : "Draft 2 invoices"}
+                            </button>
+                          </div>
+                        ) : null}
+
+                        {Number(agreement.invoice_count ?? 0) > 0 ? (
+                          <span className="border border-black/20 bg-black/[0.03] px-2 py-1 font-mono text-[9px] uppercase text-black/50">
+                            Invoice schedule drafted
+                          </span>
+                        ) : null}
+
                         {agreement.status === "DRAFT" ||
-                        agreement.status === "AGREED" ? (
+                        (agreement.status === "AGREED" &&
+                          Number(agreement.invoice_count ?? 0) === 0) ? (
                           <button
                             className="casa-button text-xs"
                             type="button"

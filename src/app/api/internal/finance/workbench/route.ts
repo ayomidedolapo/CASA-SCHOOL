@@ -186,6 +186,7 @@ export async function GET() {
       `),
       db.execute(sql`
         select i.id,i.school_id,s.name as school_name,i.invoice_number,i.status,
+          i.session_agreement_id,i.installment_sequence,agreement.service_session_label,
           case when i.status not in ('DRAFT','PAID','VOID') and i.due_on<current_date
             and greatest(i.total_kobo-coalesce(paid.paid_kobo,0),0)>0 then 'OVERDUE' else i.status end as display_status,
           i.bill_to_email,i.subtotal_kobo,i.tax_label,i.tax_rate_bps,i.tax_kobo,i.total_kobo,
@@ -193,6 +194,7 @@ export async function GET() {
           greatest(i.total_kobo-coalesce(paid.paid_kobo,0),0)::bigint as balance_kobo,
           i.issued_on::text as issued_on,i.due_on::text as due_on,i.created_at
         from casa_finance_invoices i join schools s on s.id=i.school_id
+        left join casa_finance_session_agreements agreement on agreement.id=i.session_agreement_id
         left join lateral (select coalesce(sum(p.amount_kobo),0)::bigint as paid_kobo from casa_finance_payments p where p.invoice_id=i.id) paid on true
         order by i.created_at desc limit 100
       `),
@@ -290,6 +292,17 @@ export async function POST(request: NextRequest) {
     const client = neon(getDatabaseUrl());
 
     if (input.action === "CREATE_INVOICE") {
+      if (input.lines.some((line) => line.lineKind === "SERVICE_FEE")) {
+        return NextResponse.json(
+          {
+            code: "SESSION_AGREEMENT_REQUIRED",
+            message:
+              "CASA service invoices must be drafted from an agreed school session in the session agreement register.",
+          },
+          { status: 409, headers: casaInternalNoStoreHeaders },
+        );
+      }
+
       const school = rowsOf<{
         id:string; name:string; billing_contact_name:string|null; billing_email:string|null; billing_phone:string|null;
         default_tax_label:string; default_tax_rate_bps:number; invoice_due_days:number;

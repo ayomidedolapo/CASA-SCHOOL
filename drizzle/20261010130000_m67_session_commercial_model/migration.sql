@@ -73,3 +73,8 @@ ALTER TABLE "casa_finance_invoices" ADD CONSTRAINT "casa_finance_invoices_instal
   CHECK ("installment_sequence" IS NULL OR "installment_sequence" IN (1,2));
 CREATE INDEX IF NOT EXISTS "casa_finance_invoices_session_agreement_idx"
 ON "casa_finance_invoices" ("session_agreement_id","installment_sequence");
+
+CREATE UNIQUE INDEX IF NOT EXISTS "casa_finance_invoices_session_installment_unique"
+ON "casa_finance_invoices" ("session_agreement_id","installment_sequence")
+WHERE "session_agreement_id" IS NOT NULL
+  AND "status" <> 'VOID';
