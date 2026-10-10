@@ -605,30 +605,46 @@ export async function rejectContinuityEvents(
 
 export async function clearContinuityStorage():
   Promise<void> {
-  await new Promise<void>(
-    (
-      resolve,
-      reject,
-    ) => {
-      const request =
-        indexedDB.deleteDatabase(
-          DATABASE_NAME,
-        );
+  const db =
+    await openDatabase();
 
-      request.onsuccess =
-        () => resolve();
-
-      request.onerror =
-        () =>
-          reject(
-            request.error ??
-              new Error(
-                "Unable to clear scanner continuity storage.",
-              ),
+  try {
+    await new Promise<void>(
+      (
+        resolve,
+        reject,
+      ) => {
+        const tx =
+          db.transaction(
+            [
+              SNAPSHOT_STORE,
+              QUEUE_STORE,
+            ],
+            "readwrite",
           );
 
-      request.onblocked =
-        () => resolve();
-    },
-  );
+        tx.objectStore(
+          SNAPSHOT_STORE,
+        ).clear();
+
+        tx.objectStore(
+          QUEUE_STORE,
+        ).clear();
+
+        tx.oncomplete =
+          () => resolve();
+
+        tx.onerror =
+          () =>
+            reject(
+              tx.error ??
+                new Error(
+                  "Unable to clear scanner continuity storage.",
+                ),
+            );
+      },
+    );
+  } finally {
+    db.close();
+  }
 }

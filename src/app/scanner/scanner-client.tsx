@@ -1359,6 +1359,18 @@ export default function ScannerClient() {
       string | null
     >(null);
 
+  const continuityFallbackRef =
+    useRef<
+      (
+        (
+          mode:
+            | "DEGRADED"
+            | "OFFLINE",
+        ) =>
+          Promise<boolean>
+      ) | null
+    >(null);
+
   const [
     connectivityHealth,
     setConnectivityHealth,
@@ -2680,6 +2692,49 @@ export default function ScannerClient() {
       ],
     );
 
+  useEffect(
+    () => {
+      continuityFallbackRef.current =
+        async (
+          mode,
+        ) => {
+          const payload =
+            currentQrPayloadRef
+              .current;
+
+          if (
+            !payload ||
+            !continuitySnapshotUsable(
+              continuitySnapshot,
+              terminalSession
+                ?.terminal
+                .id ??
+                null,
+            )
+          ) {
+            return false;
+          }
+
+          await processContinuityCard(
+            payload,
+            mode,
+          );
+
+          return true;
+        };
+
+      return () => {
+        continuityFallbackRef.current =
+          null;
+      };
+    },
+    [
+      processContinuityCard,
+      continuitySnapshot,
+      terminalSession,
+    ],
+  );
+
   const syncContinuityQueue =
     useCallback(
       async () => {
@@ -3024,7 +3079,7 @@ export default function ScannerClient() {
                 method:
                   "POST",
               },
-              2,
+              1,
               3000,
             );
 
@@ -3042,30 +3097,23 @@ export default function ScannerClient() {
             !response.ok ||
             !data?.liveness
           ) {
+            const biometricTransportFailure =
+              data?.code ===
+                "AWS_BIOMETRIC_UNAVAILABLE" ||
+              response.status ===
+                502 ||
+              response.status ===
+                504;
+
             if (
-              currentQrPayloadRef
-                .current &&
-              (
-                response.status >=
-                  500 ||
-                data?.code ===
-                  "AWS_BIOMETRIC_UNAVAILABLE"
-              ) &&
-              continuitySnapshotUsable(
-                continuitySnapshot,
-                terminalSession
-                  ?.terminal
-                  .id ??
-                  null,
-              )
+              biometricTransportFailure &&
+              await continuityFallbackRef
+                .current?.(
+                  navigator.onLine
+                    ? "DEGRADED"
+                    : "OFFLINE",
+                )
             ) {
-              await processContinuityCard(
-                currentQrPayloadRef
-                  .current,
-                navigator.onLine
-                  ? "DEGRADED"
-                  : "OFFLINE",
-              );
               return;
             }
 
@@ -3104,23 +3152,13 @@ export default function ScannerClient() {
           );
         } catch {
           if (
-            currentQrPayloadRef
-              .current &&
-            continuitySnapshotUsable(
-              continuitySnapshot,
-              terminalSession
-                ?.terminal
-                .id ??
-                null,
-            )
+            await continuityFallbackRef
+              .current?.(
+                navigator.onLine
+                  ? "DEGRADED"
+                  : "OFFLINE",
+              )
           ) {
-            await processContinuityCard(
-              currentQrPayloadRef
-                .current,
-              navigator.onLine
-                ? "DEGRADED"
-                : "OFFLINE",
-            );
             return;
           }
 
@@ -3135,9 +3173,6 @@ export default function ScannerClient() {
       [
         token,
         livenessCameraDeviceId,
-        continuitySnapshot,
-        terminalSession,
-        processContinuityCard,
       ],
     );
 
@@ -3288,8 +3323,8 @@ export default function ScannerClient() {
                     qrPayload,
                   }),
               },
-              2,
-              2500,
+              1,
+              3000,
             );
 
           const data =
@@ -3308,6 +3343,24 @@ export default function ScannerClient() {
             !response.ok ||
             !data
           ) {
+            if (
+              [
+                502,
+                503,
+                504,
+              ].includes(
+                response.status,
+              ) &&
+              await continuityFallbackRef
+                .current?.(
+                  navigator.onLine
+                    ? "DEGRADED"
+                    : "OFFLINE",
+                )
+            ) {
+              return;
+            }
+
             setPhase(
               "ERROR",
             );
@@ -3495,6 +3548,39 @@ export default function ScannerClient() {
       ],
     );
 
+  const handleLivenessTransportError =
+    useCallback(
+      async (
+        error: {
+          state?:
+            string | null;
+        },
+      ) => {
+        const transportFailure =
+          error.state ===
+            "CONNECTION_TIMEOUT";
+
+        if (
+          transportFailure &&
+          await continuityFallbackRef
+            .current?.(
+              navigator.onLine
+                ? "DEGRADED"
+                : "OFFLINE",
+            )
+        ) {
+          return;
+        }
+
+        await cancelLiveness(
+          true,
+        );
+      },
+      [
+        cancelLiveness,
+      ],
+    );
+
   const switchLivenessCamera =
     useCallback(
       async () => {
@@ -3661,7 +3747,7 @@ export default function ScannerClient() {
 
         try {
           const response =
-            await terminalFetch(
+            await terminalFetchWithRetry(
               token,
               `/api/terminal/attempts/${current.attemptId}/biometric/liveness/complete`,
               {
@@ -3678,6 +3764,8 @@ export default function ScannerClient() {
                         .livenessSessionId,
                   }),
               },
+              1,
+              5000,
             );
 
           const data =
@@ -3698,6 +3786,26 @@ export default function ScannerClient() {
             !response.ok ||
             !data?.presence
           ) {
+            const biometricTransportFailure =
+              data?.code ===
+                "AWS_BIOMETRIC_UNAVAILABLE" ||
+              response.status ===
+                502 ||
+              response.status ===
+                504;
+
+            if (
+              biometricTransportFailure &&
+              await continuityFallbackRef
+                .current?.(
+                  navigator.onLine
+                    ? "DEGRADED"
+                    : "OFFLINE",
+                )
+            ) {
+              return;
+            }
+
             setPhase(
               "ERROR",
             );
@@ -3740,6 +3848,17 @@ export default function ScannerClient() {
                   : "Checked in.",
           );
         } catch {
+          if (
+            await continuityFallbackRef
+              .current?.(
+                navigator.onLine
+                  ? "DEGRADED"
+                  : "OFFLINE",
+              )
+          ) {
+            return;
+          }
+
           setLiveness(
             null,
           );
@@ -4612,9 +4731,11 @@ export default function ScannerClient() {
                       )
                   }
                   onError={
-                    () =>
-                      void cancelLiveness(
-                        true,
+                    (
+                      error,
+                    ) =>
+                      void handleLivenessTransportError(
+                        error,
                       )
                   }
                   config={{

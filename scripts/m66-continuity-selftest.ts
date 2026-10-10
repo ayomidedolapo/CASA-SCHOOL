@@ -46,6 +46,14 @@ const sync =
   source(
     "src/server/attendance/continuity-sync.ts",
   );
+const push =
+  source(
+    "src/server/messaging/guardian-presence-push.ts",
+  );
+const sms =
+  source(
+    "src/server/messaging/simhostng-provider.ts",
+  );
 const worker =
   source(
     "public/scanner-sw.js",
@@ -82,6 +90,57 @@ expect(
 );
 
 expect(
+  scanner.includes(
+    "continuityFallbackRef",
+  ) &&
+  scanner.includes(
+    "handleLivenessTransportError",
+  ),
+  "Biometric transport fallback bridge is missing.",
+);
+
+expect(
+  scanner.includes(
+    'error.state ===\n            "CONNECTION_TIMEOUT"',
+  ),
+  "AWS websocket connection-timeout continuity fallback is missing.",
+);
+
+expect(
+  !scanner.includes(
+    'error.state ===\n            "SERVER_ERROR" ||',
+  ) &&
+  !scanner.includes(
+    'error.state ===\n            "CAMERA_ACCESS_ERROR"',
+  ) &&
+  !scanner.includes(
+    'error.state ===\n            "MULTIPLE_FACES_ERROR"',
+  ),
+  "Non-connectivity liveness failures must not silently bypass biometrics.",
+);
+
+expect(
+  scanner.includes(
+    '"AWS_BIOMETRIC_UNAVAILABLE"',
+  ),
+  "AWS biometric unavailable classification is missing.",
+);
+
+expect(
+  scanner.includes(
+    '1,\n              3000,\n            );\n\n          const data =\n            await parseJson<\n              ScannerLivenessStart',
+  ),
+  "AWS liveness start is not bounded to one 3000ms request.",
+);
+
+expect(
+  scanner.includes(
+    '1,\n              5000,\n            );\n\n          const data =\n            await parseJson<\n              ScannerPresenceResult',
+  ),
+  "AWS liveness completion is not bounded to one 5000ms request.",
+);
+
+expect(
   storage.includes(
     "casa-school-scanner-continuity",
   ) &&
@@ -92,6 +151,16 @@ expect(
     '"REJECTED"',
   ),
   "Durable continuity queue storage is incomplete.",
+);
+
+expect(
+  storage.includes(
+    ".clear()",
+  ) &&
+  !storage.includes(
+    "deleteDatabase",
+  ),
+  "Continuity reset must clear stores deterministically.",
 );
 
 expect(
@@ -121,7 +190,7 @@ expect(
   sync.includes(
     "'UNAVAILABLE'::attendance_liveness_result",
   ),
-  "Continuity reconciliation must truthfully mark biometrics unavailable.",
+  "Continuity reconciliation must mark biometrics unavailable.",
 );
 
 expect(
@@ -135,10 +204,31 @@ expect(
 );
 
 expect(
+  sync.includes(
+    "CONTINUITY_EVENT_ORDER_INVALID",
+  ),
+  "Continuity event-order hardening is missing.",
+);
+
+expect(
   syncRoute.includes(
     "runGuardianPushOutbox",
   ),
   "Guardian push delivery is not resumed after continuity sync.",
+);
+
+expect(
+  push.includes(
+    "Notification delayed due to temporary connectivity loss.",
+  ),
+  "Guardian push does not disclose delayed connectivity delivery.",
+);
+
+expect(
+  sms.includes(
+    "Notification delayed due to temporary connectivity loss.",
+  ),
+  "Guardian SMS does not disclose delayed connectivity delivery.",
 );
 
 expect(
@@ -152,5 +242,5 @@ expect(
 );
 
 console.log(
-  "M66 OFFLINE CONTINUITY SELFTEST = GREEN",
+  "M66 OFFLINE CONTINUITY CLOSURE SELFTEST = GREEN",
 );
