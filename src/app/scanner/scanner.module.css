@@ -974,3 +974,33 @@
   display: none !important;
   pointer-events: none !important;
 }
+
+.connectivityPanel {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 10rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid rgba(15, 23, 42, 0.18);
+  border-radius: 0.8rem;
+  background: rgba(255, 255, 255, 0.72);
+  font-size: 0.72rem;
+  line-height: 1.25;
+}
+
+.connectivityPanel strong {
+  font-size: 0.78rem;
+}
+
+.connectivityPanel[data-state="HEALTHY"] {
+  border-color: rgba(22, 101, 52, 0.42);
+}
+
+.connectivityPanel[data-state="UNSTABLE"],
+.connectivityPanel[data-state="RECOVERING"] {
+  border-color: rgba(161, 98, 7, 0.48);
+}
+
+.connectivityPanel[data-state="DEGRADED"],
+.connectivityPanel[data-state="OFFLINE"] {
+  border-color: rgba(185, 28, 28, 0.48);
+}

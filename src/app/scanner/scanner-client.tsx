@@ -21,6 +21,12 @@ import {
   storeTerminalCredential,
 } from "@/scanner/device-storage";
 import {
+  calculateConnectivityHealth,
+  connectivityHealthLabel,
+  type ConnectivityHealth,
+  type ConnectivitySample,
+} from "@/scanner/connectivity-health";
+import {
   createScannerRequestId,
   isTerminalCredentialShape,
   scannerReasonMessage,
@@ -75,7 +81,7 @@ function loadQrScannerModule() {
 }
 
 const SCANNER_UI_REVISION =
-  "2026-10-03-m54-camera-switch";
+  "2026-10-10-m66-connectivity-health";
 
 type Phase =
   | "BOOTING"
@@ -1238,6 +1244,61 @@ export default function ScannerClient() {
   ] =
     useState(false);
 
+  const [
+    connectivityHealth,
+    setConnectivityHealth,
+  ] =
+    useState<ConnectivityHealth>(
+      "CHECKING",
+    );
+
+  const [
+    connectivityLatencyMs,
+    setConnectivityLatencyMs,
+  ] =
+    useState<
+      number | null
+    >(null);
+
+  const connectivitySamplesRef =
+    useRef<
+      ConnectivitySample[]
+    >([]);
+
+  const applyConnectivitySample =
+    useCallback(
+      (
+        sample:
+          ConnectivitySample,
+      ) => {
+        const history =
+          [
+            ...connectivitySamplesRef.current,
+            sample,
+          ].slice(
+            -6,
+          );
+
+        connectivitySamplesRef.current =
+          history;
+
+        setConnectivityLatencyMs(
+          sample.ok
+            ? sample.latencyMs
+            : null,
+        );
+
+        setConnectivityHealth(
+          (current) =>
+            calculateConnectivityHealth(
+              current,
+              history,
+            ),
+        );
+      },
+      [],
+    );
+
   const resetTimer =
     useRef<
       ReturnType<
@@ -1585,6 +1646,143 @@ export default function ScannerClient() {
     [
       refreshTerminal,
       recoverPendingAttempt,
+    ],
+  );
+
+  useEffect(
+    () => {
+      if (!token) {
+        connectivitySamplesRef.current =
+          [];
+        return;
+      }
+
+      let cancelled =
+        false;
+
+      const probe =
+        async () => {
+          if (
+            !navigator.onLine
+          ) {
+            if (!cancelled) {
+              applyConnectivitySample({
+                at:
+                  Date.now(),
+                ok: false,
+                latencyMs:
+                  null,
+                offline:
+                  true,
+              });
+            }
+            return;
+          }
+
+          const controller =
+            new AbortController();
+          const timeout =
+            window.setTimeout(
+              () =>
+                controller.abort(),
+              2200,
+            );
+          const started =
+            performance.now();
+
+          try {
+            const response =
+              await terminalFetch(
+                token,
+                "/api/terminal/connectivity",
+                {
+                  signal:
+                    controller.signal,
+                },
+              );
+
+            const latencyMs =
+              Math.max(
+                0,
+                Math.round(
+                  performance.now() -
+                    started,
+                ),
+              );
+
+            if (!cancelled) {
+              applyConnectivitySample({
+                at:
+                  Date.now(),
+                ok:
+                  response.ok,
+                latencyMs,
+                offline:
+                  false,
+              });
+            }
+          } catch {
+            if (!cancelled) {
+              applyConnectivitySample({
+                at:
+                  Date.now(),
+                ok: false,
+                latencyMs:
+                  null,
+                offline:
+                  !navigator.onLine,
+              });
+            }
+          } finally {
+            window.clearTimeout(
+              timeout,
+            );
+          }
+        };
+
+      const onOffline =
+        () => {
+          applyConnectivitySample({
+            at:
+              Date.now(),
+            ok: false,
+            latencyMs:
+              null,
+            offline:
+              true,
+          });
+        };
+
+      void probe();
+
+      const timer =
+        window.setInterval(
+          () => {
+            void probe();
+          },
+          5000,
+        );
+
+      window.addEventListener(
+        "offline",
+        onOffline,
+      );
+
+      return () => {
+        cancelled =
+          true;
+        window.clearInterval(
+          timer,
+        );
+        window.removeEventListener(
+          "offline",
+          onOffline,
+        );
+      };
+    },
+    [
+      token,
+      applyConnectivitySample,
     ],
   );
 
@@ -2681,6 +2879,14 @@ export default function ScannerClient() {
       setToken(
         null,
       );
+      setConnectivityHealth(
+        "CHECKING",
+      );
+      setConnectivityLatencyMs(
+        null,
+      );
+      connectivitySamplesRef.current =
+        [];
       setTerminalSession(
         null,
       );
@@ -2729,6 +2935,14 @@ export default function ScannerClient() {
       setToken(
         null,
       );
+      setConnectivityHealth(
+        "CHECKING",
+      );
+      setConnectivityLatencyMs(
+        null,
+      );
+      connectivitySamplesRef.current =
+        [];
       setTerminalSession(
         null,
       );
@@ -2893,6 +3107,17 @@ export default function ScannerClient() {
             ? "Queued for delivery"
             : "No guardian device";
 
+  const connectivityStatusLabel =
+    connectivityHealthLabel(
+      connectivityHealth,
+    );
+
+  const connectivityLatencyLabel =
+    connectivityLatencyMs ===
+      null
+      ? "No response"
+      : `${connectivityLatencyMs} ms`;
+
   const isEarlyDepartureRetry =
     currentAttempt
       ?.attempt
@@ -2957,6 +3182,27 @@ export default function ScannerClient() {
                 </>
               )
             : "Attendance Scanner"}
+        </div>
+
+        <div
+          className={
+            styles.connectivityPanel
+          }
+          data-state={
+            connectivityHealth
+          }
+          aria-live="polite"
+        >
+          <strong>
+            {
+              connectivityStatusLabel
+            }
+          </strong>
+          <span>
+            {
+              connectivityLatencyLabel
+            }
+          </span>
         </div>
 
       </header>

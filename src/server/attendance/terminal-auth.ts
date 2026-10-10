@@ -37,6 +37,9 @@ export interface TerminalAccess {
 
 export async function authenticateTerminalRequest(
   request: NextRequest,
+  options: {
+    touch?: boolean;
+  } = {},
 ): Promise<TerminalAccess | null> {
   const authorization =
     request.headers.get(
@@ -122,32 +125,42 @@ export async function authenticateTerminalRequest(
     return null;
   }
 
-  await db
-    .update(
-      attendanceTerminals,
-    )
-    .set({
-      lastSeenAt: new Date(),
-      updatedAt: new Date(),
-    })
-    .where(
-      and(
-        eq(
-          attendanceTerminals.schoolId,
-          row.schoolId,
+  if (
+    options.touch !==
+      false
+  ) {
+    await db
+      .update(
+        attendanceTerminals,
+      )
+      .set({
+        lastSeenAt:
+          new Date(),
+        updatedAt:
+          new Date(),
+      })
+      .where(
+        and(
+          eq(
+            attendanceTerminals.schoolId,
+            row.schoolId,
+          ),
+          eq(
+            attendanceTerminals.id,
+            row.terminalId,
+          ),
+          eq(
+            attendanceTerminals.status,
+            "ACTIVE",
+          ),
         ),
-        eq(
-          attendanceTerminals.id,
-          row.terminalId,
-        ),
-        eq(
-          attendanceTerminals.status,
-          "ACTIVE",
-        ),
-      ),
-    );
+      );
 
-  await reconcileTerminalHealthNotifications({ schoolId: row.schoolId });
+    await reconcileTerminalHealthNotifications({
+      schoolId:
+        row.schoolId,
+    });
+  }
 
   return {
     terminal: {
