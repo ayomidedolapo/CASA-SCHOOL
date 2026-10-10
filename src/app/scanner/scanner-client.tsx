@@ -27,6 +27,25 @@ import {
   type ConnectivitySample,
 } from "@/scanner/connectivity-health";
 import {
+  continuityPendingCount,
+  continuitySnapshotUsable,
+  deleteContinuityEvents,
+  listContinuityEvents,
+  listPendingContinuityEvents,
+  putContinuityEvent,
+  readContinuitySnapshot,
+  rejectContinuityEvents,
+  saveContinuitySnapshot,
+  clearContinuityStorage,
+  type ContinuityCachedCard,
+  type ContinuityQueuedEvent,
+  type ContinuitySnapshot,
+} from "@/scanner/continuity-storage";
+import {
+  decideContinuityAttendance,
+  hashContinuityCardPayload,
+} from "@/scanner/continuity-card";
+import {
   createScannerRequestId,
   isTerminalCredentialShape,
   scannerReasonMessage,
@@ -81,7 +100,7 @@ function loadQrScannerModule() {
 }
 
 const SCANNER_UI_REVISION =
-  "2026-10-10-m66-connectivity-health";
+  "2026-10-10-m66-offline-continuity";
 
 type Phase =
   | "BOOTING"
@@ -94,6 +113,7 @@ type Phase =
   | "FACE_RETRY"
   | "STAFF"
   | "RESULT"
+  | "CONTINUITY_RESULT"
   | "ERROR";
 
 interface LivenessState {
@@ -121,6 +141,19 @@ interface FinalResult {
     ScannerStudent | null;
   result:
     ScannerPresenceResult;
+}
+
+interface ContinuityResultState {
+  student:
+    ContinuityCachedCard;
+  operation:
+    | "CHECK_IN"
+    | "CHECK_OUT";
+  capturedAt: string;
+  connectivityMode:
+    | "DEGRADED"
+    | "OFFLINE";
+  pendingCount: number;
 }
 
 function displayStudentSex(
@@ -198,6 +231,8 @@ async function terminalFetchWithRetry(
     RequestInit = {},
   maxAttempts =
     3,
+  timeoutMs =
+    0,
 ): Promise<Response> {
   let lastError:
     unknown =
@@ -209,12 +244,53 @@ async function terminalFetchWithRetry(
     attempt++
   ) {
     try {
-      const response =
-        await terminalFetch(
-          token,
-          input,
-          init,
-        );
+      let timer:
+        ReturnType<
+          typeof setTimeout
+        > | null =
+          null;
+
+      const controller =
+        timeoutMs >
+            0 &&
+          !init.signal
+          ? new AbortController()
+          : null;
+
+      if (
+        controller
+      ) {
+        timer =
+          setTimeout(
+            () =>
+              controller.abort(),
+            timeoutMs,
+          );
+      }
+
+      let response:
+        Response;
+
+      try {
+        response =
+          await terminalFetch(
+            token,
+            input,
+            controller
+              ? {
+                  ...init,
+                  signal:
+                    controller.signal,
+                }
+              : init,
+          );
+      } finally {
+        if (timer) {
+          clearTimeout(
+            timer,
+          );
+        }
+      }
 
       if (
         ![500,502,503,504].includes(
@@ -1245,6 +1321,45 @@ export default function ScannerClient() {
     useState(false);
 
   const [
+    continuitySnapshot,
+    setContinuitySnapshot,
+  ] =
+    useState<
+      ContinuitySnapshot | null
+    >(null);
+
+  const [
+    continuityPending,
+    setContinuityPending,
+  ] =
+    useState(0);
+
+  const [
+    continuityRejected,
+    setContinuityRejected,
+  ] =
+    useState(0);
+
+  const [
+    continuitySyncing,
+    setContinuitySyncing,
+  ] =
+    useState(false);
+
+  const [
+    continuityResult,
+    setContinuityResult,
+  ] =
+    useState<
+      ContinuityResultState | null
+    >(null);
+
+  const currentQrPayloadRef =
+    useRef<
+      string | null
+    >(null);
+
+  const [
     connectivityHealth,
     setConnectivityHealth,
   ] =
@@ -1295,6 +1410,120 @@ export default function ScannerClient() {
               history,
             ),
         );
+      },
+      [],
+    );
+
+  const refreshContinuityCounters =
+    useCallback(
+      async () => {
+        const rows =
+          await listContinuityEvents();
+
+        setContinuityPending(
+          rows.filter(
+            (
+              row,
+            ) =>
+              row.state ===
+                "PENDING",
+          ).length,
+        );
+        setContinuityRejected(
+          rows.filter(
+            (
+              row,
+            ) =>
+              row.state ===
+                "REJECTED",
+          ).length,
+        );
+      },
+      [],
+    );
+
+  const loadContinuitySnapshot =
+    useCallback(
+      async (
+        terminalId?:
+          string | null,
+      ) => {
+        try {
+          const snapshot =
+            await readContinuitySnapshot();
+
+          if (
+            continuitySnapshotUsable(
+              snapshot,
+              terminalId,
+            )
+          ) {
+            setContinuitySnapshot(
+              snapshot,
+            );
+            return snapshot;
+          }
+
+          setContinuitySnapshot(
+            null,
+          );
+          return null;
+        } catch {
+          setContinuitySnapshot(
+            null,
+          );
+          return null;
+        }
+      },
+      [],
+    );
+
+  const refreshContinuitySnapshot =
+    useCallback(
+      async (
+        credential:
+          string,
+      ) => {
+        try {
+          const response =
+            await terminalFetch(
+              credential,
+              "/api/terminal/continuity/bootstrap",
+            );
+
+          if (!response.ok) {
+            return null;
+          }
+
+          const snapshot =
+            await parseJson<
+              ContinuitySnapshot
+            >(
+              response,
+            );
+
+          if (
+            !snapshot ||
+            !continuitySnapshotUsable(
+              snapshot,
+              snapshot
+                .terminal
+                .id,
+            )
+          ) {
+            return null;
+          }
+
+          await saveContinuitySnapshot(
+            snapshot,
+          );
+          setContinuitySnapshot(
+            snapshot,
+          );
+          return snapshot;
+        } catch {
+          return null;
+        }
       },
       [],
     );
@@ -1609,10 +1838,69 @@ export default function ScannerClient() {
             saved,
           );
 
+          await refreshContinuityCounters();
+
+          const cached =
+            await loadContinuitySnapshot();
+
+          if (
+            !navigator.onLine &&
+            cached &&
+            !cancelled
+          ) {
+            setTerminalSession({
+              school:
+                cached.school,
+              terminal:
+                cached.terminal,
+              branch:
+                cached.branch,
+              clock:
+                cached.clock,
+              session: {
+                id:
+                  cached.session.id,
+                branchSessionId:
+                  null,
+                status:
+                  "OPEN",
+                mode:
+                  cached.session.mode,
+                policyId:
+                  cached.session.policyId,
+                policyDay:
+                  cached.policyDay,
+              },
+              readiness:
+                null,
+              lateStayOnly:
+                false,
+            });
+            setPhase(
+              "READY",
+            );
+            setMessage(
+              "Offline continuity is active. Face verification is temporarily unavailable; attendance will sync automatically.",
+            );
+            return;
+          }
+
           const refreshed =
             await refreshTerminal(
               saved,
             );
+
+          if (
+            refreshed
+              ?.terminal
+              ?.id
+          ) {
+            await loadContinuitySnapshot(
+              refreshed
+                .terminal
+                .id,
+            );
+          }
 
           if (
             !cancelled &&
@@ -1620,6 +1908,16 @@ export default function ScannerClient() {
           ) {
             await recoverPendingAttempt(
               saved,
+            );
+          } else if (
+            cached &&
+            !cancelled
+          ) {
+            setPhase(
+              "READY",
+            );
+            setMessage(
+              "CASA connectivity is limited. Offline continuity is ready and attendance will sync automatically.",
             );
           }
         } catch {
@@ -1646,6 +1944,8 @@ export default function ScannerClient() {
     [
       refreshTerminal,
       recoverPendingAttempt,
+      loadContinuitySnapshot,
+      refreshContinuityCounters,
     ],
   );
 
@@ -1788,6 +2088,65 @@ export default function ScannerClient() {
 
   useEffect(
     () => {
+      if (
+        !token ||
+        !terminalSession
+          ?.session ||
+        terminalSession
+          .session
+          .status !==
+          "OPEN" ||
+        terminalSession
+          .lateStayOnly ||
+        (
+          connectivityHealth !==
+            "HEALTHY" &&
+          connectivityHealth !==
+            "UNSTABLE"
+        )
+      ) {
+        return;
+      }
+
+      const initialRefresh =
+        window.setTimeout(
+          () => {
+            void refreshContinuitySnapshot(
+              token,
+            );
+          },
+          0,
+        );
+
+      const timer =
+        window.setInterval(
+          () => {
+            void refreshContinuitySnapshot(
+              token,
+            );
+          },
+          300_000,
+        );
+
+      return () => {
+        window.clearTimeout(
+          initialRefresh,
+        );
+        window.clearInterval(
+          timer,
+        );
+      };
+    },
+    [
+      token,
+      terminalSession,
+      connectivityHealth,
+      refreshContinuitySnapshot,
+    ],
+  );
+
+  useEffect(
+    () => {
       if (!token) {
         return;
       }
@@ -1795,6 +2154,17 @@ export default function ScannerClient() {
       const timer =
         setInterval(
           () => {
+            if (
+              connectivityHealth ===
+                "DEGRADED" ||
+              connectivityHealth ===
+                "OFFLINE" ||
+              connectivityHealth ===
+                "RECOVERING"
+            ) {
+              return;
+            }
+
             if (
               phase ===
                 "READY" ||
@@ -1826,6 +2196,7 @@ export default function ScannerClient() {
       token,
       phase,
       refreshTerminal,
+      connectivityHealth,
     ],
   );
 
@@ -1898,10 +2269,49 @@ export default function ScannerClient() {
         setFinalResult(
           null,
         );
+        setContinuityResult(
+          null,
+        );
+        currentQrPayloadRef.current =
+          null;
 
         if (!token) {
           setPhase(
             "UNPROVISIONED",
+          );
+          return;
+        }
+
+        const cached =
+          continuitySnapshotUsable(
+            continuitySnapshot,
+            terminalSession
+              ?.terminal
+              .id ??
+              null,
+          );
+
+        if (
+          cached &&
+          (
+            connectivityHealth ===
+              "DEGRADED" ||
+            connectivityHealth ===
+              "OFFLINE" ||
+            connectivityHealth ===
+              "RECOVERING" ||
+            continuityPending >
+              0
+          )
+        ) {
+          setPhase(
+            "READY",
+          );
+          setMessage(
+            continuityPending >
+              0
+              ? `${continuityPending} attendance event(s) are waiting to sync. Continue scanning; CASA will reconcile them in order.`
+              : "Connectivity continuity is active. Scan the next student card.",
           );
           return;
         }
@@ -1913,6 +2323,10 @@ export default function ScannerClient() {
       [
         token,
         refreshTerminal,
+        continuitySnapshot,
+        terminalSession,
+        connectivityHealth,
+        continuityPending,
       ],
     );
 
@@ -1920,7 +2334,9 @@ export default function ScannerClient() {
     () => {
       if (
         phase !==
-          "RESULT"
+          "RESULT" &&
+        phase !==
+          "CONTINUITY_RESULT"
       ) {
         return;
       }
@@ -1930,7 +2346,10 @@ export default function ScannerClient() {
           () => {
             void resetToReady();
           },
-          6500,
+          phase ===
+            "CONTINUITY_RESULT"
+            ? 2600
+            : 6500,
         );
 
       return () => {
@@ -2009,6 +2428,11 @@ export default function ScannerClient() {
         await storeTerminalCredential(
           candidate,
         );
+        await clearContinuityStorage()
+          .catch(
+            () =>
+              undefined,
+          );
 
         try {
           await navigator.storage
@@ -2054,6 +2478,451 @@ export default function ScannerClient() {
         );
       }
     };
+
+  const continuityModeActive =
+    (
+      connectivityHealth ===
+        "DEGRADED" ||
+      connectivityHealth ===
+        "OFFLINE" ||
+      connectivityHealth ===
+        "RECOVERING" ||
+      continuityPending >
+        0
+    );
+
+  const processContinuityCard =
+    useCallback(
+      async (
+        qrPayload:
+          string,
+        forceMode?:
+          "DEGRADED" |
+          "OFFLINE",
+      ) => {
+        const snapshot =
+          continuitySnapshotUsable(
+            continuitySnapshot,
+            terminalSession
+              ?.terminal
+              .id ??
+              null,
+          )
+            ? continuitySnapshot
+            : await loadContinuitySnapshot(
+                terminalSession
+                  ?.terminal
+                  .id ??
+                  null,
+              );
+
+        if (!snapshot) {
+          setPhase(
+            "ERROR",
+          );
+          setMessage(
+            "Connectivity continuity is not ready on this scanner. Keep the Scanner open until the connection recovers and the continuity cache refreshes.",
+          );
+          return;
+        }
+
+        const tokenHash =
+          await hashContinuityCardPayload(
+            qrPayload,
+          );
+
+        if (!tokenHash) {
+          setPhase(
+            "ERROR",
+          );
+          setMessage(
+            "This is not a valid CASA student card.",
+          );
+          return;
+        }
+
+        const card =
+          snapshot.cards.find(
+            (
+              candidate,
+            ) =>
+              candidate.tokenHash ===
+                tokenHash,
+          );
+
+        if (!card) {
+          setPhase(
+            "ERROR",
+          );
+          setMessage(
+            "This card is not in this scanner's current continuity cache. It may belong to another campus or have changed since the last successful sync.",
+          );
+          return;
+        }
+
+        const queue =
+          await listContinuityEvents();
+
+        const capturedAt =
+          new Date();
+
+        const decision =
+          decideContinuityAttendance({
+            snapshot,
+            card,
+            pending:
+              queue,
+            capturedAt,
+          });
+
+        if (
+          !decision.ok
+        ) {
+          setPhase(
+            "ERROR",
+          );
+          setMessage(
+            decision.message,
+          );
+          return;
+        }
+
+        const mode =
+          forceMode ??
+          (
+            connectivityHealth ===
+              "OFFLINE" ||
+            !navigator.onLine
+              ? "OFFLINE"
+              : "DEGRADED"
+          );
+
+        const event:
+          ContinuityQueuedEvent = {
+            requestId:
+              createScannerRequestId(),
+            sessionId:
+              snapshot.session.id,
+            studentId:
+              card.studentId,
+            tokenHash,
+            operation:
+              decision.operation,
+            timeResult:
+              decision.timeResult,
+            departureResult:
+              decision
+                .departureResult,
+            capturedAt:
+              capturedAt
+                .toISOString(),
+            connectivityMode:
+              mode,
+            cacheIssuedAt:
+              snapshot.serverTime,
+            cacheExpiresAt:
+              snapshot.expiresAt,
+            state:
+              "PENDING",
+            lastErrorCode:
+              null,
+            queuedAt:
+              new Date()
+                .toISOString(),
+          };
+
+        await putContinuityEvent(
+          event,
+        );
+
+        const pending =
+          await continuityPendingCount();
+
+        setContinuityPending(
+          pending,
+        );
+        setContinuityResult({
+          student:
+            card,
+          operation:
+            event.operation,
+          capturedAt:
+            event.capturedAt,
+          connectivityMode:
+            mode,
+          pendingCount:
+            pending,
+        });
+        setCurrentAttempt(
+          null,
+        );
+        setLiveness(
+          null,
+        );
+        setFinalResult(
+          null,
+        );
+        setPhase(
+          "CONTINUITY_RESULT",
+        );
+        setMessage(
+          mode ===
+            "OFFLINE"
+            ? "Attendance captured offline. Face/liveness was skipped and CASA will sync this event automatically when the connection returns."
+            : "Attendance captured in degraded-connectivity mode. Face/liveness was skipped and CASA will reconcile this event automatically.",
+        );
+      },
+      [
+        continuitySnapshot,
+        terminalSession,
+        loadContinuitySnapshot,
+        connectivityHealth,
+      ],
+    );
+
+  const syncContinuityQueue =
+    useCallback(
+      async () => {
+        if (
+          !token ||
+          connectivityHealth !==
+            "HEALTHY" ||
+          continuitySyncing
+        ) {
+          return;
+        }
+
+        setContinuitySyncing(
+          true,
+        );
+
+        try {
+          for (
+            let pass = 0;
+            pass < 20;
+            pass++
+          ) {
+            const pending =
+              await listPendingContinuityEvents(
+                100,
+              );
+
+            if (
+              pending.length ===
+                0
+            ) {
+              break;
+            }
+
+            const response =
+              await terminalFetch(
+                token,
+                "/api/terminal/continuity/sync",
+                {
+                  method:
+                    "POST",
+                  headers: {
+                    "Content-Type":
+                      "application/json",
+                  },
+                  body:
+                    JSON.stringify({
+                      events:
+                        pending.map(
+                          (
+                            event,
+                          ) => ({
+                            requestId:
+                              event.requestId,
+                            sessionId:
+                              event.sessionId,
+                            studentId:
+                              event.studentId,
+                            tokenHash:
+                              event.tokenHash,
+                            operation:
+                              event.operation,
+                            timeResult:
+                              event.timeResult,
+                            departureResult:
+                              event.departureResult,
+                            capturedAt:
+                              event.capturedAt,
+                            connectivityMode:
+                              event.connectivityMode,
+                            cacheIssuedAt:
+                              event.cacheIssuedAt,
+                            cacheExpiresAt:
+                              event.cacheExpiresAt,
+                          }),
+                        ),
+                    }),
+                },
+              );
+
+            const body =
+              await parseJson<{
+                results?: Array<{
+                  requestId:
+                    string;
+                  status:
+                    | "RECORDED"
+                    | "ALREADY_RECORDED"
+                    | "REJECTED";
+                  code?:
+                    string;
+                }>;
+              }>(
+                response,
+              );
+
+            if (
+              !response.ok ||
+              !body?.results
+            ) {
+              break;
+            }
+
+            const settled =
+              body.results
+                .filter(
+                  (
+                    result,
+                  ) =>
+                    result.status ===
+                      "RECORDED" ||
+                    result.status ===
+                      "ALREADY_RECORDED",
+                )
+                .map(
+                  (
+                    result,
+                  ) =>
+                    result.requestId,
+                );
+
+            const rejected =
+              body.results
+                .filter(
+                  (
+                    result,
+                  ) =>
+                    result.status ===
+                      "REJECTED",
+                )
+                .map(
+                  (
+                    result,
+                  ) => ({
+                    requestId:
+                      result.requestId,
+                    code:
+                      result.code ??
+                      "CONTINUITY_REJECTED",
+                  }),
+                );
+
+            await deleteContinuityEvents(
+              settled,
+            );
+            await rejectContinuityEvents(
+              rejected,
+            );
+
+            if (
+              settled.length ===
+                0
+            ) {
+              break;
+            }
+          }
+        } catch {
+          // The queue remains durable and the next healthy probe retries.
+        } finally {
+          await refreshContinuityCounters()
+            .catch(
+              () =>
+                undefined,
+            );
+          setContinuitySyncing(
+            false,
+          );
+        }
+      },
+      [
+        token,
+        connectivityHealth,
+        continuitySyncing,
+        refreshContinuityCounters,
+      ],
+    );
+
+  useEffect(
+    () => {
+      if (
+        connectivityHealth !==
+          "HEALTHY" ||
+        continuityPending <=
+          0
+      ) {
+        return;
+      }
+
+      const syncTimer =
+        window.setTimeout(
+          () => {
+            void syncContinuityQueue();
+          },
+          0,
+        );
+
+      return () =>
+        window.clearTimeout(
+          syncTimer,
+        );
+    },
+    [
+      connectivityHealth,
+      continuityPending,
+      syncContinuityQueue,
+    ],
+  );
+
+  useEffect(
+    () => {
+      if (
+        phase !==
+          "LIVENESS" ||
+        (
+          connectivityHealth !==
+            "DEGRADED" &&
+          connectivityHealth !==
+            "OFFLINE"
+        ) ||
+        !currentQrPayloadRef
+          .current
+      ) {
+        return;
+      }
+
+      const payload =
+        currentQrPayloadRef
+          .current;
+
+      void processContinuityCard(
+        payload,
+        connectivityHealth ===
+          "OFFLINE"
+          ? "OFFLINE"
+          : "DEGRADED",
+      );
+    },
+    [
+      phase,
+      connectivityHealth,
+      processContinuityCard,
+    ],
+  );
 
   const startFace =
     useCallback(
@@ -2155,6 +3024,8 @@ export default function ScannerClient() {
                 method:
                   "POST",
               },
+              2,
+              3000,
             );
 
           const data =
@@ -2171,6 +3042,33 @@ export default function ScannerClient() {
             !response.ok ||
             !data?.liveness
           ) {
+            if (
+              currentQrPayloadRef
+                .current &&
+              (
+                response.status >=
+                  500 ||
+                data?.code ===
+                  "AWS_BIOMETRIC_UNAVAILABLE"
+              ) &&
+              continuitySnapshotUsable(
+                continuitySnapshot,
+                terminalSession
+                  ?.terminal
+                  .id ??
+                  null,
+              )
+            ) {
+              await processContinuityCard(
+                currentQrPayloadRef
+                  .current,
+                navigator.onLine
+                  ? "DEGRADED"
+                  : "OFFLINE",
+              );
+              return;
+            }
+
             setPhase(
               "ERROR",
             );
@@ -2205,6 +3103,27 @@ export default function ScannerClient() {
             "Look at the camera and follow the instructions.",
           );
         } catch {
+          if (
+            currentQrPayloadRef
+              .current &&
+            continuitySnapshotUsable(
+              continuitySnapshot,
+              terminalSession
+                ?.terminal
+                .id ??
+                null,
+            )
+          ) {
+            await processContinuityCard(
+              currentQrPayloadRef
+                .current,
+              navigator.onLine
+                ? "DEGRADED"
+                : "OFFLINE",
+            );
+            return;
+          }
+
           setPhase(
             "ERROR",
           );
@@ -2216,6 +3135,9 @@ export default function ScannerClient() {
       [
         token,
         livenessCameraDeviceId,
+        continuitySnapshot,
+        terminalSession,
+        processContinuityCard,
       ],
     );
 
@@ -2324,6 +3246,18 @@ export default function ScannerClient() {
           return;
         }
 
+        currentQrPayloadRef.current =
+          qrPayload;
+
+        if (
+          continuityModeActive
+        ) {
+          await processContinuityCard(
+            qrPayload,
+          );
+          return;
+        }
+
         setPhase(
           "CARD",
         );
@@ -2355,6 +3289,7 @@ export default function ScannerClient() {
                   }),
               },
               2,
+              2500,
             );
 
           const data =
@@ -2428,13 +3363,31 @@ export default function ScannerClient() {
             data.attempt.id,
           );
         } catch {
+          if (
+            continuitySnapshotUsable(
+              continuitySnapshot,
+              terminalSession
+                ?.terminal
+                .id ??
+                null,
+            )
+          ) {
+            await processContinuityCard(
+              qrPayload,
+              navigator.onLine
+                ? "DEGRADED"
+                : "OFFLINE",
+            );
+            return;
+          }
+
           setPhase(
             "ERROR",
           );
           setMessage(
             navigator.onLine
-              ? "The QR code was read, but the connection to CASA was interrupted. The scanner retried automatically; please try the card again."
-              : "This scanner is offline. Reconnect to the internet, then try the card again.",
+              ? "The QR code was read, but CASA connectivity is too slow and this scanner does not yet have a usable continuity cache."
+              : "This scanner is offline and its continuity cache is unavailable or expired.",
           );
         }
       },
@@ -2442,6 +3395,10 @@ export default function ScannerClient() {
         token,
         phase,
         startFace,
+        continuityModeActive,
+        processContinuityCard,
+        continuitySnapshot,
+        terminalSession,
       ],
     );
 
@@ -2761,6 +3718,10 @@ export default function ScannerClient() {
               data,
           });
 
+          void refreshContinuitySnapshot(
+            token,
+          );
+
           setPhase(
             "RESULT",
           );
@@ -2794,6 +3755,7 @@ export default function ScannerClient() {
         token,
         liveness,
         currentAttempt,
+        refreshContinuitySnapshot,
       ],
     );
 
@@ -2875,6 +3837,11 @@ export default function ScannerClient() {
   const replaceCredential =
     async () => {
       await clearTerminalCredential();
+      await clearContinuityStorage()
+        .catch(
+          () =>
+            undefined,
+        );
 
       setToken(
         null,
@@ -2931,6 +3898,11 @@ export default function ScannerClient() {
       }
 
       await clearTerminalCredential();
+      await clearContinuityStorage()
+        .catch(
+          () =>
+            undefined,
+        );
 
       setToken(
         null,
@@ -3008,7 +3980,14 @@ export default function ScannerClient() {
               "LIVENESS"
             ? "Verify face."
             : phase ===
-                "RESULT"
+                "CONTINUITY_RESULT"
+          ? continuityResult
+              ?.operation ===
+            "CHECK_OUT"
+            ? "Signed out - pending sync."
+            : "Checked in - pending sync."
+          : phase ===
+            "RESULT"
               ? finalResult
                   ?.result
                   .presence
@@ -3203,6 +4182,31 @@ export default function ScannerClient() {
               connectivityLatencyLabel
             }
           </span>
+          <span>
+            {continuitySnapshotUsable(
+              continuitySnapshot,
+              terminalSession
+                ?.terminal
+                .id ??
+                null,
+            )
+              ? `Continuity ready Â· ${continuitySnapshot?.cards.length ?? 0} cards`
+              : "Continuity cache not ready"}
+          </span>
+          {continuityPending >
+            0 && (
+            <span>
+              {continuitySyncing
+                ? `${continuityPending} pending sync Â· syncing`
+                : `${continuityPending} pending sync`}
+            </span>
+          )}
+          {continuityRejected >
+            0 && (
+            <span>
+              {`${continuityRejected} continuity event(s) need review`}
+            </span>
+          )}
         </div>
 
       </header>
@@ -3681,6 +4685,113 @@ export default function ScannerClient() {
           >
             Waiting for staff authorization · do not scan another card · the scanner will continue automatically
           </p>
+        )}
+
+        {phase ===
+          "CONTINUITY_RESULT" &&
+          continuityResult && (
+          <div
+            className={
+              styles.resultFade
+            }
+          >
+            <div
+              className={
+                `${styles.student} ${styles.resultSummary}`
+              }
+            >
+              <dl
+                className={
+                  styles.resultList
+                }
+              >
+                <div
+                  className={
+                    styles.resultRow
+                  }
+                >
+                  <dt>
+                    Name
+                  </dt>
+                  <dd>
+                    {[
+                      continuityResult
+                        .student
+                        .firstName,
+                      continuityResult
+                        .student
+                        .middleName,
+                      continuityResult
+                        .student
+                        .lastName,
+                    ]
+                      .filter(
+                        Boolean,
+                      )
+                      .join(
+                        " ",
+                      )}
+                  </dd>
+                </div>
+                <div
+                  className={
+                    styles.resultRow
+                  }
+                >
+                  <dt>
+                    CASA ID
+                  </dt>
+                  <dd>
+                    {
+                      continuityResult
+                        .student
+                        .casaStudentId
+                    }
+                  </dd>
+                </div>
+                <div
+                  className={
+                    styles.resultRow
+                  }
+                >
+                  <dt>
+                    Attendance
+                  </dt>
+                  <dd>
+                    {continuityResult
+                      .operation ===
+                      "CHECK_OUT"
+                      ? "Signed out"
+                      : "Checked in"}
+                  </dd>
+                </div>
+                <div
+                  className={
+                    styles.resultRow
+                  }
+                >
+                  <dt>
+                    Verification
+                  </dt>
+                  <dd>
+                    Connectivity continuity Â· biometric unavailable
+                  </dd>
+                </div>
+                <div
+                  className={
+                    styles.resultRow
+                  }
+                >
+                  <dt>
+                    Sync
+                  </dt>
+                  <dd>
+                    {`${continuityResult.pendingCount} pending`}
+                  </dd>
+                </div>
+              </dl>
+            </div>
+          </div>
         )}
 
         {phase ===
