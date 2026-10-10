@@ -4309,14 +4309,14 @@ export default function ScannerClient() {
                 .id ??
                 null,
             )
-              ? `Continuity ready Â· ${continuitySnapshot?.cards.length ?? 0} cards`
+              ? `Continuity ready - ${continuitySnapshot?.cards.length ?? 0} cards`
               : "Continuity cache not ready"}
           </span>
           {continuityPending >
             0 && (
             <span>
               {continuitySyncing
-                ? `${continuityPending} pending sync Â· syncing`
+                ? `${continuityPending} pending sync - syncing`
                 : `${continuityPending} pending sync`}
             </span>
           )}
@@ -4895,7 +4895,7 @@ export default function ScannerClient() {
                     Verification
                   </dt>
                   <dd>
-                    Connectivity continuity Â· biometric unavailable
+                    Connectivity continuity - biometric unavailable
                   </dd>
                 </div>
                 <div

@@ -241,6 +241,16 @@ expect(
   "Scanner service worker offline shell policy is missing or caches APIs.",
 );
 
+expect(
+  !scanner.includes(
+    "\u00c2",
+  ) &&
+  !scanner.includes(
+    "\u00c3",
+  ),
+  "Scanner source contains mojibake characters.",
+);
+
 console.log(
   "M66 OFFLINE CONTINUITY CLOSURE SELFTEST = GREEN",
 );
