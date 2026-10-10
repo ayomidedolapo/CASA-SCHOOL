@@ -212,9 +212,28 @@ expect(
 
 expect(
   syncRoute.includes(
-    "runGuardianPushOutbox",
+    "runGuardianPushOutboxForPresenceEvent",
+  ) &&
+  syncRoute.includes(
+    "presenceEventId:",
+  ) &&
+  !syncRoute.includes(
+    "runGuardianPushOutbox({",
   ),
-  "Guardian push delivery is not resumed after continuity sync.",
+  "Continuity recovery must deliver only the exact recorded presence event.",
+);
+
+expect(
+  sync.includes(
+    "CONNECTIVITY_CONTINUITY_TEMPORARY_EXIT",
+  ) &&
+  sync.includes(
+    "'TEMPORARY_EXITED'::attendance_presence_event_type",
+  ) &&
+  sync.includes(
+    "TEMPORARY_RETURN_REQUIRES_FRESH_SCAN",
+  ),
+  "Continuity temporary step-out safety is incomplete.",
 );
 
 expect(

@@ -15,7 +15,7 @@ import {
   authenticateTerminalRequest,
 } from "@/server/attendance/terminal-auth";
 import {
-  runGuardianPushOutbox,
+  runGuardianPushOutboxForPresenceEvent,
 } from "@/server/messaging/guardian-push-worker";
 
 export const dynamic =
@@ -151,31 +151,34 @@ export async function POST(
     );
   }
 
-  let guardianPushDelivery:
-    | Awaited<
-        ReturnType<
-          typeof runGuardianPushOutbox
-        >
-      >
-    | null =
-      null;
+  const guardianPushDelivery = [];
 
-  if (
-    results.some(
-      (
-        result,
-      ) =>
-        result.status ===
-          "RECORDED",
-    )
+  for (
+    const result of
+      results
   ) {
+    if (
+      result.status !==
+        "RECORDED"
+    ) {
+      continue;
+    }
+
     try {
-      guardianPushDelivery =
-        await runGuardianPushOutbox({
-          schoolId:
-            access.school.id,
-          limit: 100,
-        });
+      guardianPushDelivery.push({
+        requestId:
+          result.requestId,
+        presenceEventId:
+          result.presenceEventId,
+        delivery:
+          await runGuardianPushOutboxForPresenceEvent({
+            schoolId:
+              access.school.id,
+            presenceEventId:
+              result.presenceEventId,
+            limit: 50,
+          }),
+      });
     } catch {
       // Durable outbox remains available for the scheduled worker.
     }

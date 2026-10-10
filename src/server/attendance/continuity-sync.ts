@@ -784,6 +784,66 @@ export async function syncContinuityEvent(
       `),
     )[0];
 
+  const temporaryExitCycle =
+    record
+      ? rowsOf<{
+          id: string;
+          status:
+            | "AUTHORIZED"
+            | "OUTSIDE";
+          reason: string;
+          authorized_by_membership_id:
+            string;
+        }>(
+          await db.execute(sql`
+            select
+              cycle.id::text
+                as id,
+              cycle.status::text
+                as status,
+              cycle.reason,
+              cycle.authorized_by_membership_id::text
+                as authorized_by_membership_id
+            from student_temporary_exit_cycles
+              cycle
+            where
+              cycle.school_id =
+                ${access.school.id}::uuid
+              and cycle.session_id =
+                ${input.sessionId}::uuid
+              and cycle.student_id =
+                ${card.student_id}::uuid
+              and cycle.attendance_record_id =
+                ${record.id}::uuid
+              and cycle.status in (
+                'AUTHORIZED',
+                'OUTSIDE'
+              )
+            order by
+              cycle.created_at desc
+            limit 1
+          `),
+        )[0] ??
+        null
+      : null;
+
+  const temporaryExitContinuity =
+    temporaryExitCycle?.status ===
+      "AUTHORIZED" &&
+    input.operation ===
+      "CHECK_OUT";
+
+  if (
+    temporaryExitCycle?.status ===
+      "OUTSIDE"
+  ) {
+    return rejected(
+      input,
+      "TEMPORARY_RETURN_REQUIRES_FRESH_SCAN",
+      "This student is temporarily outside campus. CASA will not mark a return until the student scans again.",
+    );
+  }
+
   if (
     input.operation ===
       "CHECK_IN" &&
@@ -848,6 +908,7 @@ export async function syncContinuityEvent(
   }
 
   if (
+    !temporaryExitContinuity &&
     input.operation ===
       "CHECK_OUT" &&
     record
@@ -901,6 +962,11 @@ export async function syncContinuityEvent(
       null;
 
   if (
+    temporaryExitContinuity
+  ) {
+    departureResult =
+      "NORMAL";
+  } else   if (
     input.operation ===
       "CHECK_IN"
   ) {
@@ -1071,10 +1137,12 @@ export async function syncContinuityEvent(
     randomUUID();
 
   const continuityReason =
-    input.connectivityMode ===
-      "OFFLINE"
-      ? "CONNECTIVITY_CONTINUITY_OFFLINE"
-      : "CONNECTIVITY_CONTINUITY_DEGRADED";
+    temporaryExitContinuity
+      ? "CONNECTIVITY_CONTINUITY_TEMPORARY_EXIT"
+      : input.connectivityMode ===
+          "OFFLINE"
+        ? "CONNECTIVITY_CONTINUITY_OFFLINE"
+        : "CONNECTIVITY_CONTINUITY_DEGRADED";
 
   let row:
     | {
@@ -1088,6 +1156,176 @@ export async function syncContinuityEvent(
     | undefined;
 
   if (
+    temporaryExitContinuity &&
+    temporaryExitCycle &&
+    record
+  ) {
+    row =
+      rowsOf<{
+        recorded:
+          boolean;
+        attendance_record_id:
+          string | null;
+        presence_event_id:
+          string | null;
+      }>(
+        await db.execute(sql`
+          with inserted_attempt as (
+            insert into attendance_verification_attempts (
+              id,
+              school_id,
+              session_id,
+              terminal_id,
+              terminal_request_id,
+              student_id,
+              card_id,
+              scanned_token_hash,
+              operation,
+              card_result,
+              face_result,
+              liveness_result,
+              time_result,
+              departure_result,
+              outcome,
+              reason_code,
+              occurred_at,
+              completed_at,
+              created_at
+            ) values (
+              ${attemptId}::uuid,
+              ${access.school.id}::uuid,
+              ${input.sessionId}::uuid,
+              ${access.terminal.id}::uuid,
+              ${input.requestId},
+              ${card.student_id}::uuid,
+              ${card.card_id}::uuid,
+              ${input.tokenHash},
+              'CHECK_OUT'::attendance_operation,
+              'MATCHED'::attendance_card_result,
+              'UNAVAILABLE'::attendance_face_result,
+              'UNAVAILABLE'::attendance_liveness_result,
+              'NOT_RUN'::attendance_time_result,
+              'NORMAL'::attendance_departure_result,
+              'PENDING'::attendance_attempt_outcome,
+              ${continuityReason},
+              ${input.capturedAt}::timestamptz,
+              null,
+              ${syncAt}::timestamptz
+            )
+            on conflict do nothing
+            returning id
+          ),
+          inserted_event as (
+            insert into student_presence_events (
+              school_id,
+              session_id,
+              student_id,
+              attendance_record_id,
+              attempt_id,
+              terminal_id,
+              card_id,
+              event_type,
+              departure_result,
+              actor_membership_id,
+              reason,
+              occurred_at,
+              created_at
+            )
+            select
+              ${access.school.id}::uuid,
+              ${input.sessionId}::uuid,
+              ${card.student_id}::uuid,
+              ${record.id}::uuid,
+              ${attemptId}::uuid,
+              ${access.terminal.id}::uuid,
+              ${card.card_id}::uuid,
+              'TEMPORARY_EXITED'::attendance_presence_event_type,
+              'NOT_RUN'::attendance_departure_result,
+              ${temporaryExitCycle.authorized_by_membership_id}::uuid,
+              ${temporaryExitCycle.reason},
+              ${input.capturedAt}::timestamptz,
+              ${syncAt}::timestamptz
+            from inserted_attempt
+            on conflict do nothing
+            returning id, attendance_record_id
+          ),
+          updated_cycle as (
+            update student_temporary_exit_cycles
+              cycle
+            set
+              status = 'OUTSIDE',
+              step_out_attempt_id =
+                ${attemptId}::uuid,
+              step_out_event_id =
+                inserted_event.id,
+              stepped_out_at =
+                ${input.capturedAt}::timestamptz,
+              updated_at =
+                ${syncAt}::timestamptz
+            from inserted_event
+            where
+              cycle.school_id =
+                ${access.school.id}::uuid
+              and cycle.id =
+                ${temporaryExitCycle.id}::uuid
+              and cycle.status =
+                'AUTHORIZED'
+            returning cycle.id
+          ),
+          recorded_attempt as (
+            update attendance_verification_attempts
+            set
+              outcome =
+                'RECORDED'::attendance_attempt_outcome,
+              completed_at =
+                ${syncAt}::timestamptz
+            where
+              id =
+                ${attemptId}::uuid
+              and exists (
+                select 1
+                from updated_cycle
+              )
+            returning id
+          ),
+          rejected_attempt as (
+            update attendance_verification_attempts
+            set
+              outcome =
+                'REJECTED'::attendance_attempt_outcome,
+              reason_code =
+                'TEMPORARY_MOVEMENT_STATE_CHANGED',
+              completed_at =
+                ${syncAt}::timestamptz
+            where
+              id =
+                ${attemptId}::uuid
+              and outcome =
+                'PENDING'::attendance_attempt_outcome
+              and not exists (
+                select 1
+                from updated_cycle
+              )
+            returning id
+          )
+          select
+            true as recorded,
+            inserted_event.attendance_record_id::text
+              as attendance_record_id,
+            inserted_event.id::text
+              as presence_event_id
+          from inserted_event
+          join updated_cycle on true
+          union all
+          select
+            false as recorded,
+            null::text as attendance_record_id,
+            null::text as presence_event_id
+          from rejected_attempt
+          limit 1
+        `),
+      )[0];
+  } else   if (
     input.operation ===
       "CHECK_IN"
   ) {
@@ -1505,8 +1743,11 @@ export async function syncContinuityEvent(
     0;
 
   try {
-    notificationQueued =
-      await queueSchoolNotification({
+    if (
+      !temporaryExitContinuity
+    ) {
+      notificationQueued =
+        await queueSchoolNotification({
         schoolId:
           access.school.id,
         studentId:
@@ -1521,24 +1762,38 @@ export async function syncContinuityEvent(
           input.capturedAt,
         connectivityMode:
           input.connectivityMode,
-      });
+        });
+    }
   } catch {
     // Attendance remains authoritative even when notification queueing fails.
   }
 
   const guardianPushQueued =
-    await recordedPushCount({
-      schoolId:
-        access.school.id,
-      studentId:
-        card.student_id,
-      attendanceRecordId:
-        row.attendance_record_id,
-      presenceEventId:
-        row.presence_event_id,
-      operation:
-        input.operation,
-    });
+    temporaryExitContinuity
+      ? await queueGuardianPresencePushBestEffort({
+          schoolId:
+            access.school.id,
+          studentId:
+            card.student_id,
+          attendanceRecordId:
+            row.attendance_record_id,
+          presenceEventId:
+            row.presence_event_id,
+          eventType:
+            "STUDENT_TEMPORARILY_OUT",
+        })
+      : await recordedPushCount({
+          schoolId:
+            access.school.id,
+          studentId:
+            card.student_id,
+          attendanceRecordId:
+            row.attendance_record_id,
+          presenceEventId:
+            row.presence_event_id,
+          operation:
+            input.operation,
+        });
 
   return {
     requestId:
