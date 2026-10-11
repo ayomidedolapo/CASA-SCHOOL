@@ -130,8 +130,17 @@ function monthCells(month: string) {
   return cells;
 }
 
-export default function FinanceIntelligence() {
-  const [tab, setTab] = useState<Tab>("BUDGETS");
+export default function FinanceIntelligence({
+  visibleTabs = ["BUDGETS", "REMINDERS", "CALENDAR"],
+  initialTab = "BUDGETS",
+}: {
+  visibleTabs?: Tab[];
+  initialTab?: Tab;
+}) {
+  const startTab = visibleTabs.includes(initialTab)
+    ? initialTab
+    : visibleTabs[0] ?? "BUDGETS";
+  const [tab, setTab] = useState<Tab>(startTab);
   const [month, setMonth] = useState(currentMonth());
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [busy, setBusy] = useState(false);
@@ -448,7 +457,7 @@ export default function FinanceIntelligence() {
             ["BUDGETS", "Budgeting"],
             ["REMINDERS", "Payment reminders"],
             ["CALENDAR", "Financial calendar"],
-          ] as Array<[Tab, string]>).map(([key, label]) => (
+          ] as Array<[Tab, string]>).filter(([key]) => visibleTabs.includes(key)).map(([key, label]) => (
             <button
               className={`border px-4 py-2 text-xs font-semibold uppercase tracking-[0.08em] ${
                 tab === key

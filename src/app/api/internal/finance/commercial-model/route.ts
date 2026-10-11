@@ -9,6 +9,7 @@ import { getDatabaseUrl } from "@/config/env";
 import { getDb } from "@/db";
 import { requireCasaSuperAdmin } from "@/server/internal/authorization";
 import { casaInternalAuthErrorResponse, casaInternalNoStoreHeaders } from "@/server/internal/http";
+import { allocateSessionSubtotalAcrossBranches, type SessionInvoiceBranch } from "@/server/finance/session-branch-allocation";
 import { writeCasaInternalAudit } from "@/server/internal/onboarding";
 
 export const dynamic = "force-dynamic";
@@ -120,6 +121,39 @@ export async function POST(request:NextRequest){
       and status<>'VOID'
    `))[0]?.invoice_count??0);
 
+   const invoiceBranches=rowsOf<{
+    id:string;
+    name:string;
+    code:string;
+    is_headquarters:boolean;
+    active_student_count:number;
+   }>(await db.execute(sql`
+    select
+      branch.id,
+      branch.name,
+      branch.code,
+      branch.is_headquarters,
+      count(student.id) filter(
+        where student.status='ACTIVE'::student_status
+      )::int as active_student_count
+    from school_branches branch
+    left join students student
+      on student.school_id=branch.school_id
+     and student.home_branch_id=branch.id
+    where branch.school_id=${agreementRow.school_id}::uuid
+      and branch.status='ACTIVE'
+    group by branch.id,branch.name,branch.code,branch.is_headquarters
+    order by branch.is_headquarters desc,branch.name
+   `));
+
+   const branchAllocationInputs:SessionInvoiceBranch[]=invoiceBranches.map((branch)=>({
+    id:branch.id,
+    name:branch.name,
+    code:branch.code,
+    isHeadquarters:Boolean(branch.is_headquarters),
+    activeStudentCount:Number(branch.active_student_count??0),
+   }));
+
    if(existingInvoiceCount>0){
     return NextResponse.json(
       {message:"This session agreement already has a CASA invoice schedule."},
@@ -180,14 +214,21 @@ export async function POST(request:NextRequest){
    const statements=plans.flatMap((plan)=>{
     const invoiceId=randomUUID();
     const invoiceNumber=docNumber("CASA-INV");
-    const lineId=randomUUID();
     const label=agreementRow.service_session_label?.trim()||"CASA service session";
     const suffix=plans.length===2?` - Installment ${plan.sequence} of 2`:"";
-    const description=`CASA School Management & Attendance System - ${label}${suffix}`;
     const vatKobo=Math.round(plan.amountKobo*vatRateBps/10000);
     const totalKobo=plan.amountKobo+vatKobo;
     const issuedOn=plan.dueOn<todayValue?plan.dueOn:todayValue;
-    const notes=`CASA service session: ${label}. Service period ${agreementRow.starts_on} to ${agreementRow.ends_on}. Session/installment subtotal follows the frozen school agreement. VAT is added only at the percentage selected when this invoice schedule is drafted.`;
+    const branchAllocations=allocateSessionSubtotalAcrossBranches(
+      plan.amountKobo,
+      branchAllocationInputs,
+    );
+    const notes=[
+      `CASA service session: ${label}.`,
+      `Service period ${agreementRow.starts_on} to ${agreementRow.ends_on}.`,
+      "Organization branch allocations are explanatory only and together equal the frozen agreed session/installment subtotal; they do not create additional charges.",
+      "VAT is added only at the percentage selected when this invoice schedule is drafted.",
+    ].join(" ");
 
     created.push({
       invoiceId,
@@ -198,34 +239,62 @@ export async function POST(request:NextRequest){
       totalKobo,
     });
 
-    return [
-      client`
-        insert into casa_finance_invoices (
-          id,school_id,invoice_number,status,bill_to_name,bill_to_contact_name,
-          bill_to_email,bill_to_phone,currency,subtotal_kobo,tax_label,tax_rate_bps,
-          tax_kobo,total_kobo,issued_on,due_on,notes,
-          created_by_internal_membership_id,session_agreement_id,installment_sequence
-        )
-        values (
-          ${invoiceId}::uuid,${agreementRow.school_id}::uuid,${invoiceNumber},'DRAFT',
-          ${agreementRow.school_name},${agreementRow.billing_contact_name},
-          ${agreementRow.billing_email},${agreementRow.billing_phone},'NGN',
-          ${plan.amountKobo},'VAT',${vatRateBps},${vatKobo},${totalKobo},
-          ${issuedOn}::date,${plan.dueOn}::date,${notes},
-          ${access.membership.id}::uuid,${input.agreementId}::uuid,${plan.sequence}
-        )
-      `,
-      client`
+    const invoiceStatement=client`
+      insert into casa_finance_invoices (
+        id,school_id,invoice_number,status,bill_to_name,bill_to_contact_name,
+        bill_to_email,bill_to_phone,currency,subtotal_kobo,tax_label,tax_rate_bps,
+        tax_kobo,total_kobo,issued_on,due_on,notes,
+        created_by_internal_membership_id,session_agreement_id,installment_sequence
+      )
+      values (
+        ${invoiceId}::uuid,${agreementRow.school_id}::uuid,${invoiceNumber},'DRAFT',
+        ${agreementRow.school_name},${agreementRow.billing_contact_name},
+        ${agreementRow.billing_email},${agreementRow.billing_phone},'NGN',
+        ${plan.amountKobo},'VAT',${vatRateBps},${vatKobo},${totalKobo},
+        ${issuedOn}::date,${plan.dueOn}::date,${notes},
+        ${access.membership.id}::uuid,${input.agreementId}::uuid,${plan.sequence}
+      )
+    `;
+
+    if(branchAllocations.length===0){
+      const lineId=randomUUID();
+      const description=`CASA School Management & Attendance System - ${label}${suffix}`;
+
+      return [
+        invoiceStatement,
+        client`
+          insert into casa_finance_invoice_lines (
+            id,invoice_id,line_kind,description,quantity,unit_amount_kobo,
+            amount_kobo,pricing_version_id,sort_order
+          )
+          values (
+            ${lineId}::uuid,${invoiceId}::uuid,'SERVICE_FEE',${description},
+            1,${plan.amountKobo},${plan.amountKobo},null,0
+          )
+        `,
+      ];
+    }
+
+    const branchLineStatements=branchAllocations.map((allocation,index)=>{
+      const lineId=randomUUID();
+      const branchLabel=allocation.code
+        ? `${allocation.name} (${allocation.code})`
+        : allocation.name;
+      const description=`CASA School Management & Attendance System - ${branchLabel} - Organization branch allocation${suffix}`;
+
+      return client`
         insert into casa_finance_invoice_lines (
           id,invoice_id,line_kind,description,quantity,unit_amount_kobo,
           amount_kobo,pricing_version_id,sort_order
         )
         values (
           ${lineId}::uuid,${invoiceId}::uuid,'SERVICE_FEE',${description},
-          1,${plan.amountKobo},${plan.amountKobo},null,0
+          1,${allocation.amountKobo},${allocation.amountKobo},null,${index}
         )
-      `,
-    ];
+      `;
+    });
+
+    return [invoiceStatement,...branchLineStatements];
    });
 
    await client.transaction(statements);
@@ -240,6 +309,12 @@ export async function POST(request:NextRequest){
       paymentPlan:agreementRow.payment_plan,
       agreedSessionSubtotalKobo:Number(agreementRow.agreed_total_kobo),
       vatRateBps,
+      organizationBranches:branchAllocationInputs.map((branch)=>({
+        branchId:branch.id,
+        branchName:branch.name,
+        branchCode:branch.code,
+        activeStudentCount:branch.activeStudentCount,
+      })),
       invoices:created,
     },
    });

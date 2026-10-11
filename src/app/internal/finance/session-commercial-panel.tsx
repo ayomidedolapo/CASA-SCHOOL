@@ -122,6 +122,35 @@ function blankAgreement(
   };
 }
 
+
+function agreementForm(agreement: Agreement): AgreementForm {
+  return {
+    agreementId: agreement.id,
+    schoolId: agreement.school_id,
+    serviceSessionLabel: agreement.service_session_label ?? "",
+    startsOn: agreement.starts_on,
+    endsOn: agreement.ends_on,
+    studentCount: String(agreement.student_count),
+    baseSessionFeeNaira: String(Number(agreement.base_session_fee_kobo) / 100),
+    studentRateNaira: String(Number(agreement.student_rate_kobo) / 100),
+    cardServiceFeeNaira: String(
+      Number(agreement.card_service_fee_kobo) / 100,
+    ),
+    agreedTotalNaira: String(Number(agreement.agreed_total_kobo) / 100),
+    paymentPlan: agreement.payment_plan,
+    firstInstallmentNaira: String(
+      Number(agreement.first_installment_kobo) / 100,
+    ),
+    firstDueOn: agreement.first_due_on,
+    secondInstallmentNaira:
+      agreement.second_installment_kobo == null
+        ? ""
+        : String(Number(agreement.second_installment_kobo) / 100),
+    secondDueOn: agreement.second_due_on ?? "",
+    agreementNote: agreement.agreement_note ?? "",
+  };
+}
+
 export default function SessionCommercialPanel() {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [form, setForm] = useState<AgreementForm>(() =>
@@ -280,33 +309,7 @@ export default function SessionCommercialPanel() {
   }
 
   function editAgreement(agreement: Agreement) {
-    setForm({
-      agreementId: agreement.id,
-      schoolId: agreement.school_id,
-      serviceSessionLabel: agreement.service_session_label ?? "",
-      startsOn: agreement.starts_on,
-      endsOn: agreement.ends_on,
-      studentCount: String(agreement.student_count),
-      baseSessionFeeNaira: String(
-        Number(agreement.base_session_fee_kobo) / 100,
-      ),
-      studentRateNaira: String(Number(agreement.student_rate_kobo) / 100),
-      cardServiceFeeNaira: String(
-        Number(agreement.card_service_fee_kobo) / 100,
-      ),
-      agreedTotalNaira: String(Number(agreement.agreed_total_kobo) / 100),
-      paymentPlan: agreement.payment_plan,
-      firstInstallmentNaira: String(
-        Number(agreement.first_installment_kobo) / 100,
-      ),
-      firstDueOn: agreement.first_due_on,
-      secondInstallmentNaira:
-        agreement.second_installment_kobo == null
-          ? ""
-          : String(Number(agreement.second_installment_kobo) / 100),
-      secondDueOn: agreement.second_due_on ?? "",
-      agreementNote: agreement.agreement_note ?? "",
-    });
+    setForm(agreementForm(agreement));
     setNotice("Draft agreement loaded for editing.");
     setError("");
   }
@@ -356,20 +359,18 @@ export default function SessionCommercialPanel() {
         agreementNote: form.agreementNote.trim() || null,
       });
 
+      const body = await fetchSnapshot();
+      applySnapshot(body);
+
+      const savedId = result.agreementId ?? form.agreementId;
+      const saved = body.agreements.find((item) => item.id === savedId);
+      if (saved) setForm(agreementForm(saved));
+
       setNotice(
         form.agreementId
           ? "Draft session agreement updated."
           : "Draft session agreement created.",
       );
-
-      await reload();
-
-      if (!form.agreementId && result.agreementId) {
-        setForm((current) => ({
-          ...current,
-          agreementId: result.agreementId ?? "",
-        }));
-      }
     } catch (caught) {
       setError(
         caught instanceof Error ? caught.message : "Could not save agreement.",
@@ -389,16 +390,22 @@ export default function SessionCommercialPanel() {
 
     try {
       await post({ action, agreementId });
+      const body = await fetchSnapshot();
+      applySnapshot(body);
+
+      if (form.agreementId === agreementId) {
+        const school =
+          body.schools.find((item) => item.id === form.schoolId) ??
+          body.schools[0] ??
+          null;
+        setForm(blankAgreement(body.defaults, school));
+      }
+
       setNotice(
         action === "MARK_AGREED"
           ? "Session agreement marked agreed. Its commercial figures are now frozen."
           : "Session agreement cancelled.",
       );
-      await reload();
-
-      if (form.agreementId === agreementId) {
-        startNewAgreement();
-      }
     } catch (caught) {
       setError(
         caught instanceof Error
@@ -526,7 +533,7 @@ export default function SessionCommercialPanel() {
             </label>
 
             <label className="casa-label mt-4">
-              <span>ID Card Branding & Production Service / session (NGN)</span>
+              <span>Student ID Card Branding & Production Service / session (NGN)</span>
               <input
                 className="casa-field"
                 min="0"
@@ -684,7 +691,7 @@ export default function SessionCommercialPanel() {
               </label>
 
               <label className="casa-label">
-                <span>Card branding & production service (NGN)</span>
+                <span>Student ID Card Branding & Production Service (NGN)</span>
                 <input
                   className="casa-field"
                   min="0"
@@ -981,6 +988,12 @@ export default function SessionCommercialPanel() {
                                 ? "Draft invoice"
                                 : "Draft 2 invoices"}
                             </button>
+                            <p className="basis-full max-w-lg text-[9px] leading-4 text-black/40">
+                              New invoices show explanatory organization-branch
+                              allocations that add up exactly to the agreed
+                              session/installment subtotal. They are not extra
+                              branch charges.
+                            </p>
                           </div>
                         ) : null}
 

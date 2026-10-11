@@ -27,7 +27,8 @@ ok(
 
 ok(
   route.includes("CASA School Management & Attendance System") &&
-  route.includes("Session/installment subtotal follows the frozen school agreement") &&
+  route.includes("Organization branch allocations are explanatory only") &&
+  route.includes("allocateSessionSubtotalAcrossBranches") &&
   route.includes("agreementRow.status!==\"AGREED\""),
   "Frozen agreement invoice protections are incomplete.",
 );
@@ -47,8 +48,10 @@ ok(
 );
 
 ok(
-  workbench.includes("Use the session agreement above") &&
-  workbench.includes("installment_sequence"),
+  workbench.includes("Invoices come from agreed sessions") &&
+  workbench.includes("installment_sequence") &&
+  !workbench.includes("Legacy invoice drafter") &&
+  !workbench.includes("per student / term"),
   "Finance workbench still exposes the old term service path as active.",
 );
 
