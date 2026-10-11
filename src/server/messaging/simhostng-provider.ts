@@ -352,6 +352,10 @@ export function renderAttendanceSms(
         )
       : "";
 
+  const connectivityDelayed =
+    payload.connectivityDelayed ===
+      true;
+
   const eventText =
     input.eventType ===
     "STUDENT_CHECKED_IN"
@@ -367,8 +371,13 @@ export function renderAttendanceSms(
             ? `is back on school premises at ${at}.`
             : `has checked out of school for the day. Time: ${at}.`;
 
+  const deliveredEventText =
+    connectivityDelayed
+      ? `${eventText} Notification delayed due to temporary connectivity loss.`
+      : eventText;
+
   return [
-    `${schoolName}: ${studentName} ${eventText}`,
+    `${schoolName}: ${studentName} ${deliveredEventText}`,
     note || null,
     "CASA - Do not reply.",
   ]

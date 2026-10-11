@@ -246,6 +246,17 @@ export async function queueGuardianPresencePushBestEffort(
                     'HH24:MI'
                   ) ||
                   '.'
+              end ||
+              case
+                when coalesce(
+                  recipients.reason,
+                  ''
+                ) like
+                  'CONNECTIVITY_CONTINUITY_%'
+                  then
+                    ' Notification delayed due to temporary connectivity loss.'
+                else
+                  ''
               end,
               case
                 when recipients.branch_id
@@ -591,6 +602,17 @@ export async function reconcileRecentGuardianPresencePushes(
                     'HH24:MI'
                   ) ||
                   '.'
+              end ||
+              case
+                when coalesce(
+                  recipients.reason,
+                  ''
+                ) like
+                  'CONNECTIVITY_CONTINUITY_%'
+                  then
+                    ' Notification delayed due to temporary connectivity loss.'
+                else
+                  ''
               end,
               case
                 when recipients.branch_id
