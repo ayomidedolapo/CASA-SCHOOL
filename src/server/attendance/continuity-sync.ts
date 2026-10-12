@@ -1690,7 +1690,7 @@ export async function syncContinuityEvent(
               cycle
             set
               status =
-                ${nextCycleStatus}::student_temporary_exit_status,
+                ${nextCycleStatus},
               step_out_attempt_id =
                 case
                   when ${temporaryExitContinuity}
