@@ -101,7 +101,7 @@ function loadQrScannerModule() {
 }
 
 const SCANNER_UI_REVISION =
-  "2026-10-10-m66-offline-continuity";
+  "2026-10-12-m71-continuity-reconciliation-closure";
 
 type Phase =
   | "BOOTING"
@@ -1437,9 +1437,18 @@ export default function ScannerClient() {
   const refreshContinuityCounters =
     useCallback(
       async () => {
-        await recoverRejectedContinuityEvents([
-          "TEMPORARY_RETURN_REQUIRES_FRESH_SCAN",
-        ]);
+        await recoverRejectedContinuityEvents(
+          [
+            "TEMPORARY_RETURN_REQUIRES_FRESH_SCAN",
+            "CONTINUITY_TEMPORARY_EXIT_STATE_INVALID",
+            "CONTINUITY_TEMPORARY_RETURN_STATE_INVALID",
+            "CONTINUITY_ATTEMPT_CONFLICT",
+            "FINALIZATION_STATE_CONFLICT",
+            "CONTINUITY_SYNC_CONFLICT",
+            "TEMPORARY_MOVEMENT_STATE_CHANGED",
+          ],
+          "M71",
+        );
 
         const rows =
           await listContinuityEvents();
@@ -2672,7 +2681,8 @@ export default function ScannerClient() {
           operation:
             event.operation,
           movement:
-            event.movement,
+            event.movement ??
+            null,
           capturedAt:
             event.capturedAt,
           connectivityMode:
@@ -2859,6 +2869,7 @@ export default function ScannerClient() {
                   status:
                     | "RECORDED"
                     | "ALREADY_RECORDED"
+                    | "SUPERSEDED"
                     | "DEFERRED"
                     | "REJECTED";
                   code?:
@@ -2884,7 +2895,9 @@ export default function ScannerClient() {
                     result.status ===
                       "RECORDED" ||
                     result.status ===
-                      "ALREADY_RECORDED",
+                      "ALREADY_RECORDED" ||
+                    result.status ===
+                      "SUPERSEDED",
                 )
                 .map(
                   (
@@ -2923,6 +2936,8 @@ export default function ScannerClient() {
 
             if (
               settled.length ===
+                0 &&
+              rejected.length ===
                 0
             ) {
               break;

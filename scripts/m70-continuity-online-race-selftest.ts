@@ -136,7 +136,7 @@ expect(
     guardBlock.includes(
       "now() -\n                interval '2 minutes'",
     ) &&
-    guardBlock.includes(
+    !guardBlock.includes(
       "attempt.occurred_at >\n              ${input.capturedAt}::timestamptz",
     ) &&
     !guardBlock.includes(
@@ -145,7 +145,7 @@ expect(
     !guardBlock.includes(
       "TEMPORARY_RETURN_AUTHORIZED",
     ),
-  "Server live-online deferral boundary is incomplete or can be permanently blocked by a stale temporary attempt.",
+  "Server live-online deferral boundary is incomplete or can still be permanently blocked by an abandoned older attempt.",
 );
 
 expect(

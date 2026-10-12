@@ -128,6 +128,18 @@ export type ContinuitySyncResult =
   | {
       requestId: string;
       status:
+        "SUPERSEDED";
+      replayed: true;
+      operation:
+        | "CHECK_IN"
+        | "CHECK_OUT";
+      code:
+        "CONTINUITY_SUPERSEDED_BY_AUTHORITATIVE_STATE";
+      capturedAt: string;
+    }
+  | {
+      requestId: string;
+      status:
         "DEFERRED";
       replayed: false;
       code: string;
@@ -160,6 +172,26 @@ function rejected(
     replayed,
     code,
     message,
+    capturedAt:
+      input.capturedAt,
+  };
+}
+
+function superseded(
+  input:
+    ContinuitySyncInput,
+): ContinuitySyncResult {
+  return {
+    requestId:
+      input.requestId,
+    status:
+      "SUPERSEDED",
+    replayed:
+      true,
+    operation:
+      input.operation,
+    code:
+      "CONTINUITY_SUPERSEDED_BY_AUTHORITATIVE_STATE",
     capturedAt:
       input.capturedAt,
   };
@@ -996,11 +1028,14 @@ export async function syncContinuityEvent(
           id: string;
           status:
             | "AUTHORIZED"
-            | "OUTSIDE";
+            | "OUTSIDE"
+            | "RETURNED";
           reason: string;
           authorized_by_membership_id:
             string;
           stepped_out_at:
+            string | Date | null;
+          returned_at:
             string | Date | null;
           created_at:
             string | Date;
@@ -1015,6 +1050,7 @@ export async function syncContinuityEvent(
               cycle.authorized_by_membership_id::text
                 as authorized_by_membership_id,
               cycle.stepped_out_at,
+              cycle.returned_at,
               cycle.created_at
             from student_temporary_exit_cycles
               cycle
@@ -1029,7 +1065,8 @@ export async function syncContinuityEvent(
                 ${record.id}::uuid
               and cycle.status in (
                 'AUTHORIZED',
-                'OUTSIDE'
+                'OUTSIDE',
+                'RETURNED'
               )
             order by
               cycle.created_at desc
@@ -1066,6 +1103,67 @@ export async function syncContinuityEvent(
               .stepped_out_at,
           )
         : null;
+
+  const returnedAt =
+    temporaryExitCycle
+      ?.returned_at instanceof
+        Date
+      ? temporaryExitCycle
+          .returned_at
+      : temporaryExitCycle
+          ?.returned_at
+        ? new Date(
+            temporaryExitCycle
+              .returned_at,
+          )
+        : null;
+
+  if (
+    input.movement ===
+      "TEMPORARY_EXIT" &&
+    temporaryExitCycle &&
+    cycleCreatedAt &&
+    !Number.isNaN(
+      cycleCreatedAt.getTime(),
+    ) &&
+    capturedAt >=
+      cycleCreatedAt &&
+    (
+      temporaryExitCycle.status ===
+        "OUTSIDE" ||
+      temporaryExitCycle.status ===
+        "RETURNED"
+    ) &&
+    steppedOutAt &&
+    !Number.isNaN(
+      steppedOutAt.getTime(),
+    )
+  ) {
+    return superseded(
+      input,
+    );
+  }
+
+  if (
+    input.movement ===
+      "TEMPORARY_RETURN" &&
+    temporaryExitCycle?.status ===
+      "RETURNED" &&
+    steppedOutAt &&
+    !Number.isNaN(
+      steppedOutAt.getTime(),
+    ) &&
+    capturedAt >=
+      steppedOutAt &&
+    returnedAt &&
+    !Number.isNaN(
+      returnedAt.getTime(),
+    )
+  ) {
+    return superseded(
+      input,
+    );
+  }
 
   const movementResolution =
     resolveContinuityMovementIntent({
@@ -1245,8 +1343,6 @@ export async function syncContinuityEvent(
             'CONNECTIVITY_CONTINUITY_'
           and (
             attempt.occurred_at >
-              ${input.capturedAt}::timestamptz
-            or attempt.occurred_at >
               now() -
                 interval '2 minutes'
             or exists (

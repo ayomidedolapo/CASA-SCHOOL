@@ -88,7 +88,7 @@ export interface ContinuityQueuedEvent {
   operation:
     | "CHECK_IN"
     | "CHECK_OUT";
-  movement:
+  movement?:
     | "TEMPORARY_EXIT"
     | "TEMPORARY_RETURN"
     | null;
@@ -109,6 +109,10 @@ export interface ContinuityQueuedEvent {
     | "PENDING"
     | "REJECTED";
   lastErrorCode:
+    string | null;
+  recoveryRevision?:
+    string | null;
+  recoverySourceRequestId?:
     string | null;
   queuedAt: string;
 }
@@ -613,6 +617,8 @@ export async function rejectContinuityEvents(
 
 export async function recoverRejectedContinuityEvents(
   codes: string[],
+  recoveryRevision?:
+    string,
 ): Promise<number> {
   if (codes.length === 0) {
     return 0;
@@ -657,19 +663,49 @@ export async function recoverRejectedContinuityEvents(
                 row.lastErrorCode &&
                 codes.includes(
                   row.lastErrorCode,
+                ) &&
+                (
+                  !recoveryRevision ||
+                  row.recoveryRevision !==
+                    recoveryRevision
                 )
               ) {
+                const recoveredRequestId =
+                  recoveryRevision
+                    ? crypto.randomUUID()
+                    : row.requestId;
+
+                if (
+                  recoveredRequestId !==
+                    row.requestId
+                ) {
+                  store.delete(
+                    row.requestId,
+                  );
+                }
+
                 store.put({
                   ...row,
+                  requestId:
+                    recoveredRequestId,
+                  recoverySourceRequestId:
+                    recoveryRevision
+                      ? row.recoverySourceRequestId ??
+                        row.requestId
+                      : row.recoverySourceRequestId ??
+                        null,
                   movement:
                     row.lastErrorCode ===
                       "TEMPORARY_RETURN_REQUIRES_FRESH_SCAN"
                       ? "TEMPORARY_RETURN"
-                      : row.movement ??
-                        null,
+                      : row.movement,
                   state:
                     "PENDING",
                   lastErrorCode:
+                    null,
+                  recoveryRevision:
+                    recoveryRevision ??
+                    row.recoveryRevision ??
                     null,
                 });
                 recovered += 1;

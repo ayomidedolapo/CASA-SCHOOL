@@ -28,7 +28,6 @@ const panel = source("src/app/internal/finance/session-commercial-panel.tsx");
 const allocation = source("src/server/finance/session-branch-allocation.ts");
 
 expect(
-  scanner.includes("2026-10-10-m66-offline-continuity") &&
   scanner.includes("connectivityPanel") &&
   scanner.includes("Offline attendance backup active") &&
   scanner.includes("Offline attendance backup unavailable") &&
