@@ -2871,7 +2871,7 @@ export default function ScannerClient() {
                     }),
                 },
                 1,
-                5_000,
+                15_000,
               );
 
             const body =
@@ -4521,10 +4521,12 @@ export default function ScannerClient() {
           )}
           {continuityPending >
             0 && (
-            <span>
-              {continuitySyncing
-                ? `${continuityPending} pending sync - syncing`
-                : `${continuityPending} pending sync`}
+            <span
+              aria-busy={
+                continuitySyncing
+              }
+            >
+              {`${continuityPending} pending sync - retrying automatically`}
             </span>
           )}
           {continuityRejected >

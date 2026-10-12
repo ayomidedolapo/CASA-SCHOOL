@@ -1,4 +1,5 @@
 import {
+  after,
   NextRequest,
   NextResponse,
 } from "next/server";
@@ -144,7 +145,13 @@ export async function POST(
     );
   }
 
-  const results = [];
+  const results:
+    Awaited<
+      ReturnType<
+        typeof syncContinuityEvent
+      >
+    >[] =
+      [];
 
   for (
     const event of
@@ -158,43 +165,54 @@ export async function POST(
     );
   }
 
-  const guardianPushDelivery = [];
+  const hasRecordedResult =
+    results.some(
+      (
+        result,
+      ) =>
+        result.status ===
+          "RECORDED",
+    );
 
-  for (
-    const result of
-      results
+  if (
+    hasRecordedResult
   ) {
-    if (
-      result.status !==
-        "RECORDED"
-    ) {
-      continue;
-    }
+    after(
+      async () => {
+        for (
+          const result of
+            results
+        ) {
+          if (
+            result.status !==
+              "RECORDED"
+          ) {
+            continue;
+          }
 
-    try {
-      guardianPushDelivery.push({
-        requestId:
-          result.requestId,
-        presenceEventId:
-          result.presenceEventId,
-        delivery:
-          await runGuardianPushOutboxForPresenceEvent({
-            schoolId:
-              access.school.id,
-            presenceEventId:
-              result.presenceEventId,
-            limit: 50,
-          }),
-      });
-    } catch {
-      // Durable outbox remains available for the scheduled worker.
-    }
+          try {
+            await runGuardianPushOutboxForPresenceEvent({
+              schoolId:
+                access.school.id,
+              presenceEventId:
+                result.presenceEventId,
+              limit: 50,
+            });
+          } catch {
+            // The durable outbox and scheduled worker remain authoritative.
+          }
+        }
+      },
+    );
   }
 
   return NextResponse.json(
     {
       results,
-      guardianPushDelivery,
+      guardianPushDelivery:
+        [],
+      guardianPushDeliveryDeferred:
+        hasRecordedResult,
       serverTime:
         new Date()
           .toISOString(),

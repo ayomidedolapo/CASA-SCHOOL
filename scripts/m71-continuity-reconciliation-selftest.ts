@@ -12,6 +12,12 @@ const scanner = source("src/app/scanner/scanner-client.tsx");
 const storage = source("src/scanner/continuity-storage.ts");
 const sync = source("src/server/attendance/continuity-sync.ts");
 const route = source("src/app/api/terminal/continuity/sync/route.ts");
+const normalizedRoute =
+  route.replace(
+    /\s+/g,
+    " ",
+  );
+
 const m70 = source("scripts/m70-continuity-online-race-selftest.ts");
 const temporaryExit = source("src/server/attendance/temporary-exit.ts");
 const guardianPresence = source("src/server/messaging/guardian-presence-push.ts");
@@ -154,7 +160,9 @@ expect(
 );
 
 expect(
-  route.includes('result.status !==\n        "RECORDED"') &&
+  normalizedRoute.includes(
+    'result.status !== "RECORDED"',
+  ) &&
   sync.includes("queueTemporaryMovementNotification") &&
   sync.includes("queueGuardianPresencePushBestEffort") &&
   sync.includes("queueSchoolMovementNotifications") &&

@@ -183,8 +183,11 @@ expect(
 );
 
 expect(
-  route.includes(
-    "result.status !==\n        \"RECORDED\"",
+  route.replace(
+    /\s+/g,
+    " ",
+  ).includes(
+    'result.status !== "RECORDED"',
   ) &&
     sync.includes(
       "queueTemporaryMovementNotification",

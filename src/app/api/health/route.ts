@@ -11,6 +11,8 @@ const noStoreHeaders = {
     "no-store, no-cache, must-revalidate, proxy-revalidate",
   "X-CASA-Release-Revision":
     "M73",
+  "X-CASA-Continuity-Sync-Revision":
+    "M74",
 } as const;
 
 export async function GET() {
