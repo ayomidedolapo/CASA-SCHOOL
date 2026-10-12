@@ -27,24 +27,82 @@ interface RouteContext {
   }>;
 }
 
-function notFound(
+type PublicCardStatus =
+  | "READY_FOR_ACTIVATION"
+  | "ACTIVE"
+  | "LOST"
+  | "REVOKED"
+  | "REPLACED"
+  | "EXPIRED";
+
+const revisionHeaders = {
+  "Cache-Control":
+    "private, no-store",
+  "X-Robots-Tag":
+    "noindex, nofollow, noarchive",
+  "Referrer-Policy":
+    "no-referrer",
+  "X-CASA-Card-Preview-Revision":
+    "M72",
+} as const;
+
+function publicCardError(
+  status:
+    number,
   state:
+    string,
+  message:
     string,
 ) {
   return new NextResponse(
-    "Not found",
+    message,
     {
-      status: 404,
+      status,
       headers: {
-        "Cache-Control":
-          "private, no-store",
-        "X-Robots-Tag":
-          "noindex, nofollow, noarchive",
+        ...revisionHeaders,
+        "Content-Type":
+          "text/plain; charset=utf-8",
         "X-CASA-Card-State":
           state,
       },
     },
   );
+}
+
+function inactiveCardResponse(
+  status:
+    Exclude<
+      PublicCardStatus,
+      | "READY_FOR_ACTIVATION"
+      | "ACTIVE"
+    >,
+) {
+  switch (status) {
+    case "LOST":
+      return publicCardError(
+        410,
+        "CARD_LOST",
+        "This student card has been marked lost and is no longer valid.",
+      );
+    case "REVOKED":
+      return publicCardError(
+        410,
+        "CARD_REVOKED",
+        "This student card has been revoked and is no longer valid.",
+      );
+    case "REPLACED":
+      return publicCardError(
+        410,
+        "CARD_REPLACED",
+        "This student card has been replaced and is no longer valid. Please use the current card.",
+      );
+    case "EXPIRED":
+      return publicCardError(
+        410,
+        "CARD_EXPIRED",
+        "This student card has expired and is no longer valid.",
+      );
+  }
 }
 
 export async function GET(
@@ -63,8 +121,10 @@ export async function GET(
       publicKey,
     )
   ) {
-    return notFound(
+    return publicCardError(
+      404,
       "INVALID_PUBLIC_KEY",
+      "This student card link is invalid.",
     );
   }
 
@@ -77,6 +137,8 @@ export async function GET(
           studentCardProductionJobs.schoolId,
         studentId:
           studentCardProductionJobs.studentId,
+        cardStatus:
+          studentIdentityCards.status,
       })
       .from(
         studentCardProductionJobs,
@@ -95,15 +157,9 @@ export async function GET(
         ),
       )
       .where(
-        and(
-          eq(
-            studentCardProductionJobs.publicAccessKey,
-            publicKey,
-          ),
-          eq(
-            studentIdentityCards.status,
-            "ACTIVE",
-          ),
+        eq(
+          studentCardProductionJobs.publicAccessKey,
+          publicKey,
         ),
       )
       .limit(1);
@@ -112,8 +168,25 @@ export async function GET(
     rows[0];
 
   if (!job) {
-    return notFound(
-      "CARD_PUBLIC_ARTIFACT_INACTIVE",
+    return publicCardError(
+      404,
+      "CARD_PUBLIC_ARTIFACT_NOT_FOUND",
+      "This student card link was not found.",
+    );
+  }
+
+  const cardStatus =
+    job.cardStatus as
+      PublicCardStatus;
+
+  if (
+    cardStatus !==
+      "READY_FOR_ACTIVATION" &&
+    cardStatus !==
+      "ACTIVE"
+  ) {
+    return inactiveCardResponse(
+      cardStatus,
     );
   }
 
@@ -128,8 +201,10 @@ export async function GET(
     });
 
   if (!preview) {
-    return notFound(
-      "CARD_PREVIEW_UNAVAILABLE",
+    return publicCardError(
+      503,
+      "CARD_PREVIEW_TEMPORARILY_UNAVAILABLE",
+      "This student card is valid, but its preview is temporarily unavailable.",
     );
   }
 
@@ -140,18 +215,18 @@ export async function GET(
     {
       status: 200,
       headers: {
+        ...revisionHeaders,
         "Content-Type":
           "image/png",
         "Content-Disposition":
           'inline; filename="casa-student-id-card.png"',
-        "Cache-Control":
-          "private, no-store",
-        "X-Robots-Tag":
-          "noindex, nofollow, noarchive",
-        "Referrer-Policy":
-          "no-referrer",
         "X-CASA-Card-Preview":
           "PUBLIC_WATERMARKED_QR",
+        "X-CASA-Card-State":
+          cardStatus ===
+            "ACTIVE"
+            ? "CARD_ACTIVE"
+            : "CARD_READY_FOR_ACTIVATION",
       },
     },
   );
