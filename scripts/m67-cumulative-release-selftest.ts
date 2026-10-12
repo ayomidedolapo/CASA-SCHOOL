@@ -30,10 +30,13 @@ const allocation = source("src/server/finance/session-branch-allocation.ts");
 expect(
   scanner.includes("2026-10-10-m66-offline-continuity") &&
   scanner.includes("connectivityPanel") &&
-  scanner.includes("Continuity ready") &&
+  scanner.includes("Offline attendance backup active") &&
+  scanner.includes("Offline attendance backup unavailable") &&
+  !scanner.includes("Continuity ready -") &&
+  !scanner.includes("cards.length ?? 0") &&
   scanner.includes("Offline continuity is active") &&
   scanner.includes("pending sync"),
-  "PROTECTED REGRESSION: M66 scanner network reader/offline continuity UI disappeared.",
+  "PROTECTED REGRESSION: M66/M68 scanner network reader/offline backup UI disappeared.",
 );
 
 expect(
@@ -60,7 +63,10 @@ expect(
 expect(
   sync.includes("CONNECTIVITY_CONTINUITY_OFFLINE") &&
   sync.includes("CONNECTIVITY_CONTINUITY_TEMPORARY_EXIT") &&
-  sync.includes("TEMPORARY_RETURN_REQUIRES_FRESH_SCAN") &&
+  sync.includes("CONNECTIVITY_CONTINUITY_TEMPORARY_RETURN") &&
+  sync.includes("TEMPORARY_RETURNED") &&
+  sync.includes("STUDENT_RETURNED_TO_CAMPUS") &&
+  !sync.includes("TEMPORARY_RETURN_REQUIRES_FRESH_SCAN") &&
   syncRoute.includes("runGuardianPushOutboxForPresenceEvent"),
   "PROTECTED REGRESSION: M66 continuity sync/temporary movement safety disappeared.",
 );

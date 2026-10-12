@@ -35,6 +35,7 @@ import {
   putContinuityEvent,
   readContinuitySnapshot,
   rejectContinuityEvents,
+  recoverRejectedContinuityEvents,
   saveContinuitySnapshot,
   clearContinuityStorage,
   type ContinuityCachedCard,
@@ -149,6 +150,10 @@ interface ContinuityResultState {
   operation:
     | "CHECK_IN"
     | "CHECK_OUT";
+  movement:
+    | "TEMPORARY_EXIT"
+    | "TEMPORARY_RETURN"
+    | null;
   capturedAt: string;
   connectivityMode:
     | "DEGRADED"
@@ -1429,6 +1434,10 @@ export default function ScannerClient() {
   const refreshContinuityCounters =
     useCallback(
       async () => {
+        await recoverRejectedContinuityEvents([
+          "TEMPORARY_RETURN_REQUIRES_FRESH_SCAN",
+        ]);
+
         const rows =
           await listContinuityEvents();
 
@@ -2620,6 +2629,9 @@ export default function ScannerClient() {
             tokenHash,
             operation:
               decision.operation,
+            movement:
+              decision.movement ??
+              null,
             timeResult:
               decision.timeResult,
             departureResult:
@@ -2658,6 +2670,8 @@ export default function ScannerClient() {
             card,
           operation:
             event.operation,
+          movement:
+            event.movement,
           capturedAt:
             event.capturedAt,
           connectivityMode:
@@ -2678,10 +2692,16 @@ export default function ScannerClient() {
           "CONTINUITY_RESULT",
         );
         setMessage(
-          mode ===
-            "OFFLINE"
-            ? "Attendance captured offline. Face/liveness was skipped and CASA will sync this event automatically when the connection returns."
-            : "Attendance captured in degraded-connectivity mode. Face/liveness was skipped and CASA will reconcile this event automatically.",
+          event.movement ===
+            "TEMPORARY_EXIT"
+            ? "Temporary step-out captured. CASA will sync it automatically when connectivity is available."
+            : event.movement ===
+                "TEMPORARY_RETURN"
+              ? "Return to campus captured. CASA will sync it automatically when connectivity is available."
+              : mode ===
+                  "OFFLINE"
+                ? "Attendance captured offline. Face/liveness was skipped and CASA will sync this event automatically when the connection returns."
+                : "Attendance captured in degraded-connectivity mode. Face/liveness was skipped and CASA will reconcile this event automatically.",
         );
       },
       [
@@ -4301,17 +4321,26 @@ export default function ScannerClient() {
               connectivityLatencyLabel
             }
           </span>
-          <span>
-            {continuitySnapshotUsable(
-              continuitySnapshot,
-              terminalSession
-                ?.terminal
-                .id ??
-                null,
-            )
-              ? `Continuity ready - ${continuitySnapshot?.cards.length ?? 0} cards`
-              : "Continuity cache not ready"}
-          </span>
+          {(
+            connectivityHealth ===
+              "DEGRADED" ||
+            connectivityHealth ===
+              "OFFLINE" ||
+            connectivityHealth ===
+              "RECOVERING"
+          ) && (
+            <span>
+              {continuitySnapshotUsable(
+                continuitySnapshot,
+                terminalSession
+                  ?.terminal
+                  .id ??
+                  null,
+              )
+                ? "Offline attendance backup active"
+                : "Offline attendance backup unavailable"}
+            </span>
+          )}
           {continuityPending >
             0 && (
             <span>
@@ -4880,10 +4909,18 @@ export default function ScannerClient() {
                   </dt>
                   <dd>
                     {continuityResult
-                      .operation ===
-                      "CHECK_OUT"
-                      ? "Signed out"
-                      : "Checked in"}
+                      .movement ===
+                      "TEMPORARY_EXIT"
+                      ? "Stepped out temporarily"
+                      : continuityResult
+                          .movement ===
+                          "TEMPORARY_RETURN"
+                        ? "Returned to campus"
+                        : continuityResult
+                            .operation ===
+                            "CHECK_OUT"
+                          ? "Signed out"
+                          : "Checked in"}
                   </dd>
                 </div>
                 <div

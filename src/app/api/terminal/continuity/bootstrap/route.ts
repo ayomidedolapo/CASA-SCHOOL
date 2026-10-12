@@ -68,6 +68,10 @@ interface CachedCardRow {
     | "ON_CAMPUS"
     | "SIGNED_OUT"
     | null;
+  temporaryMovementStatus:
+    | "AUTHORIZED"
+    | "OUTSIDE"
+    | null;
 }
 
 export async function GET(
@@ -145,7 +149,9 @@ export async function GET(
           student.last_name
             as "lastName",
           record.presence_state::text
-            as "presenceState"
+            as "presenceState",
+          temporary_cycle.status::text
+            as "temporaryMovementStatus"
         from student_identity_cards
           card
         join students
@@ -198,6 +204,29 @@ export async function GET(
              ${active.session.id}::uuid
          and record.student_id =
              student.id
+        left join lateral (
+          select
+            cycle.status
+          from student_temporary_exit_cycles
+            cycle
+          where
+            cycle.school_id =
+              student.school_id
+            and cycle.session_id =
+              ${active.session.id}::uuid
+            and cycle.student_id =
+              student.id
+            and cycle.attendance_record_id =
+              record.id
+            and cycle.status in (
+              'AUTHORIZED',
+              'OUTSIDE'
+            )
+          order by
+            cycle.created_at desc
+          limit 1
+        ) temporary_cycle
+          on true
         where
           card.school_id =
             ${access.school.id}::uuid

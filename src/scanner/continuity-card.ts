@@ -204,11 +204,75 @@ function effectivePresenceState(
     const event of
       studentEvents
   ) {
+    if (event.movement) {
+      continue;
+    }
+
     state =
       event.operation ===
         "CHECK_IN"
         ? "ON_CAMPUS"
         : "SIGNED_OUT";
+  }
+
+  return state;
+}
+
+function effectiveTemporaryMovementStatus(
+  card:
+    ContinuityCachedCard,
+  pending:
+    ContinuityQueuedEvent[],
+):
+  | "AUTHORIZED"
+  | "OUTSIDE"
+  | "RETURN_PENDING"
+  | null {
+  let state:
+    | "AUTHORIZED"
+    | "OUTSIDE"
+    | "RETURN_PENDING"
+    | null =
+    card.temporaryMovementStatus ??
+    null;
+
+  const studentEvents =
+    pending
+      .filter(
+        (
+          event,
+        ) =>
+          event.studentId ===
+            card.studentId &&
+          event.state ===
+            "PENDING",
+      )
+      .sort(
+        (
+          left,
+          right,
+        ) =>
+          Date.parse(
+            left.capturedAt,
+          ) -
+          Date.parse(
+            right.capturedAt,
+          ),
+      );
+
+  for (const event of studentEvents) {
+    if (
+      event.movement ===
+        "TEMPORARY_EXIT"
+    ) {
+      state = "OUTSIDE";
+    } else if (
+      event.movement ===
+        "TEMPORARY_RETURN"
+    ) {
+      state =
+        "RETURN_PENDING";
+    }
   }
 
   return state;
@@ -227,6 +291,9 @@ export type ContinuityDecision =
       departureResult:
         | "NOT_RUN"
         | "NORMAL";
+      movement?:
+        | "TEMPORARY_EXIT"
+        | "TEMPORARY_RETURN";
     }
   | {
       ok: false;
@@ -258,6 +325,59 @@ export function decideContinuityAttendance(
       card,
       pending,
     );
+
+  const movementState =
+    effectiveTemporaryMovementStatus(
+      card,
+      pending,
+    );
+
+  if (
+    movementState ===
+      "RETURN_PENDING"
+  ) {
+    return {
+      ok: false,
+      code:
+        "TEMPORARY_RETURN_SYNC_PENDING",
+      message:
+        "The return to campus has already been captured and is waiting to sync.",
+    };
+  }
+
+  if (
+    movementState ===
+      "OUTSIDE"
+  ) {
+    return {
+      ok: true,
+      operation:
+        "CHECK_IN",
+      timeResult:
+        "NOT_RUN",
+      departureResult:
+        "NOT_RUN",
+      movement:
+        "TEMPORARY_RETURN",
+    };
+  }
+
+  if (
+    movementState ===
+      "AUTHORIZED"
+  ) {
+    return {
+      ok: true,
+      operation:
+        "CHECK_OUT",
+      timeResult:
+        "NOT_RUN",
+      departureResult:
+        "NORMAL",
+      movement:
+        "TEMPORARY_EXIT",
+    };
+  }
 
   if (
     state ===

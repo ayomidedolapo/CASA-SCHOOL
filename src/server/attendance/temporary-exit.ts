@@ -209,7 +209,7 @@ export type TemporaryMovement =
   | "TEMPORARY_EXIT"
   | "TEMPORARY_RETURN";
 
-async function queueSchoolMovementNotifications(input: {
+export async function queueSchoolMovementNotifications(input: {
   schoolId: string;
   branchId: string;
   studentId: string;

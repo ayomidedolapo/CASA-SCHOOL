@@ -25,6 +25,10 @@ import {
   resolveTransportPunctuality,
 } from "@/server/attendance/transport-punctuality";
 import {
+  queueSchoolMovementNotifications,
+  type TemporaryMovement,
+} from "@/server/attendance/temporary-exit";
+import {
   queueGuardianPresencePushBestEffort,
 } from "@/server/messaging/guardian-presence-push";
 
@@ -170,7 +174,10 @@ async function existingResult(
             attempt.outcome::text
               as outcome,
             attempt.reason_code,
-            record.id::text
+            coalesce(
+              record.id,
+              event.attendance_record_id
+            )::text
               as attendance_record_id,
             event.id::text
               as presence_event_id
@@ -391,6 +398,169 @@ async function queueSchoolNotification(
               'casaStudentId',
                 recipients.casa_student_id,
               ${timestampKey},
+                ${input.capturedAt}::timestamptz,
+              'connectivityDelayed',
+                true,
+              'connectivityMode',
+                ${input.connectivityMode}
+            ),
+            'PENDING'::school_notification_delivery_status,
+            0,
+            now(),
+            now(),
+            now()
+          from recipients
+          on conflict do nothing
+          returning id
+        )
+        select
+          count(*)::int
+            as count
+        from inserted
+      `);
+
+  return Number(
+    rowsOf<{
+      count: unknown;
+    }>(
+      result,
+    )[0]?.count ??
+      0,
+  );
+}
+
+async function queueTemporaryMovementNotification(
+  input: {
+    schoolId: string;
+    studentId: string;
+    attendanceRecordId: string;
+    presenceEventId: string;
+    cycleId: string;
+    movement:
+      TemporaryMovement;
+    reason: string;
+    capturedAt: string;
+    connectivityMode:
+      | "DEGRADED"
+      | "OFFLINE";
+  },
+): Promise<number> {
+  const eventType =
+    input.movement ===
+      "TEMPORARY_EXIT"
+      ? "STUDENT_TEMPORARILY_OUT"
+      : "STUDENT_RETURNED_TO_CAMPUS";
+
+  const templateKey =
+    input.movement ===
+      "TEMPORARY_EXIT"
+      ? "student_temporarily_out"
+      : "student_returned_to_campus";
+
+  const result =
+    await getDb()
+      .execute(sql`
+        with active_sender as (
+          select
+            sender.id,
+            sender.school_id
+          from school_whatsapp_senders
+            sender
+          where
+            sender.school_id =
+              ${input.schoolId}::uuid
+            and sender.status =
+              'ACTIVE'::school_messaging_sender_status
+          limit 1
+        ),
+        recipients as (
+          select
+            sender.id
+              as sender_id,
+            guardian.id
+              as guardian_id,
+            guardian.phone
+              as recipient_phone,
+            student.casa_student_id,
+            concat_ws(
+              ' ',
+              student.first_name,
+              nullif(
+                student.middle_name,
+                ''
+              ),
+              student.last_name
+            ) as student_name
+          from active_sender
+            sender
+          join students
+            student
+            on student.school_id =
+               sender.school_id
+           and student.id =
+               ${input.studentId}::uuid
+          join student_guardians
+            relationship
+            on relationship.school_id =
+               student.school_id
+           and relationship.student_id =
+               student.id
+           and relationship.receives_notifications =
+               true
+          join guardians
+            guardian
+            on guardian.school_id =
+               relationship.school_id
+           and guardian.id =
+               relationship.guardian_id
+           and guardian.status =
+               'ACTIVE'::guardian_status
+           and guardian.phone
+               is not null
+           and length(
+             trim(
+               guardian.phone
+             )
+           ) > 0
+        ),
+        inserted as (
+          insert into school_notification_outbox (
+            school_id,
+            attendance_record_id,
+            presence_event_id,
+            guardian_id,
+            sender_id,
+            event_type,
+            recipient_phone,
+            template_key,
+            payload,
+            status,
+            attempt_count,
+            available_at,
+            created_at,
+            updated_at
+          )
+          select
+            ${input.schoolId}::uuid,
+            ${input.attendanceRecordId}::uuid,
+            ${input.presenceEventId}::uuid,
+            recipients.guardian_id,
+            recipients.sender_id,
+            ${eventType}::school_notification_event_type,
+            recipients.recipient_phone,
+            ${templateKey},
+            jsonb_build_object(
+              'studentName',
+                recipients.student_name,
+              'casaStudentId',
+                recipients.casa_student_id,
+              'temporaryExitCycleId',
+                ${input.cycleId},
+              'movement',
+                ${input.movement},
+              'reason',
+                ${input.reason},
+              'occurredAt',
                 ${input.capturedAt}::timestamptz,
               'connectivityDelayed',
                 true,
@@ -794,6 +964,8 @@ export async function syncContinuityEvent(
           reason: string;
           authorized_by_membership_id:
             string;
+          stepped_out_at:
+            string | Date | null;
         }>(
           await db.execute(sql`
             select
@@ -803,7 +975,8 @@ export async function syncContinuityEvent(
                 as status,
               cycle.reason,
               cycle.authorized_by_membership_id::text
-                as authorized_by_membership_id
+                as authorized_by_membership_id,
+              cycle.stepped_out_at
             from student_temporary_exit_cycles
               cycle
             where
@@ -829,22 +1002,69 @@ export async function syncContinuityEvent(
 
   const temporaryExitContinuity =
     temporaryExitCycle?.status ===
-      "AUTHORIZED" &&
-    input.operation ===
-      "CHECK_OUT";
+      "AUTHORIZED";
+
+  const temporaryReturnContinuity =
+    temporaryExitCycle?.status ===
+      "OUTSIDE";
+
+  const temporaryMovementContinuity =
+    temporaryExitContinuity ||
+    temporaryReturnContinuity;
+
+  const effectiveOperation:
+    | "CHECK_IN"
+    | "CHECK_OUT" =
+      temporaryReturnContinuity
+        ? "CHECK_IN"
+        : temporaryExitContinuity
+          ? "CHECK_OUT"
+          : input.operation;
+
+  const temporaryMovement:
+    TemporaryMovement |
+    null =
+      temporaryExitContinuity
+        ? "TEMPORARY_EXIT"
+        : temporaryReturnContinuity
+          ? "TEMPORARY_RETURN"
+          : null;
 
   if (
-    temporaryExitCycle?.status ===
-      "OUTSIDE"
+    temporaryReturnContinuity
   ) {
-    return rejected(
-      input,
-      "TEMPORARY_RETURN_REQUIRES_FRESH_SCAN",
-      "This student is temporarily outside campus. CASA will not mark a return until the student scans again.",
-    );
+    const steppedOutAt =
+      temporaryExitCycle
+        ?.stepped_out_at instanceof
+          Date
+        ? temporaryExitCycle
+            .stepped_out_at
+        : temporaryExitCycle
+            ?.stepped_out_at
+          ? new Date(
+              temporaryExitCycle
+                .stepped_out_at,
+            )
+          : null;
+
+    if (
+      !steppedOutAt ||
+      Number.isNaN(
+        steppedOutAt.getTime(),
+      ) ||
+      capturedAt <
+        steppedOutAt
+    ) {
+      return rejected(
+        input,
+        "CONTINUITY_TEMPORARY_RETURN_ORDER_INVALID",
+        "The return scan is earlier than the recorded temporary step-out.",
+      );
+    }
   }
 
   if (
+    !temporaryMovementContinuity &&
     input.operation ===
       "CHECK_IN" &&
     record?.presence_state ===
@@ -864,6 +1084,7 @@ export async function syncContinuityEvent(
   }
 
   if (
+    !temporaryMovementContinuity &&
     input.operation ===
       "CHECK_IN" &&
     record?.presence_state ===
@@ -877,6 +1098,7 @@ export async function syncContinuityEvent(
   }
 
   if (
+    !temporaryMovementContinuity &&
     input.operation ===
       "CHECK_OUT" &&
     record?.presence_state ===
@@ -896,6 +1118,7 @@ export async function syncContinuityEvent(
   }
 
   if (
+    !temporaryMovementContinuity &&
     input.operation ===
       "CHECK_OUT" &&
     !record
@@ -908,7 +1131,7 @@ export async function syncContinuityEvent(
   }
 
   if (
-    !temporaryExitContinuity &&
+    !temporaryMovementContinuity &&
     input.operation ===
       "CHECK_OUT" &&
     record
@@ -962,11 +1185,13 @@ export async function syncContinuityEvent(
       null;
 
   if (
-    temporaryExitContinuity
+    temporaryMovementContinuity
   ) {
     departureResult =
-      "NORMAL";
-  } else   if (
+      temporaryExitContinuity
+        ? "NORMAL"
+        : "NOT_RUN";
+  } else if (
     input.operation ===
       "CHECK_IN"
   ) {
@@ -1139,7 +1364,9 @@ export async function syncContinuityEvent(
   const continuityReason =
     temporaryExitContinuity
       ? "CONNECTIVITY_CONTINUITY_TEMPORARY_EXIT"
-      : input.connectivityMode ===
+      : temporaryReturnContinuity
+        ? "CONNECTIVITY_CONTINUITY_TEMPORARY_RETURN"
+        : input.connectivityMode ===
           "OFFLINE"
         ? "CONNECTIVITY_CONTINUITY_OFFLINE"
         : "CONNECTIVITY_CONTINUITY_DEGRADED";
@@ -1156,10 +1383,24 @@ export async function syncContinuityEvent(
     | undefined;
 
   if (
-    temporaryExitContinuity &&
+    temporaryMovementContinuity &&
     temporaryExitCycle &&
-    record
+    record &&
+    temporaryMovement
   ) {
+    const movementEventType =
+      temporaryReturnContinuity
+        ? "TEMPORARY_RETURNED"
+        : "TEMPORARY_EXITED";
+    const expectedCycleStatus =
+      temporaryReturnContinuity
+        ? "OUTSIDE"
+        : "AUTHORIZED";
+    const nextCycleStatus =
+      temporaryReturnContinuity
+        ? "RETURNED"
+        : "OUTSIDE";
+
     row =
       rowsOf<{
         recorded:
@@ -1200,12 +1441,12 @@ export async function syncContinuityEvent(
               ${card.student_id}::uuid,
               ${card.card_id}::uuid,
               ${input.tokenHash},
-              'CHECK_OUT'::attendance_operation,
+              ${effectiveOperation}::attendance_operation,
               'MATCHED'::attendance_card_result,
               'UNAVAILABLE'::attendance_face_result,
               'UNAVAILABLE'::attendance_liveness_result,
               'NOT_RUN'::attendance_time_result,
-              'NORMAL'::attendance_departure_result,
+              ${temporaryExitContinuity ? "NORMAL" : "NOT_RUN"}::attendance_departure_result,
               'PENDING'::attendance_attempt_outcome,
               ${continuityReason},
               ${input.capturedAt}::timestamptz,
@@ -1239,7 +1480,7 @@ export async function syncContinuityEvent(
               ${attemptId}::uuid,
               ${access.terminal.id}::uuid,
               ${card.card_id}::uuid,
-              'TEMPORARY_EXITED'::attendance_presence_event_type,
+              ${movementEventType}::attendance_presence_event_type,
               'NOT_RUN'::attendance_departure_result,
               ${temporaryExitCycle.authorized_by_membership_id}::uuid,
               ${temporaryExitCycle.reason},
@@ -1253,13 +1494,44 @@ export async function syncContinuityEvent(
             update student_temporary_exit_cycles
               cycle
             set
-              status = 'OUTSIDE',
+              status =
+                ${nextCycleStatus}::student_temporary_exit_status,
               step_out_attempt_id =
-                ${attemptId}::uuid,
+                case
+                  when ${temporaryExitContinuity}
+                    then ${attemptId}::uuid
+                  else cycle.step_out_attempt_id
+                end,
               step_out_event_id =
-                inserted_event.id,
+                case
+                  when ${temporaryExitContinuity}
+                    then inserted_event.id
+                  else cycle.step_out_event_id
+                end,
               stepped_out_at =
-                ${input.capturedAt}::timestamptz,
+                case
+                  when ${temporaryExitContinuity}
+                    then ${input.capturedAt}::timestamptz
+                  else cycle.stepped_out_at
+                end,
+              return_attempt_id =
+                case
+                  when ${temporaryReturnContinuity}
+                    then ${attemptId}::uuid
+                  else cycle.return_attempt_id
+                end,
+              return_event_id =
+                case
+                  when ${temporaryReturnContinuity}
+                    then inserted_event.id
+                  else cycle.return_event_id
+                end,
+              returned_at =
+                case
+                  when ${temporaryReturnContinuity}
+                    then ${input.capturedAt}::timestamptz
+                  else cycle.returned_at
+                end,
               updated_at =
                 ${syncAt}::timestamptz
             from inserted_event
@@ -1268,8 +1540,8 @@ export async function syncContinuityEvent(
                 ${access.school.id}::uuid
               and cycle.id =
                 ${temporaryExitCycle.id}::uuid
-              and cycle.status =
-                'AUTHORIZED'
+              and cycle.status::text =
+                ${expectedCycleStatus}
             returning cycle.id
           ),
           recorded_attempt as (
@@ -1325,7 +1597,7 @@ export async function syncContinuityEvent(
           limit 1
         `),
       )[0];
-  } else   if (
+  } else if (
     input.operation ===
       "CHECK_IN"
   ) {
@@ -1744,32 +2016,78 @@ export async function syncContinuityEvent(
 
   try {
     if (
-      !temporaryExitContinuity
+      temporaryMovement &&
+      temporaryExitCycle
     ) {
       notificationQueued =
+        await queueTemporaryMovementNotification({
+          schoolId:
+            access.school.id,
+          studentId:
+            card.student_id,
+          attendanceRecordId:
+            row.attendance_record_id,
+          presenceEventId:
+            row.presence_event_id,
+          cycleId:
+            temporaryExitCycle.id,
+          movement:
+            temporaryMovement,
+          reason:
+            temporaryExitCycle.reason,
+          capturedAt:
+            input.capturedAt,
+          connectivityMode:
+            input.connectivityMode,
+        });
+    } else {
+      notificationQueued =
         await queueSchoolNotification({
-        schoolId:
-          access.school.id,
-        studentId:
-          card.student_id,
-        attendanceRecordId:
-          row.attendance_record_id,
-        presenceEventId:
-          row.presence_event_id,
-        operation:
-          input.operation,
-        capturedAt:
-          input.capturedAt,
-        connectivityMode:
-          input.connectivityMode,
+          schoolId:
+            access.school.id,
+          studentId:
+            card.student_id,
+          attendanceRecordId:
+            row.attendance_record_id,
+          presenceEventId:
+            row.presence_event_id,
+          operation:
+            input.operation,
+          capturedAt:
+            input.capturedAt,
+          connectivityMode:
+            input.connectivityMode,
         });
     }
   } catch {
     // Attendance remains authoritative even when notification queueing fails.
   }
 
+  if (
+    temporaryMovement &&
+    temporaryExitCycle &&
+    active.branch
+  ) {
+    await queueSchoolMovementNotifications({
+      schoolId:
+        access.school.id,
+      branchId:
+        active.branch.id,
+      studentId:
+        card.student_id,
+      cycleId:
+        temporaryExitCycle.id,
+      movement:
+        temporaryMovement,
+      reason:
+        temporaryExitCycle.reason,
+      occurredAt:
+        input.capturedAt,
+    });
+  }
+
   const guardianPushQueued =
-    temporaryExitContinuity
+    temporaryMovement
       ? await queueGuardianPresencePushBestEffort({
           schoolId:
             access.school.id,
@@ -1780,7 +2098,10 @@ export async function syncContinuityEvent(
           presenceEventId:
             row.presence_event_id,
           eventType:
-            "STUDENT_TEMPORARILY_OUT",
+            temporaryMovement ===
+              "TEMPORARY_EXIT"
+              ? "STUDENT_TEMPORARILY_OUT"
+              : "STUDENT_RETURNED_TO_CAMPUS",
         })
       : await recordedPushCount({
           schoolId:
@@ -1806,7 +2127,7 @@ export async function syncContinuityEvent(
     presenceEventId:
       row.presence_event_id,
     operation:
-      input.operation,
+      effectiveOperation,
     capturedAt:
       input.capturedAt,
     notificationQueued,

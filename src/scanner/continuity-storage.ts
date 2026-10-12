@@ -27,6 +27,10 @@ export interface ContinuityCachedCard {
   lastName: string;
   presenceState:
     ContinuityPresenceState;
+  temporaryMovementStatus:
+    | "AUTHORIZED"
+    | "OUTSIDE"
+    | null;
 }
 
 export interface ContinuitySnapshot {
@@ -84,6 +88,10 @@ export interface ContinuityQueuedEvent {
   operation:
     | "CHECK_IN"
     | "CHECK_OUT";
+  movement:
+    | "TEMPORARY_EXIT"
+    | "TEMPORARY_RETURN"
+    | null;
   timeResult:
     | "NOT_RUN"
     | "ON_TIME"
@@ -601,6 +609,86 @@ export async function rejectContinuityEvents(
   } finally {
     db.close();
   }
+}
+
+export async function recoverRejectedContinuityEvents(
+  codes: string[],
+): Promise<number> {
+  if (codes.length === 0) {
+    return 0;
+  }
+
+  const db =
+    await openDatabase();
+
+  let recovered = 0;
+
+  try {
+    await new Promise<void>(
+      (
+        resolve,
+        reject,
+      ) => {
+        const tx =
+          db.transaction(
+            QUEUE_STORE,
+            "readwrite",
+          );
+
+        const store =
+          tx.objectStore(
+            QUEUE_STORE,
+          );
+
+        const request =
+          store.getAll();
+
+        request.onsuccess =
+          () => {
+            const rows =
+              (request.result ??
+                []) as
+                ContinuityQueuedEvent[];
+
+            for (const row of rows) {
+              if (
+                row.state ===
+                  "REJECTED" &&
+                row.lastErrorCode &&
+                codes.includes(
+                  row.lastErrorCode,
+                )
+              ) {
+                store.put({
+                  ...row,
+                  state:
+                    "PENDING",
+                  lastErrorCode:
+                    null,
+                });
+                recovered += 1;
+              }
+            }
+          };
+
+        tx.oncomplete =
+          () => resolve();
+
+        tx.onerror =
+          () =>
+            reject(
+              tx.error ??
+                new Error(
+                  "Unable to recover retryable continuity events.",
+                ),
+            );
+      },
+    );
+  } finally {
+    db.close();
+  }
+
+  return recovered;
 }
 
 export async function clearContinuityStorage():

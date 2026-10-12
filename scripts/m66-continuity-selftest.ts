@@ -64,12 +64,21 @@ const worker =
 
 expect(
   scanner.includes(
-    "Continuity ready",
+    "Offline attendance backup active",
+  ) &&
+  scanner.includes(
+    "Offline attendance backup unavailable",
   ) &&
   scanner.includes(
     "pending sync",
+  ) &&
+  !scanner.includes(
+    "Continuity ready -",
+  ) &&
+  !scanner.includes(
+    "cards.length ?? 0",
   ),
-  "Scanner does not expose continuity readiness and pending sync.",
+  "Scanner offline-backup status or pending-sync UI contract is incomplete.",
 );
 
 expect(
@@ -231,12 +240,21 @@ expect(
     "CONNECTIVITY_CONTINUITY_TEMPORARY_EXIT",
   ) &&
   sync.includes(
-    "'TEMPORARY_EXITED'::attendance_presence_event_type",
+    "CONNECTIVITY_CONTINUITY_TEMPORARY_RETURN",
   ) &&
   sync.includes(
+    "TEMPORARY_EXITED",
+  ) &&
+  sync.includes(
+    "TEMPORARY_RETURNED",
+  ) &&
+  sync.includes(
+    "STUDENT_RETURNED_TO_CAMPUS",
+  ) &&
+  !sync.includes(
     "TEMPORARY_RETURN_REQUIRES_FRESH_SCAN",
   ),
-  "Continuity temporary step-out safety is incomplete.",
+  "Continuity temporary movement safety is incomplete.",
 );
 
 expect(
