@@ -128,6 +128,15 @@ export type ContinuitySyncResult =
   | {
       requestId: string;
       status:
+        "DEFERRED";
+      replayed: false;
+      code: string;
+      message: string;
+      capturedAt: string;
+    }
+  | {
+      requestId: string;
+      status:
         "REJECTED";
       replayed: boolean;
       code: string;
@@ -149,6 +158,26 @@ function rejected(
     status:
       "REJECTED",
     replayed,
+    code,
+    message,
+    capturedAt:
+      input.capturedAt,
+  };
+}
+
+function deferred(
+  input:
+    ContinuitySyncInput,
+  code: string,
+  message: string,
+): ContinuitySyncResult {
+  return {
+    requestId:
+      input.requestId,
+    status:
+      "DEFERRED",
+    replayed:
+      false,
     code,
     message,
     capturedAt:
@@ -1183,6 +1212,78 @@ export async function syncContinuityEvent(
     }
   }
 
+  const protectedOnlineAttempt =
+    rowsOf<{
+      id: string;
+    }>(
+      await db.execute(sql`
+        select
+          attempt.id::text
+            as id
+        from attendance_verification_attempts
+          attempt
+        where
+          attempt.school_id =
+            ${access.school.id}::uuid
+          and attempt.terminal_id =
+            ${access.terminal.id}::uuid
+          and attempt.session_id =
+            ${input.sessionId}::uuid
+          and attempt.student_id =
+            ${card.student_id}::uuid
+          and attempt.outcome =
+            'PENDING'::attendance_attempt_outcome
+          and attempt.terminal_request_id <>
+            ${input.requestId}
+          and left(
+            coalesce(
+              attempt.reason_code,
+              ''
+            ),
+            24
+          ) <>
+            'CONNECTIVITY_CONTINUITY_'
+          and (
+            attempt.occurred_at >
+              ${input.capturedAt}::timestamptz
+            or attempt.occurred_at >
+              now() -
+                interval '2 minutes'
+            or exists (
+              select 1
+              from biometric_liveness_sessions
+                liveness
+              where
+                liveness.school_id =
+                  attempt.school_id
+                and liveness.attempt_id =
+                  attempt.id
+                and liveness.terminal_id =
+                  attempt.terminal_id
+                and liveness.purpose::text =
+                  'VERIFICATION'
+                and liveness.status::text =
+                  'CREATED'
+                and liveness.expires_at >
+                  now()
+            )
+          )
+        order by
+          attempt.occurred_at desc
+        limit 1
+      `),
+    )[0];
+
+  if (
+    protectedOnlineAttempt
+  ) {
+    return deferred(
+      input,
+      "CONTINUITY_ONLINE_ATTEMPT_ACTIVE",
+      "A live online attendance verification is in progress. CASA will retry this queued continuity event after the online verification finishes.",
+    );
+  }
+
   let timeResult:
     | "NOT_RUN"
     | "ON_TIME"
@@ -1355,32 +1456,6 @@ export async function syncContinuityEvent(
   const syncAt =
     new Date()
       .toISOString();
-
-  await db.execute(sql`
-    update attendance_verification_attempts
-    set
-      face_result =
-        'UNAVAILABLE'::attendance_face_result,
-      liveness_result =
-        'UNAVAILABLE'::attendance_liveness_result,
-      outcome =
-        'REJECTED'::attendance_attempt_outcome,
-      reason_code =
-        'CONNECTIVITY_CONTINUITY_SUPERSEDED',
-      completed_at =
-        ${syncAt}::timestamptz
-    where
-      school_id =
-        ${access.school.id}::uuid
-      and terminal_id =
-        ${access.terminal.id}::uuid
-      and session_id =
-        ${input.sessionId}::uuid
-      and student_id =
-        ${card.student_id}::uuid
-      and outcome =
-        'PENDING'::attendance_attempt_outcome
-  `);
 
   const attemptId =
     randomUUID();

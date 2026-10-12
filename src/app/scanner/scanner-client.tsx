@@ -1351,6 +1351,9 @@ export default function ScannerClient() {
   ] =
     useState(false);
 
+  const continuitySyncingRef =
+    useRef(false);
+
   const [
     continuityResult,
     setContinuityResult,
@@ -2760,10 +2763,21 @@ export default function ScannerClient() {
           !token ||
           connectivityHealth !==
             "HEALTHY" ||
-          continuitySyncing
+          continuitySyncing ||
+          continuitySyncingRef
+            .current ||
+          (
+            phase !==
+              "READY" &&
+            phase !==
+              "WAITING"
+          )
         ) {
           return;
         }
+
+        continuitySyncingRef.current =
+          true;
 
         setContinuitySyncing(
           true,
@@ -2777,7 +2791,7 @@ export default function ScannerClient() {
           ) {
             const pending =
               await listPendingContinuityEvents(
-                100,
+                1,
               );
 
             if (
@@ -2815,6 +2829,8 @@ export default function ScannerClient() {
                               event.tokenHash,
                             operation:
                               event.operation,
+                            movement:
+                              event.movement,
                             timeResult:
                               event.timeResult,
                             departureResult:
@@ -2843,6 +2859,7 @@ export default function ScannerClient() {
                   status:
                     | "RECORDED"
                     | "ALREADY_RECORDED"
+                    | "DEFERRED"
                     | "REJECTED";
                   code?:
                     string;
@@ -2919,6 +2936,10 @@ export default function ScannerClient() {
               () =>
                 undefined,
             );
+
+          continuitySyncingRef.current =
+            false;
+
           setContinuitySyncing(
             false,
           );
@@ -2926,6 +2947,7 @@ export default function ScannerClient() {
       },
       [
         token,
+        phase,
         connectivityHealth,
         continuitySyncing,
         refreshContinuityCounters,
@@ -2939,7 +2961,13 @@ export default function ScannerClient() {
           "HEALTHY" ||
         continuityPending <=
           0 ||
-        continuitySyncing
+        continuitySyncing ||
+        (
+          phase !==
+            "READY" &&
+          phase !==
+            "WAITING"
+        )
       ) {
         return;
       }
@@ -2958,6 +2986,7 @@ export default function ScannerClient() {
         );
     },
     [
+      phase,
       connectivityHealth,
       continuityPending,
       continuitySyncing,
@@ -3301,6 +3330,53 @@ export default function ScannerClient() {
             "READY"
         ) {
           return;
+        }
+
+        if (
+          continuitySyncingRef
+            .current
+        ) {
+          setPhase(
+            "CARD",
+          );
+          setMessage(
+            "Finishing an earlier attendance reconciliation before this scan...",
+          );
+
+          const waitStartedAt =
+            Date.now();
+
+          while (
+            continuitySyncingRef
+              .current &&
+            Date.now() -
+              waitStartedAt <
+              7_000
+          ) {
+            await new Promise<void>(
+              (
+                resolve,
+              ) => {
+                window.setTimeout(
+                  resolve,
+                  100,
+                );
+              },
+            );
+          }
+
+          if (
+            continuitySyncingRef
+              .current
+          ) {
+            setPhase(
+              "ERROR",
+            );
+            setMessage(
+              "CASA could not finish the earlier attendance reconciliation safely. This card was not processed.",
+            );
+            return;
+          }
         }
 
         currentQrPayloadRef.current =
