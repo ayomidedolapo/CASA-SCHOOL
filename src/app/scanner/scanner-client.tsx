@@ -2507,9 +2507,7 @@ export default function ScannerClient() {
       connectivityHealth ===
         "OFFLINE" ||
       connectivityHealth ===
-        "RECOVERING" ||
-      continuityPending >
-        0
+        "RECOVERING"
     );
 
   const processContinuityCard =
@@ -2790,7 +2788,7 @@ export default function ScannerClient() {
             }
 
             const response =
-              await terminalFetch(
+              await terminalFetchWithRetry(
                 token,
                 "/api/terminal/continuity/sync",
                 {
@@ -2833,6 +2831,8 @@ export default function ScannerClient() {
                         ),
                     }),
                 },
+                1,
+                5_000,
               );
 
             const body =
@@ -2938,7 +2938,8 @@ export default function ScannerClient() {
         connectivityHealth !==
           "HEALTHY" ||
         continuityPending <=
-          0
+          0 ||
+        continuitySyncing
       ) {
         return;
       }
@@ -2948,7 +2949,7 @@ export default function ScannerClient() {
           () => {
             void syncContinuityQueue();
           },
-          0,
+          5_000,
         );
 
       return () =>
@@ -2959,6 +2960,7 @@ export default function ScannerClient() {
     [
       connectivityHealth,
       continuityPending,
+      continuitySyncing,
       syncContinuityQueue,
     ],
   );

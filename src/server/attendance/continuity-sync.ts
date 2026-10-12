@@ -29,6 +29,9 @@ import {
   type TemporaryMovement,
 } from "@/server/attendance/temporary-exit";
 import {
+  resolveContinuityMovementIntent,
+} from "@/server/attendance/continuity-movement-intent";
+import {
   queueGuardianPresencePushBestEffort,
 } from "@/server/messaging/guardian-presence-push";
 
@@ -74,6 +77,10 @@ export interface ContinuitySyncInput {
   operation:
     | "CHECK_IN"
     | "CHECK_OUT";
+  movement?:
+    | "TEMPORARY_EXIT"
+    | "TEMPORARY_RETURN"
+    | null;
   timeResult:
     | "NOT_RUN"
     | "ON_TIME"
@@ -966,6 +973,8 @@ export async function syncContinuityEvent(
             string;
           stepped_out_at:
             string | Date | null;
+          created_at:
+            string | Date;
         }>(
           await db.execute(sql`
             select
@@ -976,7 +985,8 @@ export async function syncContinuityEvent(
               cycle.reason,
               cycle.authorized_by_membership_id::text
                 as authorized_by_membership_id,
-              cycle.stepped_out_at
+              cycle.stepped_out_at,
+              cycle.created_at
             from student_temporary_exit_cycles
               cycle
             where
@@ -1000,68 +1010,82 @@ export async function syncContinuityEvent(
         null
       : null;
 
-  const temporaryExitContinuity =
-    temporaryExitCycle?.status ===
-      "AUTHORIZED";
+  const cycleCreatedAt =
+    temporaryExitCycle
+      ?.created_at instanceof
+        Date
+      ? temporaryExitCycle
+          .created_at
+      : temporaryExitCycle
+          ?.created_at
+        ? new Date(
+            temporaryExitCycle
+              .created_at,
+          )
+        : null;
 
-  const temporaryReturnContinuity =
-    temporaryExitCycle?.status ===
-      "OUTSIDE";
+  const steppedOutAt =
+    temporaryExitCycle
+      ?.stepped_out_at instanceof
+        Date
+      ? temporaryExitCycle
+          .stepped_out_at
+      : temporaryExitCycle
+          ?.stepped_out_at
+        ? new Date(
+            temporaryExitCycle
+              .stepped_out_at,
+          )
+        : null;
 
-  const temporaryMovementContinuity =
-    temporaryExitContinuity ||
-    temporaryReturnContinuity;
+  const movementResolution =
+    resolveContinuityMovementIntent({
+      requestedMovement:
+        input.movement,
+      operation:
+        input.operation,
+      capturedAt,
+      cycleStatus:
+        temporaryExitCycle
+          ?.status ??
+        null,
+      cycleCreatedAt,
+      steppedOutAt,
+    });
 
-  const effectiveOperation:
-    | "CHECK_IN"
-    | "CHECK_OUT" =
-      temporaryReturnContinuity
-        ? "CHECK_IN"
-        : temporaryExitContinuity
-          ? "CHECK_OUT"
-          : input.operation;
+  if (
+    !movementResolution.ok
+  ) {
+    return rejected(
+      input,
+      movementResolution.code,
+      movementResolution.message,
+    );
+  }
 
   const temporaryMovement:
     TemporaryMovement |
     null =
-      temporaryExitContinuity
-        ? "TEMPORARY_EXIT"
-        : temporaryReturnContinuity
-          ? "TEMPORARY_RETURN"
-          : null;
+      movementResolution
+        .movement;
 
-  if (
-    temporaryReturnContinuity
-  ) {
-    const steppedOutAt =
-      temporaryExitCycle
-        ?.stepped_out_at instanceof
-          Date
-        ? temporaryExitCycle
-            .stepped_out_at
-        : temporaryExitCycle
-            ?.stepped_out_at
-          ? new Date(
-              temporaryExitCycle
-                .stepped_out_at,
-            )
-          : null;
+  const temporaryExitContinuity =
+    temporaryMovement ===
+      "TEMPORARY_EXIT";
 
-    if (
-      !steppedOutAt ||
-      Number.isNaN(
-        steppedOutAt.getTime(),
-      ) ||
-      capturedAt <
-        steppedOutAt
-    ) {
-      return rejected(
-        input,
-        "CONTINUITY_TEMPORARY_RETURN_ORDER_INVALID",
-        "The return scan is earlier than the recorded temporary step-out.",
-      );
-    }
-  }
+  const temporaryReturnContinuity =
+    temporaryMovement ===
+      "TEMPORARY_RETURN";
+
+  const temporaryMovementContinuity =
+    temporaryMovement !==
+      null;
+
+  const effectiveOperation:
+    | "CHECK_IN"
+    | "CHECK_OUT" =
+      movementResolution
+        .effectiveOperation;
 
   if (
     !temporaryMovementContinuity &&

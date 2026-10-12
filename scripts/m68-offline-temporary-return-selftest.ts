@@ -12,6 +12,7 @@ const storage = source("src/scanner/continuity-storage.ts");
 const card = source("src/scanner/continuity-card.ts");
 const scanner = source("src/app/scanner/scanner-client.tsx");
 const sync = source("src/server/attendance/continuity-sync.ts");
+const movementIntent = source("src/server/attendance/continuity-movement-intent.ts");
 const temporaryExit = source("src/server/attendance/temporary-exit.ts");
 
 expect(
@@ -42,7 +43,9 @@ expect(
 expect(
   sync.includes("CONNECTIVITY_CONTINUITY_TEMPORARY_RETURN") &&
   sync.includes("TEMPORARY_RETURNED") &&
-  sync.includes("CONTINUITY_TEMPORARY_RETURN_ORDER_INVALID") &&
+  sync.includes("resolveContinuityMovementIntent") &&
+  movementIntent.includes("CONTINUITY_TEMPORARY_RETURN_ORDER_INVALID") &&
+  movementIntent.includes('"TEMPORARY_RETURN"') &&
   sync.includes("queueTemporaryMovementNotification") &&
   sync.includes("queueSchoolMovementNotifications") &&
   sync.includes("STUDENT_RETURNED_TO_CAMPUS") &&

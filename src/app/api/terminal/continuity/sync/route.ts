@@ -44,6 +44,13 @@ const eventSchema =
         "CHECK_IN",
         "CHECK_OUT",
       ]),
+    movement:
+      z.enum([
+        "TEMPORARY_EXIT",
+        "TEMPORARY_RETURN",
+      ])
+        .nullable()
+        .optional(),
     timeResult:
       z.enum([
         "NOT_RUN",

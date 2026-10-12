@@ -661,6 +661,12 @@ export async function recoverRejectedContinuityEvents(
               ) {
                 store.put({
                   ...row,
+                  movement:
+                    row.lastErrorCode ===
+                      "TEMPORARY_RETURN_REQUIRES_FRESH_SCAN"
+                      ? "TEMPORARY_RETURN"
+                      : row.movement ??
+                        null,
                   state:
                     "PENDING",
                   lastErrorCode:
