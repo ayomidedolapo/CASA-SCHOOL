@@ -17,11 +17,9 @@ const temporaryExit = source("src/server/attendance/temporary-exit.ts");
 const guardianPresence = source("src/server/messaging/guardian-presence-push.ts");
 const guardianWorker = source("src/server/messaging/guardian-push-worker.ts");
 
-expect(
-  scanner.includes('"2026-10-12-m71-continuity-reconciliation-closure"'),
-  "Scanner M71 revision marker is missing.",
-);
-
+// M71 is a protected behavioral baseline, not a permanent UI release label.
+// Later cumulative releases may advance SCANNER_UI_REVISION while preserving
+// every M71 reconciliation guarantee asserted below.
 expect(
   storage.includes("movement?:") &&
   storage.includes("recoveryRevision?:") &&

@@ -56,8 +56,10 @@ export default function ScannerInstallControl() {
     installed,
     setInstalled,
   ] =
-    useState(
-      false,
+    useState<
+      boolean | null
+    >(
+      null,
     );
 
   const [
@@ -70,9 +72,6 @@ export default function ScannerInstallControl() {
 
   useEffect(
     () => {
-      let cancelled =
-        false;
-
       const displayMode =
         window.matchMedia(
           "(display-mode: standalone)",
@@ -81,11 +80,9 @@ export default function ScannerInstallControl() {
       const frame =
         window.requestAnimationFrame(
           () => {
-            if (!cancelled) {
-              setInstalled(
-                isStandalone(),
-              );
-            }
+            setInstalled(
+              isStandalone(),
+            );
           },
         );
 
@@ -94,6 +91,10 @@ export default function ScannerInstallControl() {
           Event,
       ) {
         event.preventDefault();
+
+        setInstalled(
+          false,
+        );
 
         setPromptEvent(
           event as
@@ -141,9 +142,6 @@ export default function ScannerInstallControl() {
       );
 
       return () => {
-        cancelled =
-          true;
-
         window.cancelAnimationFrame(
           frame,
         );
@@ -216,7 +214,10 @@ export default function ScannerInstallControl() {
     }
   }
 
-  if (installed) {
+  if (
+    installed !==
+      false
+  ) {
     return null;
   }
 

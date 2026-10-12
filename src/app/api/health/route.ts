@@ -9,6 +9,8 @@ export const dynamic = "force-dynamic";
 const noStoreHeaders = {
   "Cache-Control":
     "no-store, no-cache, must-revalidate, proxy-revalidate",
+  "X-CASA-Release-Revision":
+    "M73",
 } as const;
 
 export async function GET() {

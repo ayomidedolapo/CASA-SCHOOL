@@ -2258,58 +2258,69 @@ export async function syncContinuityEvent(
     // Attendance remains authoritative even when notification queueing fails.
   }
 
-  if (
-    temporaryMovement &&
-    temporaryExitCycle &&
-    active.branch
-  ) {
-    await queueSchoolMovementNotifications({
-      schoolId:
-        access.school.id,
-      branchId:
-        active.branch.id,
-      studentId:
-        card.student_id,
-      cycleId:
-        temporaryExitCycle.id,
-      movement:
-        temporaryMovement,
-      reason:
-        temporaryExitCycle.reason,
-      occurredAt:
-        input.capturedAt,
-    });
+  try {
+    if (
+      temporaryMovement &&
+      temporaryExitCycle &&
+      active.branch
+    ) {
+      await queueSchoolMovementNotifications({
+        schoolId:
+          access.school.id,
+        branchId:
+          active.branch.id,
+        studentId:
+          card.student_id,
+        cycleId:
+          temporaryExitCycle.id,
+        movement:
+          temporaryMovement,
+        reason:
+          temporaryExitCycle.reason,
+        occurredAt:
+          input.capturedAt,
+      });
+    }
+  } catch {
+    // Recorded attendance must be acknowledged even if school notification queueing fails.
   }
 
-  const guardianPushQueued =
-    temporaryMovement
-      ? await queueGuardianPresencePushBestEffort({
-          schoolId:
-            access.school.id,
-          studentId:
-            card.student_id,
-          attendanceRecordId:
-            row.attendance_record_id,
-          presenceEventId:
-            row.presence_event_id,
-          eventType:
-            temporaryMovement ===
-              "TEMPORARY_EXIT"
-              ? "STUDENT_TEMPORARILY_OUT"
-              : "STUDENT_RETURNED_TO_CAMPUS",
-        })
-      : await recordedPushCount({
-          schoolId:
-            access.school.id,
-          studentId:
-            card.student_id,
-          attendanceRecordId:
-            row.attendance_record_id,
-          presenceEventId:
-            row.presence_event_id,
-          operation:
-            input.operation,
-        });
+  let guardianPushQueued =
+    0;
+
+  try {
+    guardianPushQueued =
+      temporaryMovement
+        ? await queueGuardianPresencePushBestEffort({
+            schoolId:
+              access.school.id,
+            studentId:
+              card.student_id,
+            attendanceRecordId:
+              row.attendance_record_id,
+            presenceEventId:
+              row.presence_event_id,
+            eventType:
+              temporaryMovement ===
+                "TEMPORARY_EXIT"
+                ? "STUDENT_TEMPORARILY_OUT"
+                : "STUDENT_RETURNED_TO_CAMPUS",
+          })
+        : await recordedPushCount({
+            schoolId:
+              access.school.id,
+            studentId:
+              card.student_id,
+            attendanceRecordId:
+              row.attendance_record_id,
+            presenceEventId:
+              row.presence_event_id,
+            operation:
+              input.operation,
+          });
+  } catch {
+    // Durable notification workers can catch up after attendance reconciliation succeeds.
+  }
 
   return {
     requestId:

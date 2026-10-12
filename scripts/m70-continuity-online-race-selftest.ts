@@ -83,29 +83,53 @@ expect(
   "A scanned card is not serialized safely behind an in-flight background reconciliation.",
 );
 
-const effectNeedle =
-`      if (
-        connectivityHealth !==
-          "HEALTHY" ||
-        continuityPending <=
-          0 ||
-        continuitySyncing ||
-        (
-          phase !==
-            "READY" &&
-          phase !==
-            "WAITING"
-        )
-      ) {`;
+const heartbeatStart =
+  scanner.indexOf(
+    "  useEffect(\n    () => {\n      if (\n        !token ||\n        continuityPending <=",
+  );
+const heartbeatEnd =
+  scanner.indexOf(
+    "  useEffect(\n    () => {\n      if (\n        phase !==\n          \"LIVENESS\"",
+    heartbeatStart,
+  );
+const heartbeatBlock =
+  heartbeatStart >= 0 &&
+  heartbeatEnd > heartbeatStart
+    ? scanner.slice(
+        heartbeatStart,
+        heartbeatEnd,
+      )
+    : "";
 
 expect(
   scanner.includes(
-    effectNeedle,
+    "function continuityBackgroundSyncAllowed(",
   ) &&
-    scanner.includes(
-      "      phase,\n      connectivityHealth,\n      continuityPending,",
+    heartbeatBlock.includes(
+      "triggerContinuitySync();",
+    ) &&
+    heartbeatBlock.includes(
+      "window.setInterval(",
+    ) &&
+    heartbeatBlock.includes(
+      "4_000",
+    ) &&
+    heartbeatBlock.includes(
+      "\"online\"",
+    ) &&
+    heartbeatBlock.includes(
+      "\"focus\"",
+    ) &&
+    heartbeatBlock.includes(
+      "\"pageshow\"",
+    ) &&
+    heartbeatBlock.includes(
+      "\"visibilitychange\"",
+    ) &&
+    !heartbeatBlock.includes(
+      "window.setTimeout(",
     ),
-  "Background continuity sync is not isolated from active Scanner phases.",
+  "Background continuity sync is not using the durable M73 healthy heartbeat.",
 );
 
 const guardStart =

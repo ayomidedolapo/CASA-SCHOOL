@@ -101,7 +101,7 @@ function loadQrScannerModule() {
 }
 
 const SCANNER_UI_REVISION =
-  "2026-10-12-m71-continuity-reconciliation-closure";
+  "2026-10-12-m73-continuity-heartbeat-pwa-bootstrap";
 
 type Phase =
   | "BOOTING"
@@ -116,6 +116,23 @@ type Phase =
   | "RESULT"
   | "CONTINUITY_RESULT"
   | "ERROR";
+
+function continuityBackgroundSyncAllowed(
+  phase: Phase,
+) {
+  return (
+    phase ===
+      "READY" ||
+    phase ===
+      "WAITING" ||
+    phase ===
+      "RESULT" ||
+    phase ===
+      "CONTINUITY_RESULT" ||
+    phase ===
+      "ERROR"
+  );
+}
 
 interface LivenessState {
   attemptId: string;
@@ -2773,14 +2790,10 @@ export default function ScannerClient() {
           !token ||
           connectivityHealth !==
             "HEALTHY" ||
-          continuitySyncing ||
           continuitySyncingRef
             .current ||
-          (
-            phase !==
-              "READY" &&
-            phase !==
-              "WAITING"
+          !continuityBackgroundSyncAllowed(
+            phase,
           )
         ) {
           return;
@@ -2880,7 +2893,29 @@ export default function ScannerClient() {
               );
 
             if (
-              !response.ok ||
+              !response.ok
+            ) {
+              if (
+                response.status ===
+                  400
+              ) {
+                await rejectContinuityEvents([
+                  {
+                    requestId:
+                      pending[0]!
+                        .requestId,
+                    code:
+                      "CONTINUITY_PAYLOAD_INVALID",
+                  },
+                ]);
+
+                continue;
+              }
+
+              break;
+            }
+
+            if (
               !body?.results
             ) {
               break;
@@ -2964,7 +2999,6 @@ export default function ScannerClient() {
         token,
         phase,
         connectivityHealth,
-        continuitySyncing,
         refreshContinuityCounters,
       ],
     );
@@ -2972,39 +3006,90 @@ export default function ScannerClient() {
   useEffect(
     () => {
       if (
-        connectivityHealth !==
-          "HEALTHY" ||
+        !token ||
         continuityPending <=
-          0 ||
-        continuitySyncing ||
-        (
-          phase !==
-            "READY" &&
-          phase !==
-            "WAITING"
-        )
+          0
       ) {
         return;
       }
 
+      const triggerContinuitySync =
+        () => {
+          if (
+            connectivityHealth !==
+              "HEALTHY" ||
+            !continuityBackgroundSyncAllowed(
+              phase,
+            )
+          ) {
+            return;
+          }
+
+          void syncContinuityQueue();
+        };
+
+      const visibilityChanged =
+        () => {
+          if (
+            document.visibilityState ===
+              "visible"
+          ) {
+            triggerContinuitySync();
+          }
+        };
+
+      triggerContinuitySync();
+
       const syncTimer =
-        window.setTimeout(
-          () => {
-            void syncContinuityQueue();
-          },
-          5_000,
+        window.setInterval(
+          triggerContinuitySync,
+          4_000,
         );
 
-      return () =>
-        window.clearTimeout(
+      window.addEventListener(
+        "online",
+        triggerContinuitySync,
+      );
+      window.addEventListener(
+        "focus",
+        triggerContinuitySync,
+      );
+      window.addEventListener(
+        "pageshow",
+        triggerContinuitySync,
+      );
+      document.addEventListener(
+        "visibilitychange",
+        visibilityChanged,
+      );
+
+      return () => {
+        window.clearInterval(
           syncTimer,
         );
+        window.removeEventListener(
+          "online",
+          triggerContinuitySync,
+        );
+        window.removeEventListener(
+          "focus",
+          triggerContinuitySync,
+        );
+        window.removeEventListener(
+          "pageshow",
+          triggerContinuitySync,
+        );
+        document.removeEventListener(
+          "visibilitychange",
+          visibilityChanged,
+        );
+      };
     },
     [
+      token,
       phase,
       connectivityHealth,
       continuityPending,
-      continuitySyncing,
       syncContinuityQueue,
     ],
   );
