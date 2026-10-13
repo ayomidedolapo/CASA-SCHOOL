@@ -1,8 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
 import { attendanceNoStoreHeaders } from "@/server/attendance/http";
 import { authorizeLateStay } from "@/server/attendance/late-stay";
+import { runGuardianPushOutbox } from "@/server/messaging/guardian-push-worker";
 import { requireBranchAttendanceOperatorAccess } from "@/server/school-operations/operations";
 import { schoolOperationsErrorResponse } from "@/server/school-operations/http";
 
@@ -57,6 +58,18 @@ export async function POST(request: NextRequest, context: RouteContext) {
         },
       );
     }
+
+    const guardianBatchKey = result.guardianNotificationBatchKey;
+    if (guardianBatchKey) {
+      after(async () => {
+        try {
+          await runGuardianPushOutbox({ schoolId: branchAccess.access.school.id, operationalBatchKey: guardianBatchKey, limit: 100 });
+        } catch (error) {
+          console.error("CASA_LATE_STAY_GUARDIAN_DELIVERY_FAILED", error);
+        }
+      });
+    }
+
     return NextResponse.json(result, { headers: attendanceNoStoreHeaders });
   } catch (error) {
     const response = schoolOperationsErrorResponse(error);

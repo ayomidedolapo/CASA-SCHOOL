@@ -9,6 +9,9 @@ import {
   getActiveCalendarClosure,
 } from "@/server/school-operations/calendar-closure";
 import {
+  queueGuardianBranchClosurePushes,
+} from "@/server/messaging/guardian-attendance-operations-push";
+import {
   resolveBranchDefaultPolicy,
   resolveBranchDefaultPolicyForDate,
 } from "./branch-policy-management";
@@ -429,9 +432,18 @@ export async function closeBranchAttendanceSession(input: { access: SchoolAccess
   const clock = getSchoolClock(new Date(), input.access.school.timezone);
   const db = getDb();
   const now = new Date().toISOString();
-  const row = rowsOf<{ session_id: string; branch_session_id: string; status: string }>(await db.execute(sql`
+  const row = rowsOf<{
+    session_id: string;
+    branch_session_id: string;
+    status: string;
+    closed_at: string | Date | null;
+  }>(await db.execute(sql`
     with target as (
-      select s.id as session_id, bs.id as branch_session_id, bs.status
+      select
+        s.id as session_id,
+        bs.id as branch_session_id,
+        bs.status,
+        bs.closed_at
       from attendance_sessions s
       join attendance_branch_sessions bs
         on bs.school_id = s.school_id and bs.session_id = s.id
@@ -445,8 +457,9 @@ export async function closeBranchAttendanceSession(input: { access: SchoolAccess
           closed_by_membership_id = ${input.access.membership.id}::uuid,
           updated_at = ${now}::timestamptz
       from target
-      where bs.id = target.branch_session_id and target.status = 'OPEN'
-      returning bs.id, bs.session_id, bs.status
+      where bs.id = target.branch_session_id
+        and bs.status = 'OPEN'
+      returning bs.id, bs.session_id, bs.status, bs.closed_at
     ), aggregate as (
       select
         s.id,
@@ -478,11 +491,53 @@ export async function closeBranchAttendanceSession(input: { access: SchoolAccess
       where s.id = aggregate.id
       returning s.id
     )
-    select target.session_id::text, target.branch_session_id::text, coalesce(closed.status, target.status) as status
-    from target left join closed on closed.id = target.branch_session_id
+    select
+      target.session_id::text,
+      target.branch_session_id::text,
+      coalesce(closed.status, target.status) as status,
+      coalesce(closed.closed_at, target.closed_at) as closed_at
+    from target
+    left join closed
+      on closed.id = target.branch_session_id
   `))[0];
-  if (!row) return { ok: false as const, status: 404 as const, code: "ATTENDANCE_SESSION_NOT_FOUND" as const };
-  if (row.status === "CLOSED") return { ok: true as const, session: { id: row.session_id, branchSessionId: row.branch_session_id, status: "CLOSED" as const } };
+
+  if (!row) {
+    return { ok: false as const, status: 404 as const, code: "ATTENDANCE_SESSION_NOT_FOUND" as const };
+  }
+
+  if (row.status === "CLOSED") {
+    let guardianNotificationQueued = 0;
+    let guardianNotificationBatchKey: string | null = null;
+
+    if (row.closed_at) {
+      try {
+        const notification = await queueGuardianBranchClosurePushes({
+          schoolId: input.access.school.id,
+          branchId: input.branchId,
+          sessionId: row.session_id,
+          branchSessionId: row.branch_session_id,
+          closedAt: row.closed_at,
+        });
+        guardianNotificationQueued = notification.queued;
+        guardianNotificationBatchKey = notification.batchKey;
+      } catch (error) {
+        console.error("CASA_BRANCH_CLOSURE_GUARDIAN_QUEUE_FAILED", {
+          schoolId: input.access.school.id,
+          branchId: input.branchId,
+          branchSessionId: row.branch_session_id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    return {
+      ok: true as const,
+      session: { id: row.session_id, branchSessionId: row.branch_session_id, status: "CLOSED" as const },
+      guardianNotificationQueued,
+      guardianNotificationBatchKey,
+    };
+  }
+
   return { ok: false as const, status: 409 as const, code: "ATTENDANCE_SESSION_NOT_OPEN" as const };
 }
 

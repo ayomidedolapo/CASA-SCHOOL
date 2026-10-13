@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
 import {
@@ -8,6 +8,7 @@ import {
   reopenBranchAttendanceSession,
 } from "@/server/attendance/branch-session";
 import { requirePasskeyStepUpGrant } from "@/server/auth/passkey-step-up";
+import { runGuardianPushOutbox } from "@/server/messaging/guardian-push-worker";
 import { requireBranchAttendanceOperatorAccess } from "@/server/school-operations/operations";
 import {
   schoolOperationsErrorResponse,
@@ -67,6 +68,23 @@ export async function POST(request: NextRequest, context: Context) {
         { status: result.status, headers: schoolOperationsNoStoreHeaders },
       );
     }
+
+    const guardianBatchKey =
+      "guardianNotificationBatchKey" in result &&
+      typeof result.guardianNotificationBatchKey === "string"
+        ? result.guardianNotificationBatchKey
+        : null;
+
+    if (guardianBatchKey) {
+      after(async () => {
+        try {
+          await runGuardianPushOutbox({ schoolId: access.school.id, operationalBatchKey: guardianBatchKey, limit: 100 });
+        } catch (error) {
+          console.error("CASA_BRANCH_CLOSURE_GUARDIAN_DELIVERY_FAILED", error);
+        }
+      });
+    }
+
     return NextResponse.json(result, { headers: schoolOperationsNoStoreHeaders });
   } catch (error) {
     if (error instanceof Error && error.message === "PASSKEY_STEP_UP_REQUIRED") {

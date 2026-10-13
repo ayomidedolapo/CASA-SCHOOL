@@ -8,6 +8,9 @@ import {
   reconcileRecentGuardianPresencePushes,
 } from "./guardian-presence-push";
 import {
+  reconcileRecentGuardianAttendanceOperationalPushes,
+} from "./guardian-attendance-operations-push";
+import {
   reconcileDueGuardianCalendarPushes,
 } from "./guardian-calendar-push";
 import { sendFcmToFid } from "./firebase-fcm";
@@ -395,6 +398,7 @@ export async function runGuardianPushOutbox(
     schoolId?: string;
     presenceEventId?: string;
     calendarEventId?: string;
+    operationalBatchKey?: string;
   } = {},
 ) {
   const db = getDb();
@@ -433,7 +437,8 @@ export async function runGuardianPushOutbox(
   `);
 
   const reconciled =
-    input.calendarEventId
+    input.calendarEventId ||
+    input.operationalBatchKey
       ? 0
       : await reconcileRecentGuardianPresencePushes({
           schoolId:
@@ -451,7 +456,8 @@ export async function runGuardianPushOutbox(
 
   const calendarReconciled =
     input.presenceEventId ||
-    input.calendarEventId
+    input.calendarEventId ||
+    input.operationalBatchKey
       ? 0
       : await reconcileDueGuardianCalendarPushes({
           schoolId:
@@ -462,6 +468,13 @@ export async function runGuardianPushOutbox(
               limit,
             ),
         });
+
+  const operationalReconciled =
+    input.presenceEventId ||
+    input.calendarEventId ||
+    input.operationalBatchKey
+      ? 0
+      : await reconcileRecentGuardianAttendanceOperationalPushes({ schoolId: input.schoolId, limit: Math.min(100, limit) });
 
   const schoolFilter =
     input.schoolId
@@ -475,6 +488,10 @@ export async function runGuardianPushOutbox(
     input.calendarEventId
       ? sql`and outbox.event_type = 'SCHOOL_CALENDAR_NOTICE'
             and outbox.payload ->> 'calendarEventId' = ${input.calendarEventId}`
+      : sql``;
+  const operationalBatchFilter =
+    input.operationalBatchKey
+      ? sql`and outbox.payload ->> 'operationalBatchKey' = ${input.operationalBatchKey}`
       : sql``;
 
   const claimed =
@@ -529,6 +546,7 @@ export async function runGuardianPushOutbox(
         ${schoolFilter}
         ${presenceEventFilter}
         ${calendarEventFilter}
+        ${operationalBatchFilter}
       order by outbox.available_at asc, outbox.created_at asc
       limit ${limit}
       for update skip locked
@@ -616,6 +634,13 @@ export async function runGuardianPushOutbox(
             ? {
                 casaPresenceEventId:
                   row.payload.presenceEventId,
+              }
+            : {}),
+          ...((row.payload?.operationalEventKey &&
+          typeof row.payload.operationalEventKey === "string")
+            ? {
+                casaOperationalEventKey:
+                  row.payload.operationalEventKey,
               }
             : {}),
         },
@@ -788,6 +813,7 @@ export async function runGuardianPushOutbox(
   return {
     reconciled,
     calendarReconciled,
+    operationalReconciled,
     claimed:
       claimed.length,
     sent,

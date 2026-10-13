@@ -1661,7 +1661,7 @@ export default function AttendanceClient(
             : action ===
                 "REOPEN"
               ? "Attendance reopened. The original session and audit history were preserved."
-              : "Attendance is closed.",
+              : "Attendance is closed for this campus. Guardian closure notifications were queued where registered, and CASA will keep retrying delivery automatically.",
       );
 
       await refreshToday();
@@ -2336,7 +2336,7 @@ export default function AttendanceClient(
       if (!response.ok) {
         throw new Error(body.message ?? body.code ?? "Late-stay authorization failed.");
       }
-      setNotice(`${body.authorized ?? selectedLateStudentIds.length} student(s) may check out after campus close until the approved time. Active-card students use the Scanner; students without an active card use Assisted sign-out when they actually leave.`);
+      setNotice(`${body.authorized ?? selectedLateStudentIds.length} student(s) may check out after campus close until the approved time. Guardian notifications were queued where configured with the reason and approved-until time. Active-card students use the Scanner; students without an active card use Assisted sign-out when they actually leave.`);
       setSelectedLateStudentIds([]);
       setSelectedLateReason("");
       setSelectedLateAllowedUntil("");
@@ -2784,7 +2784,7 @@ export default function AttendanceClient(
                   disabled={busy}
                   onClick={() => void mutateSession("CLOSE")}
                 >
-                  Close today
+                  Close today & notify guardians
                 </button>
                 {canManage && (
                   <button
@@ -3000,7 +3000,7 @@ export default function AttendanceClient(
             <div>
               <h2 className={styles.sectionTitle}>After-hours stay</h2>
               <p className={styles.muted}>
-                Use this only after the daily attendance session has been closed for students who are still on campus beyond normal dismissal. Selecting a student does not sign them out. Enter the reason and allowed-until time, authorize once with Passkey, then active-card students check out on the Scanner; students without an active card use Assisted sign-out with staff face confirmation and Passkey.
+                Use this only after the daily attendance session has been closed for students who are still on campus beyond normal dismissal. Selecting a student does not sign them out. Enter the reason and allowed-until time, authorize once with Passkey, and CASA queues a guardian notification with the reason and approved-until time. Active-card students then check out on the Scanner; students without an active card use Assisted sign-out with staff face confirmation and Passkey.
               </p>
             </div>
             <span className={styles.muted}>{selectedLateStudentIds.length} selected</span>

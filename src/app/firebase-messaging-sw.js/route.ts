@@ -39,6 +39,7 @@ export function GET() {
 // CASA_M52_ANDROID_NOTIFICATION_BRANDING_PRESENCE_ONLY_SIGNOUT
 // CASA_M53_GUARDIAN_DISPLAY_RETRY_AUTHORITY
 // CASA_M55_SCANNER_GUARDIAN_FOREGROUND_PUSH
+// CASA_M76_GUARDIAN_CLOSURE_LATE_STAY_TRUTH
 self.addEventListener("notificationclick", (event) => {
   event.preventDefault();
   event.stopImmediatePropagation();
@@ -93,6 +94,9 @@ messaging.onBackgroundMessage((payload) => {
   const presenceEventId =
     data.presenceEventId ||
     data.casaPresenceEventId;
+  const operationalEventKey =
+    data.operationalEventKey ||
+    data.casaOperationalEventKey;
 
   return self.registration
     .showNotification(
@@ -106,7 +110,9 @@ messaging.onBackgroundMessage((payload) => {
         badge,
         tag: presenceEventId
           ? "casa-presence-" + presenceEventId
-          : undefined,
+          : operationalEventKey
+            ? "casa-operation-" + operationalEventKey
+            : undefined,
         renotify: false
       }
     )

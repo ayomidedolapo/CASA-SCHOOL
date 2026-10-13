@@ -182,6 +182,11 @@ export default function CasaForegroundNotifications() {
                   ?.presenceEventId ??
                 payload.data
                   ?.casaPresenceEventId;
+              const operationalEventKey =
+                payload.data
+                  ?.operationalEventKey ??
+                payload.data
+                  ?.casaOperationalEventKey;
 
               void (async () => {
                 await registration
@@ -198,7 +203,9 @@ export default function CasaForegroundNotifications() {
                       tag:
                         presenceEventId
                           ? `casa-presence-${presenceEventId}`
-                          : undefined,
+                          : operationalEventKey
+                            ? `casa-operation-${operationalEventKey}`
+                            : undefined,
                     },
                   );
 

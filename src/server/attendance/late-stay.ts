@@ -4,6 +4,9 @@ import { getDb } from "@/db";
 import type { SchoolAccess } from "@/server/auth/authorization";
 import { consumePasskeyStepUpGrantWithId } from "@/server/auth/passkey-step-up";
 import {
+  queueGuardianLateStayPushes,
+} from "@/server/messaging/guardian-attendance-operations-push";
+import {
   calendarClosureMessage,
   getCurrentCalendarClosure,
 } from "@/server/school-operations/calendar-closure";
@@ -157,13 +160,37 @@ export async function authorizeLateStay(input: {
       ${now}::timestamptz
     from jsonb_to_recordset(${JSON.stringify(candidates)}::jsonb)
       as c(student_id text, attendance_record_id text)
-    returning id
+    returning id::text as id
   `));
+
+  let guardianNotificationQueued = 0;
+  let guardianNotificationBatchKey: string | null = null;
+
+  if (inserted.length > 0) {
+    try {
+      const notification = await queueGuardianLateStayPushes({
+        schoolId: input.access.school.id,
+        branchId: input.branchId,
+        authorizationIds: inserted.map((row) => row.id),
+      });
+      guardianNotificationQueued = notification.queued;
+      guardianNotificationBatchKey = notification.batchKey;
+    } catch (error) {
+      console.error("CASA_LATE_STAY_GUARDIAN_QUEUE_FAILED", {
+        schoolId: input.access.school.id,
+        branchId: input.branchId,
+        authorizationIds: inserted.map((row) => row.id),
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
 
   return {
     ok: true as const,
     requested: unique.length,
     authorized: inserted.length,
     allowedUntil: allowed.toISOString(),
+    guardianNotificationQueued,
+    guardianNotificationBatchKey,
   };
 }

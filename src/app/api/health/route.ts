@@ -15,6 +15,8 @@ const noStoreHeaders = {
     "M74",
   "X-CASA-Continuity-SQL-Revision":
     "M75",
+  "X-CASA-Guardian-Operations-Revision":
+    "M76",
 } as const;
 
 export async function GET() {
