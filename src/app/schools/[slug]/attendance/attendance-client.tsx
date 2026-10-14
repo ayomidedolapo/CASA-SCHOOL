@@ -2332,11 +2332,76 @@ export default function AttendanceClient(
           }),
         },
       );
-      const body = await response.json() as { message?: string; code?: string; authorized?: number };
+      const body = await response.json() as {
+        message?: string;
+        code?: string;
+        authorized?: number;
+        guardianNotificationQueued?: number;
+        guardianDelivery?: {
+          attempted: boolean;
+          claimed: number;
+          sent: number;
+          retried: number;
+          failed: number;
+          error: string | null;
+        };
+      };
       if (!response.ok) {
         throw new Error(body.message ?? body.code ?? "Late-stay authorization failed.");
       }
-      setNotice(`${body.authorized ?? selectedLateStudentIds.length} student(s) may check out after campus close until the approved time. Guardian notifications were queued where configured with the reason and approved-until time. Active-card students use the Scanner; students without an active card use Assisted sign-out when they actually leave.`);
+
+      const authorized =
+        body.authorized ??
+          selectedLateStudentIds.length;
+      const queued =
+        body.guardianNotificationQueued ??
+          0;
+      const delivery =
+        body.guardianDelivery;
+
+      let guardianTruth: string;
+      if (queued === 0) {
+        guardianTruth =
+          "No active registered guardian notification device was eligible, so no push notification was queued.";
+      } else if (
+        delivery &&
+        delivery.sent > 0 &&
+        delivery.sent >= queued
+      ) {
+        guardianTruth =
+          `${delivery.sent} guardian device notification(s) were sent immediately with the reason and approved-until time.`;
+      } else if (
+        delivery &&
+        delivery.failed > 0
+      ) {
+        guardianTruth =
+          `${delivery.failed} guardian device notification(s) failed because the registered device was rejected or stale. Reconnect guardian notifications on that device.`;
+      } else if (
+        delivery &&
+        delivery.retried > 0
+      ) {
+        guardianTruth =
+          `${delivery.retried} guardian device notification(s) did not complete immediately and were retained for retry by CASA's notification worker.`;
+      } else if (
+        delivery &&
+        delivery.attempted &&
+        delivery.claimed === 0
+      ) {
+        guardianTruth =
+          `${queued} guardian device notification(s) were queued, but no eligible device row could be claimed for immediate delivery. Check the guardian notification registration.`;
+      } else if (
+        delivery?.error
+      ) {
+        guardianTruth =
+          `${queued} guardian device notification(s) were queued, but the immediate delivery attempt failed. CASA retained the durable outbox record for a later worker retry.`;
+      } else {
+        guardianTruth =
+          `${queued} guardian device notification(s) were queued for delivery.`;
+      }
+
+      setNotice(
+        `${authorized} student(s) may remain after regular closing until the approved time. ${guardianTruth} Active-card students use the Scanner; students without an active card use Assisted sign-out when they actually leave.`,
+      );
       setSelectedLateStudentIds([]);
       setSelectedLateReason("");
       setSelectedLateAllowedUntil("");

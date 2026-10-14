@@ -1,4 +1,4 @@
-import { after, NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
 import { attendanceNoStoreHeaders } from "@/server/attendance/http";
@@ -8,6 +8,7 @@ import { requireBranchAttendanceOperatorAccess } from "@/server/school-operation
 import { schoolOperationsErrorResponse } from "@/server/school-operations/http";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 interface RouteContext { params: Promise<{ slug: string; branchId: string }>; }
 const bodySchema = z.object({
   studentIds: z.array(z.string().uuid()).min(1).max(100),
@@ -60,17 +61,57 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
 
     const guardianBatchKey = result.guardianNotificationBatchKey;
-    if (guardianBatchKey) {
-      after(async () => {
-        try {
-          await runGuardianPushOutbox({ schoolId: branchAccess.access.school.id, operationalBatchKey: guardianBatchKey, limit: 100 });
-        } catch (error) {
-          console.error("CASA_LATE_STAY_GUARDIAN_DELIVERY_FAILED", error);
-        }
-      });
+    const guardianDelivery = {
+      attempted: false,
+      claimed: 0,
+      sent: 0,
+      retried: 0,
+      failed: 0,
+      error: null as string | null,
+    };
+
+    if (
+      guardianBatchKey &&
+      result.guardianNotificationQueued > 0
+    ) {
+      guardianDelivery.attempted = true;
+      try {
+        const delivery = await runGuardianPushOutbox({
+          schoolId: branchAccess.access.school.id,
+          operationalBatchKey: guardianBatchKey,
+          limit: Math.min(
+            100,
+            Math.max(
+              1,
+              result.guardianNotificationQueued,
+            ),
+          ),
+        });
+
+        guardianDelivery.claimed = delivery.claimed;
+        guardianDelivery.sent = delivery.sent;
+        guardianDelivery.retried = delivery.retried;
+        guardianDelivery.failed = delivery.failed;
+      } catch (error) {
+        guardianDelivery.error =
+          "IMMEDIATE_DELIVERY_FAILED";
+        console.error(
+          "CASA_LATE_STAY_GUARDIAN_DELIVERY_FAILED",
+          error,
+        );
+      }
     }
 
-    return NextResponse.json(result, { headers: attendanceNoStoreHeaders });
+    return NextResponse.json(
+      {
+        ...result,
+        guardianDelivery,
+      },
+      {
+        headers:
+          attendanceNoStoreHeaders,
+      },
+    );
   } catch (error) {
     const response = schoolOperationsErrorResponse(error);
     if (response) return response;

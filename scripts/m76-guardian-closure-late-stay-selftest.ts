@@ -133,16 +133,25 @@ expect(
     !sessionRoute.includes(
       "after,",
     ) &&
-    lateStayRoute.includes(
+    !lateStayRoute.includes(
       "after,",
+    ) &&
+    !lateStayRoute.includes(
+      "after(async",
+    ) &&
+    lateStayRoute.includes(
+      "guardianDelivery",
+    ) &&
+    lateStayRoute.includes(
+      "await runGuardianPushOutbox",
     ) &&
     lateStayRoute.includes(
       "operationalBatchKey",
     ) &&
     lateStayRoute.includes(
-      "runGuardianPushOutbox",
+      "result.guardianNotificationQueued > 0",
     ),
-  "Manual close delivery was not removed cleanly or immediate late-stay delivery regressed.",
+  "Manual close delivery was not removed cleanly or truthful synchronous late-stay delivery regressed.",
 );
 
 expect(
@@ -255,6 +264,22 @@ expect(
 
 expect(
   attendanceUi.includes(
+    "No active registered guardian notification device was eligible, so no push notification was queued.",
+  ) &&
+    attendanceUi.includes(
+      "were sent immediately with the reason and approved-until time.",
+    ) &&
+    attendanceUi.includes(
+      "were retained for retry by CASA's notification worker.",
+    ) &&
+    attendanceUi.includes(
+      "Check the guardian notification registration.",
+    ),
+  "M76R3 After-hours stay UI no longer reports actual guardian delivery truth.",
+);
+
+expect(
+  attendanceUi.includes(
     "Normal dismissal also triggers the automatic daily guardian closing-time notice for this branch.",
   ),
   "M76R1 policy UI does not explain automatic Normal dismissal guardian notification.",
@@ -284,11 +309,11 @@ expect(
       '"X-CASA-Continuity-SQL-Revision":\n    "M75"',
     ) &&
     health.includes(
-      '"X-CASA-Guardian-Operations-Revision":\n    "M76R2"',
+      '"X-CASA-Guardian-Operations-Revision":\n    "M76R3"',
     ),
-  "M76R2 health marker is missing or cumulative release markers regressed.",
+  "M76R3 health marker is missing or cumulative release markers regressed.",
 );
 
 console.log(
-  "M76R2 SCHEDULED DISMISSAL + OPEN LATE-STAY SELECTION TRUTH SELFTEST = GREEN",
+  "M76R3 SCHEDULED DISMISSAL + LATE-STAY DELIVERY TRUTH SELFTEST = GREEN",
 );
