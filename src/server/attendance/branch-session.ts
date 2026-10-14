@@ -9,9 +9,6 @@ import {
   getActiveCalendarClosure,
 } from "@/server/school-operations/calendar-closure";
 import {
-  queueGuardianBranchClosurePushes,
-} from "@/server/messaging/guardian-attendance-operations-push";
-import {
   resolveBranchDefaultPolicy,
   resolveBranchDefaultPolicyForDate,
 } from "./branch-policy-management";
@@ -506,35 +503,13 @@ export async function closeBranchAttendanceSession(input: { access: SchoolAccess
   }
 
   if (row.status === "CLOSED") {
-    let guardianNotificationQueued = 0;
-    let guardianNotificationBatchKey: string | null = null;
-
-    if (row.closed_at) {
-      try {
-        const notification = await queueGuardianBranchClosurePushes({
-          schoolId: input.access.school.id,
-          branchId: input.branchId,
-          sessionId: row.session_id,
-          branchSessionId: row.branch_session_id,
-          closedAt: row.closed_at,
-        });
-        guardianNotificationQueued = notification.queued;
-        guardianNotificationBatchKey = notification.batchKey;
-      } catch (error) {
-        console.error("CASA_BRANCH_CLOSURE_GUARDIAN_QUEUE_FAILED", {
-          schoolId: input.access.school.id,
-          branchId: input.branchId,
-          branchSessionId: row.branch_session_id,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }
-
     return {
       ok: true as const,
-      session: { id: row.session_id, branchSessionId: row.branch_session_id, status: "CLOSED" as const },
-      guardianNotificationQueued,
-      guardianNotificationBatchKey,
+      session: {
+        id: row.session_id,
+        branchSessionId: row.branch_session_id,
+        status: "CLOSED" as const,
+      },
     };
   }
 

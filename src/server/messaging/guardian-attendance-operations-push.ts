@@ -46,58 +46,24 @@ function rowsOf<T>(
   return [];
 }
 
-function validIso(
-  value:
-    string |
-    Date,
-) {
-  const date =
-    value instanceof
-      Date
-      ? value
-      : new Date(
-          value,
-        );
-
-  if (
-    !Number.isFinite(
-      date.getTime(),
-    )
-  ) {
-    throw new Error(
-      "CASA_GUARDIAN_OPERATIONAL_EVENT_TIME_INVALID",
-    );
-  }
-
-  return date.toISOString();
-}
-
-export async function queueGuardianBranchClosurePushes(
+export async function queueGuardianScheduledDismissalPushes(
   input: {
     schoolId: string;
     branchId: string;
     sessionId: string;
-    branchSessionId:
-      string;
-    closedAt:
-      string |
-      Date;
+    branchSessionId: string;
   },
 ) {
   const db =
     getDb();
-  const closedAt =
-    validIso(
-      input.closedAt,
-    );
   const eventKey =
-    `SCHOOL_DAY_CLOSED:${input.branchSessionId}:${closedAt}`;
+    `SCHOOL_NORMAL_DISMISSAL:${input.branchSessionId}`;
   const batchKey =
     eventKey;
 
   const result =
     await db.execute(sql`
-      with closure as (
+      with dismissal as (
         select
           school.id
             as school_id,
@@ -114,7 +80,7 @@ export async function queueGuardianBranchClosurePushes(
             as branch_name,
           branch_session.id
             as branch_session_id,
-          branch_session.closed_at
+          policy_day.normal_dismissal_at
         from attendance_branch_sessions
           branch_session
         join attendance_sessions
@@ -133,6 +99,17 @@ export async function queueGuardianBranchClosurePushes(
              branch_session.school_id
          and branch.id =
              branch_session.branch_id
+        join attendance_policy_days
+          policy_day
+          on policy_day.school_id =
+             branch_session.school_id
+         and policy_day.policy_id =
+             branch_session.policy_id
+         and policy_day.weekday =
+             extract(
+               dow from
+               session.attendance_date
+             )::int
         where
           branch_session.school_id =
             ${input.schoolId}::uuid
@@ -142,30 +119,42 @@ export async function queueGuardianBranchClosurePushes(
             ${input.sessionId}::uuid
           and branch_session.id =
             ${input.branchSessionId}::uuid
-          and branch_session.status =
+          and branch_session.status in (
+            'OPEN',
             'CLOSED'
-          and branch_session.closed_at
-            is not null
+          )
+          and session.attendance_date =
+            (
+              now()
+                at time zone
+                school.timezone
+            )::date
+          and policy_day.normal_dismissal_at <=
+            (
+              now()
+                at time zone
+                school.timezone
+            )::time
         limit 1
       ),
       eligible_students as (
         select distinct
           student.id
             as student_id
-        from closure
+        from dismissal
         join student_enrollments
           enrollment
           on enrollment.school_id =
-             closure.school_id
+             dismissal.school_id
          and enrollment.status =
              'ACTIVE'::student_enrollment_status
          and enrollment.starts_on <=
-             closure.attendance_date
+             dismissal.attendance_date
          and (
            enrollment.ends_on
              is null
            or enrollment.ends_on >=
-              closure.attendance_date
+              dismissal.attendance_date
          )
         join school_branch_class_arms
           branch_map
@@ -174,7 +163,7 @@ export async function queueGuardianBranchClosurePushes(
          and branch_map.class_arm_id =
              enrollment.class_arm_id
          and branch_map.branch_id =
-             closure.branch_id
+             dismissal.branch_id
         join students
           student
           on student.school_id =
@@ -189,28 +178,28 @@ export async function queueGuardianBranchClosurePushes(
           relationship.guardian_id,
           device.firebase_installation_id
         )
-          closure.school_id,
-          closure.school_name,
-          closure.school_timezone,
-          closure.branch_id,
-          closure.branch_name,
-          closure.session_id,
-          closure.attendance_date,
-          closure.branch_session_id,
-          closure.closed_at,
+          dismissal.school_id,
+          dismissal.school_name,
+          dismissal.school_timezone,
+          dismissal.branch_id,
+          dismissal.branch_name,
+          dismissal.session_id,
+          dismissal.attendance_date,
+          dismissal.branch_session_id,
+          dismissal.normal_dismissal_at,
           eligible.student_id,
           relationship.guardian_id,
           device.id
             as device_id,
           device.firebase_installation_id
-        from closure
+        from dismissal
         join eligible_students
           eligible
           on true
         join student_guardians
           relationship
           on relationship.school_id =
-             closure.school_id
+             dismissal.school_id
          and relationship.student_id =
              eligible.student_id
          and relationship.receives_notifications =
@@ -276,13 +265,12 @@ export async function queueGuardianBranchClosurePushes(
           'SCHOOL_DAY_CLOSED',
           recipient.school_name ||
             ' · CASA',
-          'The school day at ' ||
+          'Regular school hours at ' ||
             recipient.branch_name ||
-            ' closed at ' ||
+            ' ended at ' ||
             to_char(
-              recipient.closed_at
-                at time zone
-                recipient.school_timezone,
+              recipient.attendance_date +
+              recipient.normal_dismissal_at,
               'HH24:MI'
             ) ||
             ' today.',
@@ -296,6 +284,8 @@ export async function queueGuardianBranchClosurePushes(
               'SCHOOL_DAY_CLOSED',
             'eventType',
               'SCHOOL_DAY_CLOSED',
+            'notificationKind',
+              'NORMAL_DISMISSAL',
             'operationalEventKey',
               ${eventKey},
             'operationalBatchKey',
@@ -312,8 +302,8 @@ export async function queueGuardianBranchClosurePushes(
               recipient.branch_session_id::text,
             'attendanceDate',
               recipient.attendance_date::text,
-            'closedAt',
-              recipient.closed_at::text
+            'normalDismissalAt',
+              recipient.normal_dismissal_at::text
           ),
           'PENDING',
           0,
@@ -352,7 +342,6 @@ export async function queueGuardianBranchClosurePushes(
           0,
       ),
     batchKey,
-    eventKey,
   };
 }
 
@@ -628,12 +617,44 @@ export async function reconcileRecentGuardianAttendanceOperationalPushes(
           50,
       ),
     );
+  const legacyManualClosureSchoolFilter =
+    input.schoolId
+      ? sql`and outbox.school_id = ${input.schoolId}::uuid`
+      : sql``;
+
+  await db.execute(sql`
+    update guardian_push_outbox
+      outbox
+    set
+      status = 'CANCELLED',
+      locked_at = null,
+      last_error =
+        coalesce(
+          outbox.last_error,
+          'Superseded by scheduled normal-dismissal guardian notification truth.'
+        ),
+      updated_at = now()
+    where
+      outbox.operational_event_key
+        like 'SCHOOL_DAY_CLOSED:%'
+      and outbox.device_displayed_at
+        is null
+      and outbox.status in (
+        'PENDING',
+        'RETRY',
+        'FAILED',
+        'SENT',
+        'PROCESSING'
+      )
+      ${legacyManualClosureSchoolFilter}
+  `);
+
   const schoolFilter =
     input.schoolId
       ? sql`and branch_session.school_id = ${input.schoolId}::uuid`
       : sql``;
 
-  const closures =
+  const dueDismissals =
     rowsOf<{
       school_id:
         string;
@@ -643,9 +664,6 @@ export async function reconcileRecentGuardianAttendanceOperationalPushes(
         string;
       branch_session_id:
         string;
-      closed_at:
-        string |
-        Date;
     }>(
       await db.execute(sql`
         select
@@ -653,18 +671,50 @@ export async function reconcileRecentGuardianAttendanceOperationalPushes(
           branch_session.branch_id::text,
           branch_session.session_id::text,
           branch_session.id::text
-            as branch_session_id,
-          branch_session.closed_at
+            as branch_session_id
         from attendance_branch_sessions
           branch_session
+        join attendance_sessions
+          session
+          on session.school_id =
+             branch_session.school_id
+         and session.id =
+             branch_session.session_id
+        join schools
+          school
+          on school.id =
+             branch_session.school_id
+        join attendance_policy_days
+          policy_day
+          on policy_day.school_id =
+             branch_session.school_id
+         and policy_day.policy_id =
+             branch_session.policy_id
+         and policy_day.weekday =
+             extract(
+               dow from
+               session.attendance_date
+             )::int
         where
-          branch_session.status =
+          branch_session.status in (
+            'OPEN',
             'CLOSED'
-          and branch_session.closed_at >=
-            now() - interval '2 days'
+          )
+          and session.attendance_date =
+            (
+              now()
+                at time zone
+                school.timezone
+            )::date
+          and policy_day.normal_dismissal_at <=
+            (
+              now()
+                at time zone
+                school.timezone
+            )::time
           ${schoolFilter}
         order by
-          branch_session.closed_at
+          policy_day.normal_dismissal_at
             desc
         limit ${limit}
       `),
@@ -674,23 +724,21 @@ export async function reconcileRecentGuardianAttendanceOperationalPushes(
     0;
 
   for (
-    const closure of
-      closures
+    const dismissal of
+      dueDismissals
   ) {
     try {
       queued +=
         (
-          await queueGuardianBranchClosurePushes({
+          await queueGuardianScheduledDismissalPushes({
             schoolId:
-              closure.school_id,
+              dismissal.school_id,
             branchId:
-              closure.branch_id,
+              dismissal.branch_id,
             sessionId:
-              closure.session_id,
+              dismissal.session_id,
             branchSessionId:
-              closure.branch_session_id,
-            closedAt:
-              closure.closed_at,
+              dismissal.branch_session_id,
           })
         ).queued;
     } catch {

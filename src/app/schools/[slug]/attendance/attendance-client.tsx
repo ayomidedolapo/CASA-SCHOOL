@@ -1661,7 +1661,7 @@ export default function AttendanceClient(
             : action ===
                 "REOPEN"
               ? "Attendance reopened. The original session and audit history were preserved."
-              : "Attendance is closed for this campus. Guardian closure notifications were queued where registered, and CASA will keep retrying delivery automatically.",
+              : "Attendance is closed for this campus. This is an internal attendance control; the regular closing-time guardian notice is sent automatically from the campus Normal dismissal time.",
       );
 
       await refreshToday();
@@ -2784,7 +2784,7 @@ export default function AttendanceClient(
                   disabled={busy}
                   onClick={() => void mutateSession("CLOSE")}
                 >
-                  Close today & notify guardians
+                  Close today
                 </button>
                 {canManage && (
                   <button
@@ -2994,13 +2994,14 @@ export default function AttendanceClient(
       )}
 
       {canSuperviseAttendance &&
-        data?.session?.status === "CLOSED" && (
+        data?.session &&
+        ["OPEN", "CLOSED"].includes(data.session.status) && (
         <section className={styles.section}>
           <div className={styles.sectionHeader}>
             <div>
               <h2 className={styles.sectionTitle}>After-hours stay</h2>
               <p className={styles.muted}>
-                Use this only after the daily attendance session has been closed for students who are still on campus beyond normal dismissal. Selecting a student does not sign them out. Enter the reason and allowed-until time, authorize once with Passkey, and CASA queues a guardian notification with the reason and approved-until time. Active-card students then check out on the Scanner; students without an active card use Assisted sign-out with staff face confirmation and Passkey.
+                Use this before or after normal dismissal for students who will remain on campus beyond regular school hours. Selecting a student does not sign them out. Enter the reason and allowed-until time, authorize once with Passkey, and CASA immediately queues a guardian notification with the reason and approved-until time. Active-card students then check out on the Scanner; students without an active card use Assisted sign-out with staff face confirmation and Passkey.
               </p>
             </div>
             <span className={styles.muted}>{selectedLateStudentIds.length} selected</span>
@@ -4167,7 +4168,7 @@ export default function AttendanceClient(
               ) : null}
 
               <p className={styles.muted}>
-                Editing one weekday changes only that weekday. Saving creates a new version of the weekly policy, but CASA preserves the separate times entered for every selected day. Use the Saturday Lessons control above to turn normal Saturday attendance on or off. Calendar remains for exceptional dates such as holidays, breaks, branch closures or a Special non-instructional day.
+                Editing one weekday changes only that weekday. Saving creates a new version of the weekly policy, but CASA preserves the separate times entered for every selected day. Normal dismissal also triggers the automatic daily guardian closing-time notice for this branch. Use the Saturday Lessons control above to turn normal Saturday attendance on or off. Calendar remains for exceptional dates such as holidays, breaks, branch closures or a Special non-instructional day.
               </p>
             </div>
 
