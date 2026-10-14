@@ -3459,7 +3459,8 @@ export default function AttendanceClient(
                               !data?.readOnly &&
                               data?.session?.mode === "INSTRUCTIONAL" &&
                               student.presenceStatus === "ON_CAMPUS" &&
-                              data?.session?.status === "CLOSED" &&
+                              data?.session &&
+                              ["OPEN", "CLOSED"].includes(data.session.status) &&
                               (student.scannerCheckoutEligible ? (
                                 <label className={styles.actions}>
                                   <input

@@ -238,6 +238,16 @@ expect(
 
 expect(
   attendanceUi.includes(
+    'student.presenceStatus === "ON_CAMPUS" &&\n                              data?.session &&\n                              ["OPEN", "CLOSED"].includes(data.session.status) &&\n                              (student.scannerCheckoutEligible ? (',
+  ) &&
+    attendanceUi.includes(
+      "Select for after-hours stay",
+    ),
+  "M76R2 ON_CAMPUS student selection is not available while attendance is OPEN or CLOSED.",
+);
+
+expect(
+  attendanceUi.includes(
     "CASA immediately queues a guardian notification with the reason and approved-until time.",
   ),
   "M76R1 After-hours stay does not explain immediate guardian notification truth.",
@@ -274,11 +284,11 @@ expect(
       '"X-CASA-Continuity-SQL-Revision":\n    "M75"',
     ) &&
     health.includes(
-      '"X-CASA-Guardian-Operations-Revision":\n    "M76R1"',
+      '"X-CASA-Guardian-Operations-Revision":\n    "M76R2"',
     ),
-  "M76R1 health marker is missing or cumulative release markers regressed.",
+  "M76R2 health marker is missing or cumulative release markers regressed.",
 );
 
 console.log(
-  "M76R1 SCHEDULED DISMISSAL + IMMEDIATE LATE-STAY TRUTH SELFTEST = GREEN",
+  "M76R2 SCHEDULED DISMISSAL + OPEN LATE-STAY SELECTION TRUTH SELFTEST = GREEN",
 );
